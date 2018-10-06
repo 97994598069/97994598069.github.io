@@ -1,0 +1,135 @@
+java的常用命令；用于定位问题
+
+jps、jstack、jmap、jhat、jstat、hprof等小巧的工具：
+若服务器提示未安装：则可去java的bin目录查看并进行软链
+
+现实企业级Java开发中，有时候我们会碰到下面这些问题：
+OutOfMemoryError，内存不足
+内存泄露
+线程死锁
+锁争用（Lock Contention）
+Java进程消耗CPU过高
+
+ips工具：
+jps主要用来输出JVM中运行的进程状态信息。语法格式如下：
+如果不指定hostid就默认为当前主机或服务器。
+
+命令行参数选项说明如下：
+
+-q 不输出类名、Jar名和传入main方法的参数
+-m 输出传入main方法的参数
+-l 输出main类或Jar的全限名
+-v 输出传入JVM的参数
+
+jps -m -l -v  或者直接jps
+
+
+jstack工具：
+-l long listings，会打印出额外的锁信息，在发生死锁时可以用jstack -l pid来观察锁持有情况
+-m mixed mode，不仅会输出Java堆栈信息，还会输出C/C++堆栈信息（比如Native方法）
+ 
+jstack [option] pid
+jstack [option] executable core
+jstack [option] [server-id@]remote-hostname-or-ip
+
+jstack可以定位到线程堆栈，根据堆栈信息我们可以定位到具体代码，所以它在JVM性能调优中使用得非常多。
+常用jstack pid
+
+下面我们来一个实例找出某个Java进程中最耗费CPU的Java线程并定位堆栈信息:
+1.找出pid
+ps -ef |grep tomcat
+
+找出线程
+top -Hp $pid
+
+[root@iZ25gmzxq5aZ ~]# top -Hp 27400
+top - 15:55:20 up 3 days, 22:23,  3 users,  load average: 0.03, 0.02, 0.01
+Tasks: 142 total,   0 running, 142 sleeping,   0 stopped,   0 zombie
+Cpu(s):  3.1%us,  0.6%sy,  0.0%ni, 96.3%id,  0.0%wa,  0.0%hi,  0.0%si,  0.0%st
+Mem:   3924640k total,  3496516k used,   428124k free,    97312k buffers
+Swap:  3999992k total,        0k used,  3999992k free,  1160508k cached
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                                                                                                                                                         
+27421 root      20   0 4532m 2.0g 321m S  6.6 53.1  11:30.60 java                                                                                                                                                                                                             
+30978 root      20   0 4532m 2.0g 321m S  1.3 53.1   0:07.05 java                                                                                                                                                                                                             
+30875 root      20   0 4532m 2.0g 321m S  1.0 53.1   0:06.41 java                                                                                                                                                                                                             
+30883 root      20   0 4532m 2.0g 321m S  1.0 53.1   0:07.18 java        
+TIME列就是各个Java线程耗费的CPU时间，CPU时间最长的是线程ID为27421的线程，用
+
+[root@iZ25gmzxq5aZ ~]# printf "%x\n" 27421   ##得到27421的十六进制值为6b1d，下面会用到
+6b1d
+
+[root@iZ25gmzxq5aZ ~]# jstack 27400 |grep -A 50 "6b1d"
+"Cron Manager Timer" daemon prio=10 tid=0x00007fe3485e3000 nid=0x6b1d in Object.wait() [0x00007fe37e27d000]
+   java.lang.Thread.State: TIMED_WAITING (on object monitor)
+at
+- waiting on <0x00000000ae232450> (a
+at
+- locked <0x00000000ae232450> (a
+at
+
+"Abandoned connection cleanup thread" daemon prio=10 tid=0x00007fe3483df000 nid=0x6b1c in Object.wait() [0x00007fe37e3ca000]
+   java.lang.Thread.State: TIMED_WAITING (on object monitor)
+at
+- waiting on <0x00000000ae1ab7a0> (a
+at
+- locked <0x00000000ae1ab7a0> (a
+at com.mysql.jdbc.AbandonedConnectionCleanupThread.run(AbandonedConnectionCleanupThread.
+
+"Class Modify Scanner" daemon prio=10 tid=0x00007fe348190800 nid=0x6b1b in Object.wait() [0x00007fe37e6f4000]
+   java.lang.Thread.State: TIMED_WAITING (on object monitor)
+at
+- waiting on <0x00000000ad50ef10> (a
+at
+- locked <0x00000000ad50ef10> (a
+at
+
+"Service Thread" daemon prio=10 tid=0x00007fe39813b800 nid=0x6b16 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread1" daemon prio=10 tid=0x00007fe398131000 nid=0x6b15 waiting on condition [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" daemon prio=10 tid=0x00007fe39812f000 nid=0x6b14 waiting on condition [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Signal Dispatcher" daemon prio=10 tid=0x00007fe39812c800 nid=0x6b13 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Surrogate Locker Thread (Concurrent GC)" daemon prio=10 tid=0x00007fe398118800 nid=0x6b12 waiting on condition [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Finalizer" daemon prio=10 tid=0x00007fe3980eb000 nid=0x6b11 in Object.wait() [0x00007fe37f99e000]
+   java.lang.Thread.State: WAITING (on object monitor)
+at
+- waiting on <0x00000000ad4f8668> (a
+at
+- locked <0x00000000ad4f8668> (a
+at
+at
+
+"Reference Handler" daemon prio=10 tid=0x00007fe3980e9000 nid=0x6b10 in Object.wait() [0x00007fe37fa1f000]
+   java.lang.Thread.State: WAITING (on object monitor)
+at
+
+
+map用来查看堆内存使用状况，一般结合jhat使用：
+jmap [option] pid
+jmap [option] executable core
+jmap [option] [server-id@]remote-hostname-or-ip
+
+jmap -permstat pid
+打印进程的类加载器和类加载器加载的持久代对象信息，输出：类加载器名称、对象是否存活（不可靠）、对象地址、父类加载器、已加载的类大小等信息，如下图：
+
+[root@iZ25gmzxq5aZ ~]# jmap -permstat 27421
+Attaching to process ID 27421, please wait...
+Debugger attached successfully.
+Server compiler detected.
+JVM version is 24.79-b02
+finding class loader instances ..
+
+使用jmap -heap pid查看进程堆内存使用情况，包括使用的GC算法、堆配置参数和各代中堆内存使用情况。比如下面的例子：
+
+
+
+
