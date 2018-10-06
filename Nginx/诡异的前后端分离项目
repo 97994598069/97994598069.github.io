@@ -1,0 +1,169 @@
+项目环境：
+本地IP:192.168.1.118  阿里云ECS
+
+本地部署：nginx+nodejs+tomcat  centos6.5
+
+架构:前后端项目分离
+nodejs 跑前端   3000端口
+tomcat跑后端    8080端口
+
+域名:zixingche.zhongguo.com    
+
+目前状况：
+zixingche.zhongguo.com  访问前端nodejs正常
+zixingche.zhongguo.com:8080/admin  访问后台登陆界面正常，但是要求不能带8080
+zixingche.zhongguo.com:8080   接口调度正常 但是要求不能带8080；；（但是不带8080会自动跳转到node的主页）
+
+起始思考:
+配置nginx 80端口 代理nodejs的3000   实现：zixingche.zhongguo.com  访问前端nodejs正常、
+然后在server里面增加一个location 使用proxy_pass直接转发（或者配置upstream来做反向代理）至127.0.0.0:8080/admin 来实现zixingche.zhongguo.com/admin  访问后台登陆界面正常，
+
+upstream node_app {
+        server 127.0.0.1:3000;
+    }
+
+server {
+        listen       80;
+        server_name  zixingche.zhongguo.com;
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+location /admin {
+    proxy_pass http://zixingche.zhongguo.com:8080/admin;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+}
+  
+结果：
+1.本地curl 测试各个链接均返回码200   浏览器访问各个域名查看访问日志，均显示200  但是  http://zixingche.zhongguo.com/admin; 后台登陆界面的图片不显示F12查看提示404  查看报错图片的访问路径是http://zixingche.zhongguo.com/resource/.../*.css;;此时异常；正常状态下应该是http://zixingche.zhongguo.com/admin/resource/.../*.css  少了个admin的加载，也就是说没有加载图片
+
+解决：配置location单独加载图片;形成如下：
+upstream node_app {
+        server 127.0.0.1:3000;
+    }
+
+server {
+        listen       80;
+        server_name  zixingche.zhongguo.com;
+    }
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+ 
+location /admin {
+        proxy_pass http://zixingche.zhongguo.com:8080/admin;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+location ~ .*\.(jpg|jpeg|gif|png|html|css|js|doc|docx|xlsx|apk|gz)$ {
+     root /usr/local/apache-tomcat-8.5.34/;
+             proxy_pass http://zixingche.zhongguo.com:8080;
+ 
+}
+
+结果报错依旧：后台登陆界面依旧图片报错报错404  依旧没有走admin；想着图片是先走了location /admin  然后再过location ~ .*\.  
+解决：把图片放到上面加载，先加载图片如下：
+upstream node_app {
+        server 127.0.0.1:3000;
+    }
+
+
+server {
+        listen       80;
+        server_name  zixingche.zhongguo.com;
+
+location ~ .*\.(jpg|jpeg|gif|png|html|css|js|doc|docx|xlsx|apk|gz)$ {
+     root /usr/local/apache-tomcat-8.5.34/;
+             proxy_pass http://zixingche.zhongguo.com:8080;
+         }
+location /admin {
+    proxy_pass http://zixingche.zhongguo.com:8080/admin;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+}
+
+结果：问题解决，但是后端接口还是必须带8080才能进行访问（zixingche.zhongguo.com:8080）
+但是此时zixingche.zhongguo.com 已经代理了nodejs的前端，怎么能够再要拿来访问接口呢；需要配置二级域名来解决如下：
+
+
+根据要求需要配置二级域名：
+api.zixingche.zhongguo.com
+
+用nginx做反向代理实现如下：
+
+1.用api.zixingche.zhongguo.com  代理接口的调度
+2.用api.zixingche.zhongguo.com/admin  调度后台登陆界面
+3.用zixingche.zhongguo.com 访问nodejs的前端
+
+
+upstream node_app {
+        server 127.0.0.1:3000;
+    }
+
+upstream baike {
+        server 127.0.0.1:8080;
+        }
+
+
+server {
+        listen       80;
+        server_name  zixingche.zhongguo.com;
+
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
+
+
+
+server {
+        listen       80;
+        server_name  api.zixingche.zhongguo.com;
+
+location / {
+
+        proxy_pass http://baike;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
+
+
+上述：
+1.访问zixingche.zhongguo.com 直接调度本地的3000端口（nodejs服务127.0.0.1:3000）,并返回首展界面
+2.访问api.zixingche.zhongguo.com 直接调度本地的8080端口（tomcat服务，返回调度接口，
+3.访问api.zixingche.zhongguo.com/admin ，相当于你访问的是127.0.0.1:8080/admin 并返回后台登陆界面
