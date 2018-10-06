@@ -6,20 +6,20 @@
 # 'jekyll serve'. If you change this file, please restart the server process.
 
 # Site settings
-title:  纯洁的微笑
+title:  个人博客
 subtitle: 分享技术，品味人生
-name: 纯洁的微笑 
-email: ityouknow@126.com
+name: 个人博客
+email: 979945980@qq.com
 description: 本站是纯洁的微笑的技术分享博客。内容涵盖生活故事、Java后端技术、Spring Boot、Spring Cloud、微服务架构、大数据演进、高可用架构、中间件使用、系统监控等相关的研究与知识分享。
-keywords: ityouknow,纯洁的微笑,Spring,Spring Boot,Spring Cloud,MongoDB,Jvm,Docker,生活故事,架构,大数据,一线,FastDFS,开发者,编程,代码,开源,IT网站,Developer,Programmer,Coder,Geek,IT技术博客,Java,Python,
+keywords: Spring,Spring Boot,Spring Cloud,MongoDB,Jvm,Docker,生活故事,架构,大数据,一线,FastDFS,开发者,编程,代码,开源,IT网站,Developer,Programmer,Coder,Geek,IT技术博客,Java,Python,
 encoding: "utf-8"
 favicon: favicon.png 
 
-repository: ityouknow/ityouknow.github.io
-github_url: https://github.com/ityouknow
-cnblog_url: http://www.cnblogs.com/ityouknow
-url: http://www.ityouknow.com
-enforce_ssl: ityouknow.com
+repository: 979945980/979945980.github.io
+github_url: https://github.com/979945980
+cnblog_url: http://www.cnblogs.com/979945980
+url: http://www.979945980.com
+enforce_ssl: 979945980.com
 
 ## Gem
 plugins:
@@ -57,92 +57,92 @@ paginate_path: 'page:num'
 # Navigation. If you do not like these modules, just remove them :D
 navs:
 
-  -
-    href: /
-    label: Home
+#  -
+ #   href: /
+#    label: Home
 
-  -
-    href: /spring-boot.html
-    label: Spring-Boot
+#  -
+#    href: /spring-boot.html
+ #   label: Spring-Boot
 
-  -
-    href: /spring-cloud.html
-    label: Spring-Cloud
+#  -
+ #   href: /spring-cloud.html
+ #   label: Spring-Cloud
 
-  -
-    href: /archives.html
-    label: Archives
+#  -
+ #   href: /archives.html
+#    label: Archives
 
-  -
-    href: /link.html
-    label: Link
+#  -
+ #   href: /link.html
+ #   label: Link
 
-  -
-    href: /about.html
-    label: About
+#  -
+#    href: /about.html
+#    label: About
 
 
 # labels. my blog key words
-labels:
+#labels:
 
-  -
-    href: /share/2017/10/01/resource-sharing.html
-    name: 资源
+ # -
+ #   href: /share/2017/10/01/resource-sharing.html
+ #   name: 资源
 
-  -
-    href: /life.html
-    name: 故事
+ # -
+ #   href: /life.html
+ #   name: 故事
 
-  -
-    href: /arch.html
-    name: 架构
+  #-
+ #   href: /arch.html
+ #   name: 架构
     
-  -
-    href: /jvm.html
-    name: Jvm
+ # -
+ #   href: /jvm.html
+ #   name: Jvm
 
-  -
-    href: /fastdfs.html
-    name: FastDFS
+ # -
+ #   href: /fastdfs.html
+ #   name: FastDFS
 
-  -
-    href: /mongodb.html
-    name: MongoDB
+ # -
+ #   href: /mongodb.html
+#    name: MongoDB
 
-  -
-    href: /docker.html
-    name: Docker
+#  -
+ #   href: /docker.html
+ #   name: Docker
 
-  -
-    href: /open-source.html
-    name: Code   
+ # -
+ #   href: /open-source.html
+ #   name: Code   
 
 # selected articles
-classes:
+#classes:
 
-  -
-    href: /life.html
-    name: 我的故事
-    describe: 生活就是故事，故事就是生活
+#  -
+ #   href: /life.html
+ #   name: 我的故事
+#    describe: 生活就是故事，故事就是生活
 
-  -
-    href: /arch.html
-    name: 架构师之路
-    describe: 一个架构师的自我修养
+ # -
+#    href: /arch.html
+#    name: 架构师之路
+#    describe: 一个架构师的自我修养
 
-  -
-    href: /jvm.html
-    name: Jvm系列文章
-    describe: Java之根基，Java程序员必学
+#  -
+ #   href: /jvm.html
+ #   name: Jvm系列文章
+ #   describe: Java之根基，Java程序员必学
 
 
 # ---------------- #
 #       RSS        #
 # ---------------- #
-subscribe_rss: /feed.xml
+#subscribe_rss: /feed.xml
 
 # Sidebar to show popular repo
-side_bar_repo_limit: 6 # Number of repos to show
+#side_bar_repo_limit: 6 # Number of repos to show
 
 # Google Analytics
 # analytics :
@@ -152,34 +152,34 @@ side_bar_repo_limit: 6 # Number of repos to show
 
 
 # For about.html. Fell free to create your own!
-skill_software_keywords: [Java, MySQL, Oracle, Design Patterns]
-skill_j2ee_keywords: [Spring, Struct, Hibernet, MyBatis, JSP]
-skill_web_keywords: [HTML, CSS, JS, JQuery, Ajax, NodeJS, ExpressJS, MongoDB, Redis, PHP,  Boostrap]
-skill_mobile_app_keywords: [vuejs, hyhird app]
+#skill_software_keywords: [Java, MySQL, Oracle, Design Patterns]
+#skill_j2ee_keywords: [Spring, Struct, Hibernet, MyBatis, JSP]
+#skill_web_keywords: [HTML, CSS, JS, JQuery, Ajax, NodeJS, ExpressJS, MongoDB, Redis, PHP,  Boostrap]
+#skill_mobile_app_keywords: [vuejs, hyhird app]
 
 
 # ---------------- #
 #      Comments    #
 # ---------------- #
 # support provider: disqus, gitment, gitalk
-comments_provider: gitalk
+#comments_provider: gitalk
 # !!!重要!!! 请修改下面这些信息为你自己申请的
 # !!!Important!!! Please modify infos below to yours
 # https://disqus.com
-disqus:
-    username: ityouknow
+#disqus:
+#    username: ityouknow
 # https://imsun.net/posts/gitment-introduction/
-gitment:
-    owner: ityouknow
-    repo: blog-comments
-    oauth:
-        client_id: 61bfc53d957e74e78f8f
-        client_secret: 31c61e66cdcc9ada8db2267ee779d0bdafac434c
+#gitment:
+#    owner: ityouknow
+#    repo: blog-comments
+#    oauth:
+ #       client_id: 61bfc53d957e74e78f8f
+ #       client_secret: 31c61e66cdcc9ada8db2267ee779d0bdafac434c
 # https://github.com/gitalk/gitalk#install
-gitalk:
-    owner: ityouknow
-    repo: blog-comments
-    clientID: 61bfc53d957e74e78f8f
-    clientSecret: 31c61e66cdcc9ada8db2267ee779d0bdafac434c
+#gitalk:
+#    owner: ityouknow
+#    repo: blog-comments
+ #   clientID: 61bfc53d957e74e78f8f
+#    clientSecret: 31c61e66cdcc9ada8db2267ee779d0bdafac434c
 # 在使用其它评论组件时可点击显示 Disqus
 lazy_load_disqus : true
