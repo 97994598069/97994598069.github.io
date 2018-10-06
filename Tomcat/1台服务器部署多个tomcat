@@ -1,0 +1,105 @@
+cp -rp ./tomcat tomcat_lcf
+
+vi /etc/profile   ##注意上下顺序
+JAVA_HOME=/usr/local/jdk
+PATH=$PATH:$JAVA_HOME/bin
+CLASSPATH=.:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+export JAVA_HOME PATH CLASSPATH
+export JAVA_HOME
+
+CATALINA_BASE=/usr/local/tomcat
+CATALINA_HOME=/usr/local/tomcat
+TOMCAT_HOME=/usr/local/tomcat
+export CATALINA_BASE CATALINA_HOME TOMCAT_HOME
+
+CATALINA_2_BASE=/usr/local/tomcat_lcf
+CATALINA_2_HOME=/usr/local/tomcat_lcf
+TOMCAT_2_HOME=/usr/local/tomcat_lcf
+export CATALINA_2_BASE CATALINA_2_HOME TOMCAT_2_HOME
+
+
+vi /usr/local/tomcat_lcf/bin/startup.sh  
+在最上面添加（#!/bin/bash下面）
+export JAVA_HOME=/usr/local/jdk
+export JRE_HOME=/usr/local/jdk/jre
+##同上修改shutdown.sh和setclasspath.sh
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+1. 安装部署jdk,在profile文件最后一行添加
+[root@bogon ~]# vim /etc/profile
+export JAVA_HOME=/usr/local/java
+CLASSPATH=.:$JAVA_HOME/lib:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+PATH=$PATH:$JAVA_HOME/bin
+JRE_HOME=$JAVA_HOME/jre
+export JAVA_HOME
+export PATH
+export CLASSPATH
+
+3. 安装部署tomcat1
+[root@bogon ~]#  tar zxf apache-tomcat-8.0.47.tar.gz 
+[root@bogon ~]#  mv apache-tomcat-8.0.47 /usr/local/tomcat
+[root@bogon ~]#  vim /etc/profile
+添加tomcat1配置
+#tomcat1
+TOMCAT_HOME=/usr/local/tomcat
+CATALINA_HOME=/usr/local/tomcat
+CATALINA_BASE=/usr/local/tomcat
+export  TOMCAT_HOME  CATALINA_HOME CATALINA_BASE
+保存退出 （:wq）
+
+执行/etc/profile文件  查看PATH变量是否生效
+[root@bogon ~]# source /etc/profile
+[root@bogon ~]# echo $PATH
+/usr/local/tomcat/bin:/usr/local/java/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
+查看tomcat版本及信息
+[root@bogon ~]# catalina.sh version
+Using CATALINA_BASE:   /usr/local/tomcat
+Using CATALINA_HOME:   /usr/local/tomcat
+Using CATALINA_TMPDIR: /usr/local/tomcat/temp
+Using JRE_HOME:        /usr/local/java
+Using CLASSPATH:       /usr/local/tomcat8/bin/bootstrap.jar:/usr/local/tomcat/bin/tomcat-juli.jar
+Server version: Apache Tomcat/8.0.47
+Server built:   Sep 29 2017 13:46:41 UTC
+Server number:  8.0.47.0
+OS Name:        Linux
+OS Version:     3.10.0-514.el7.x86_64
+Architecture:   amd64
+JVM Version:    1.8.0_151-b12
+JVM Vendor:     Oracle Corporation
+给tomcat/bin执行文件添加执行权限并启动tomcat1
+
+[root@bogon ~]# chmod +x /usr/local/tomcat/bin/*.sh
+[root@bogon ~]# /usr/local/tomcat/bin/startup.sh 
+Using CATALINA_BASE:   /usr/local/tomcat
+Using CATALINA_HOME:   /usr/local/tomcat
+Using CATALINA_TMPDIR: /usr/local/tomcat/temp
+Using JRE_HOME:        /usr/local/java
+Using CLASSPATH:       /usr/local/tomcat/bin/bootstrap.jar:/usr/local/tomcat/bin/tomcat-juli.jar
+Tomcat started.
+查看端口是否生效，是否有8080端口
+添加防火墙规则允许8080端口通过
+[root@bogon ~]# firewall-cmd --add-prot=8080/tcp
+4. 部署tomcat2
+cp -rp tomcat1 tomcat2 
+安装步骤跟tomcat1一样，只需要改一下安装目录名，我改的是tomcat8
+[root@bogon ~]# /usr/local/tomcat8/
+给tomcat/bin执行文件添加执行权限
+[root@bogon ~]# chmod +x /usr/local/tomcat/bin/*.sh
+[root@bogon ~]# vim /etc/profile
+#tomcat2
+TOMCAT_8_HOME=/usr/local/tomcat8
+CATALINA_8_HOME=/usr/local/tomcat8
+CATALINA_8_BASE=/usr/local/tomcat8
+
+修改tomcat2的startup.sh    shutdown.sh  配置环境变量
+export JAVA_HOME=/usr/local/jdk
+export PATH=$PATH:$JAVA_HOME/bin
+export CLASSPATH=$JAVA_HOME/lib
+export CATALINA_HOME=$CATALINA_8_HOME
+export CATALINA_BASE=$CATALINA_8_BASE
+
+
+修改tomcat2端口conf/server.xml    tomcat1不用修改
+   ##8005改成9005</div><div><br></div><div><Connector port="9080" protocol="HTTP/1.1"   ##8080改成9080</div><div><br></div><div><Connector port="9009" protocol="AJP/1.3" redirectPort="8443" /> ##8009改成9009</div><div><br></div><div><br></div><div>修改bin/shutdown.sh  startup.sh的两个脚本上面添加环境变量</div><div>export JAVA_HOME=/usr/local/java</div><div>export PATH=$PATH:$JAVA_HOME/bin</div><div>export CLASSPATH=$JAVA_HOME/lib</div><div>export CATALINA_HOME=$CATALINA_8_HOME</div><div>export CATALINA_BASE=$CATALINA_8_BASE</div><div><br></div><div>启动：</div><div>/bin/startup.sh</div><div><br></div>
