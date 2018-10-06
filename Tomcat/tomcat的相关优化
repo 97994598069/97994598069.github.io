@@ -1,0 +1,110 @@
+由于刚做完一个tomcat，jboss，Oracle性能优化项目，想做个总结。写写项目过程中对他们优化过程的理解。
+tomcat安装配置就不讲啦（这个不会小明就很慌了，你在去看看基础的比较合适你现阶段）
+其实讲到优化，那就要明白你为什么要优化。
+
+正常情况tomcat默认情况下设置，是完全可以支持访问量不高的并发情况（tomcat8默认线程最大200，最小空闲25），所有如果你的项目没有并发量的要求的话，以下可以忽略。
+默认值请参照官方文档：http://tomcat.apache.org/tomcat-8.0-doc/config/executor.html
+就拿我优化的这个项目而已，客户要求100并发0.4秒 300并发 0.8秒 500并发1秒
+
+解释下并发概念
+小明的理解： 就拿100并发而已，就是指后台一直保持着100线程在处理，这个要区分下不是指你点击保持100点击量。如果你服务器处理速度快的话，100并发每秒1000点击量都可以。
+0.4秒是指响应时间
+当然如果是有这方面经验的人，就会说你这个不全，你应该考虑下你的吞吐量。别急面包会有的。
+是不是这个QPS = 并发数 / 平均响应时间，嘿嘿
+
+下面进入正题：tomcat优化分三大块
+
+一、内存优化:
+
+所谓内存优化：其实就是分配更多内存（当然也要合适的，不能一个猛超过了，一般建议内存1/4的80%），以及添加一些内存优化属性。这里就会涉及到内存的管理（什么堆内存，非堆内存，新生代，老生代，持久代等等吧），内存回收机制（采用多线程回收，回收机制）
+具体如下
+打开 omcatincatalina.sh
+export JAVA_OPTS="-server -Xms1400M -Xmx1400M -Xss512k -XX:+AggressiveOpts -XX:+UseBiasedLocking -XX:PermSize=128M -XX:MaxPermSize=256M -XX:+DisableExplicitGC -XX:MaxTenuringThreshold=31 -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSParallelRemarkEnabled -XX:+UseCMSCompactAtFullCollection -XX:LargePageSizeInBytes=128m -XX:+UseFastAccessorMethods -XX:+UseCMSInitiatingOccupancyOnly -Djava.awt.headless=true "
+上述这样的配置，基本上可以达到：
+系统响应时间增快
+JVM回收速度增快同时又不影响系统的响应率
+JVM内存最大化利用
+线程阻塞情况最小化
+
+参数解释：
+-server Tomcat以server模式运行，将拥有更大、更高的并发处理能力，更快更强捷的JVM垃圾回收机制，可以获得更多的负载与吞吐量，生产环境必须加上。
+
+-Xms –Xmx 一般设置这里两个值相等（推荐为内存的/14的80%）
+
+–Xmn 年轻代[Sun官方推荐配置为整个堆的3/8]
+
+-Xss 指设定每个线程的堆栈大小 一般是128k或者256k（这个值注意默值512K，有时会出现这个过小，tomcat起不来情况。所有根据的项目设置。反正越小越好）
+
+-XX:+AggressiveOpts 启用这个参数，则每当JDK版本升级时，你的JVM都会使用最新加入的优化技术（如果有的话）
+
+-XX:+UseBiasedLocking 启用一个优化了的线程锁，我们知道在我们的appserver，每个http请求就是一个线程，有的请求短有的请求长，就会有请求排队的现象，甚至还会出现线程阻塞，这个优化了的线程锁使得你的appserver内对线程处理自动进行最优调配。
+
+-XX:PermSize=128M 非堆的初始值[物理内存的1/64]
+
+-XX:MaxPermSize=256M 非堆的最大值[物理内存的1/4]
+
+-XX:+DisableExplicitGC 程序代码中不允许有显示的调用”System.gc()”
+
+-XX:+UseParNewGC 对年轻代采用多线程并行回收，这样收得快。
+
+-XX:+UseConcMarkSweepGC 即CMS gc 我们知道频频繁的GC会造面JVM的大起大落从而影响到系统的效率，因此使用了CMS GC后可以在GC次数增多的情况下，每次GC的响应时间却很短，比如说使用了CMS GC后经过jprofiler的观察，GC被触发次数非常多，而每次GC耗时仅为几毫秒。
+
+-XX:MaxTenuringThreshold 设置垃圾最大年龄
+
+-XX:+CMSParallelRemarkEnabled 在使用UseParNewGC 的情况下, 尽量减少 mark 的时间
+
+-XX:+UseCMSCompactAtFullCollection 在使用concurrent gc 的情况下, 防止 memoryfragmention, 对live object 进行整理, 使 memory 碎片减少
+
+-XX:+UseFastAccessorMethods get,set 方法转成本地代码
+
+-XX:LargePageSizeInBytes 指定 Java heap的分页页面大小
+
+
+二、连接器以及连接池的优化
+所谓连接器以及连接词优化，其实就是指对连接的优化处理（连接数量，空闲数量，压缩，缓存等相关一些属性的添加，以及设置一个合理值）
+
+个人观点：这个合理值，应该比你实际并发量多25%
+<Connector 
+executor="tomcatThreadPool"----连接池
+port="8081" 
+protocol="org.apache.coyote.http11.Http11AprProtocol" ----协议 
+maxThreads="500" ---最大线程数
+minSpareThreads="50" ---最小空闲数
+acceptCount="300" ----等待线程
+maxConnections="800" ---最大连接数，一般为等待线程加最大线程数
+connectionTimeout="20000" ---连接超时
+maxHttpHeaderSize="8192" ----最大文件大小 K为单位 
+tcpNoDelay="true" ---如果为true，服务器socket会设置TCP_NO_DELAY选项，在大多数情况下可以提高性能。缺省情况下设为true
+useURIValidationHack="false"---减少一些没必要的URL检查
+compression="on" ---是否开启gzip压缩功能
+compressionMinSize="500"---500K以上压缩
+compressableMimeType="text/html,text/xml,text/javascript,text/css,text/plain,application/xhtml+xml,application/x-javascript,application/javascript,text/xhtml" -----指定压缩类型
+disableUploadTimeout="false" ----如果是长连接超时，是否给一个更长的连接。默认为false，如果无特别要求，建议false
+redirectPort="8443" ----调整Https端口
+enableLookups="false" ---关闭DNS查询
+URIEncoding="UTF-8" /> ---编码格式
+
+三、协议优化
+所谓协议优化，其实就是指上面2优化中
+protocol="org.apache.coyote.http11.Http11AprProtocol" ----协议 
+这个的优化。
+
+默认情况tomcat采用BIO，偶买噶，他既然是线程阻塞的协议。可想而知，你如果要高并发的话，这协议卡死你。
+所谓线程阻塞，你可以理解为就是线程一个一个执行。排队买麦当娜冰淇淋。
+所有BIO协议是非常恐怖的，不过别慌，世界杯已经结束
+
+Tomcat给我们提供了非线程阻塞的协议
+1NIO/NIO2,默认情况Tomcat支持
+优化很简单
+protocol="HTTP/1.1" ----默认协议 
+将默然协议改为下面即可
+protocol="org.apache.coyote.http11.Http11NioProtocol" ----协议 
+protocol="org.apache.coyote.http11.Http11Nio2Protocol" ----协议 
+2APR，默认情况下也支持，不过需要安装额外jar包（推荐使用，很强大的。以后的主流）
+(怎么安装要不你看下我APR的文章吧或百度)
+有那么一点点繁琐
+装好后，也是和上面一样替代下协议
+protocol="org.apache.coyote.http11.Http11AprProtocol" ----协议 
+
+以上就是Tomcat的优化拉。其实这个优化经验也不是很足拉。毕竟才500并发。我runload测试的时候最高1000并发。反正优化就这些，都是死的。属性指根据自己的项目情况设置，一般在变差25%之内做测试，找个合理值。比如你要500并发，就可以测试下线程为500情况，400的，600的，700的情况 。增大线程数，减少等待线程，可提高响应时间。当然也要一个合理值。一切以你测试结果为依据设置属性。
+在回到我做的项目，以上设置完成，我也找到一个最优值。但是响应时间还是达不到。500并发维持在1.7秒左右。最后我们就从硬件入手。加大内存，加cup。完美解决。500并1秒。
