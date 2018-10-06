@@ -1,0 +1,345 @@
+基于Nginx实现10万+并发，你应该做的Linux内核优化
+由于默认的linux内核参数考虑的是最通用场景，这明显不符合用于支持高并发访问的Web服务器的定义，所以需要修改Linux内核参数，是的Nginx可以拥有更高的性能；
+
+在优化内核时，可以做的事情很多，不过，我们通常会根据业务特点来进行调整，当Nginx作为静态web内容服务器、反向代理或者提供压缩服务器的服务器时，期内核参数的调整都是不同的，这里针对最通用的、使Nginx支持更多并发请求的TCP网络参数做简单的配置；
+
+首先，你需要修改 /etc/sysctl.conf 来更改内核参数。
+
+fs.file-max = 999999
+#表示单个进程最大可以打开的句柄数；
+
+net.ipv4.tcp_tw_reuse = 1
+#参数设置为 1 ，表示允许将TIME_WAIT状态的socket重新用于新的TCP链接，这对于服务器来说意义重大，因为总有大量TIME_WAIT状态的链接存在；
+
+ner.ipv4.tcp_keepalive_time = 600
+#当keepalive启动时，TCP发送keepalive消息的频度；默认是2小时，将其设置为10分钟，可以更快的清理无效链接。
+
+net.ipv4.tcp_fin_timeout = 30  
+#当服务器主动关闭链接时，socket保持在FIN_WAIT_2状态的最大时间
+
+net.ipv4.tcp_max_tw_buckets = 5000
+#这个参数表示操作系统允许TIME_WAIT套接字数量的最大值，如果超过这个数字，TIME_WAIT套接字将立刻被清除并打印警告信息。
+#该参数默认为180000，过多的TIME_WAIT套接字会使Web服务器变慢。
+
+net.ipv4.ip_local_port_range = 1024 65000  
+#定义UDP和TCP链接的本地端口的取值范围。
+
+net.ipv4.tcp_rmem = 10240 87380 12582912  
+#定义了TCP接受缓存的最小值、默认值、最大值。
+
+net.ipv4.tcp_wmem = 10240 87380 12582912  
+#定义TCP发送缓存的最小值、默认值、最大值。
+
+net.core.netdev_max_backlog = 8096  
+#当网卡接收数据包的速度大于内核处理速度时，会有一个列队保存这些数据包。这个参数表示该列队的最大值。
+
+net.core.rmem_default = 6291456  
+#表示内核套接字接受缓存区默认大小。
+
+net.core.wmem_default = 6291456  
+#表示内核套接字发送缓存区默认大小。
+
+net.core.rmem_max = 12582912  
+#表示内核套接字接受缓存区最大大小。
+
+net.core.wmem_max = 12582912 
+#表示内核套接字发送缓存区最大大小。
+
+注意：以上的四个参数，需要根据业务逻辑和实际的硬件成本来综合考虑；
+
+net.ipv4.tcp_syncookies = 1
+#与性能无关。用于解决TCP的SYN攻击。
+
+net.ipv4.tcp_max_syn_backlog = 8192
+#这个参数表示TCP三次握手建立阶段接受SYN请求列队的最大长度，默认1024，将其设置的大一些可以使出现Nginx繁忙来不及accept新连接的情况时，Linux不至于丢失客户端发起的链接请求。
+
+net.ipv4.tcp_tw_recycle = 1  
+#这个参数用于设置启用timewait快速回收。
+
+net.core.somaxconn=262114 
+# 选项默认值是128，这个参数用于调节系统同时发起的TCP连接数，在高并发的请求中，默认的值可能会导致链接超时或者重传，因此需要结合高并发请求数来调节此值。
+
+net.ipv4.tcp_max_orphans=262114  
+#选项用于设定系统中最多有多少个TCP套接字不被关联到任何一个用户文件句柄上。如果超过这个数字，孤立链接将立即被复位并输出警告信息。这个限制指示为了防止简单的DOS攻击，不用过分依靠这个限制甚至认为的减小这个值，更多的情况是增加这个值。
+
+为了方便使用，下方不带注释的可以直接复制
+
+fs.file-max = 999999
+net.ipv4.tcp_tw_reuse = 1
+ner.ipv4.tcp_keepalive_time = 600
+net.ipv4.tcp_fin_timeout = 30  
+net.ipv4.tcp_max_tw_buckets = 5000
+net.ipv4.ip_local_port_range = 1024 65000  
+net.ipv4.tcp_rmem = 10240 87380 12582912  
+net.ipv4.tcp_wmem = 10240 87380 12582912  
+net.core.netdev_max_backlog = 8096  
+net.core.rmem_default = 6291456  
+net.core.wmem_default = 6291456  
+net.core.rmem_max = 12582912  
+net.core.wmem_max = 12582912 
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_max_syn_backlog = 8192
+net.ipv4.tcp_tw_recycle = 1  
+net.core.somaxconn=262114 
+net.ipv4.tcp_max_orphans=262114 
+
+修改好配置文件，执行 sysctl -p 命令，使配置立即生效
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+大战C100K之-Linux内核调优篇--转载
+早期的系统，系统资源包括CPU、内存等都是非常有限的，系统为了保持公平，默认要限制进程对资源的使用情况。由于Linux的默认内核配置无法满足C100K的要求，因此需要对其进行适当的调优。
+
+我们可以通过 ulimit 查看一下典型的机器默认的限制情况：
+
+$ ulimit -a
+core file size          (blocks, -c) 0
+data seg size           (kbytes, -d) unlimited
+scheduling priority             (-e) 0
+file size               (blocks, -f) unlimited
+pending signals                 (-i) 204800
+max locked memory       (kbytes, -l) 32
+max memory size         (kbytes, -m) unlimited
+open files                      (-n) 1024
+pipe size            (512 bytes, -p) 8
+POSIX message queues     (bytes, -q) 819200
+real-time priority              (-r) 0
+stack size              (kbytes, -s) 10240
+cpu time               (seconds, -t) unlimited
+max user processes              (-u) 204800
+virtual memory          (kbytes, -v) unlimited
+file locks                      (-x) unlimited
+比如其中的 open files，默认一个进程能打开的文件句柄数量为1024，对于一些需要大量文件句柄的程序，如web服务器、数据库程序等，1024往往是不够用的，在句柄使用完毕的时候，系统就会频繁出现emfile错误。
+
+俗话说：一个巴掌拍不响，要完成 C100K 的目标，需要服务器端与客户端的紧密配合，下面将分别对这二者的调优进行介绍。
+
+
+客户端
+1：文件句柄数量受限
+在Linux平台上，无论是编写客户端程序还是服务端程序，在进行高并发TCP连接处理时，由于每个TCP连接都要创建一个socket句柄，而每个socket句柄同时也是一个文件句柄，所以其最高并发数量要受到系统对用户单一进程同时可打开文件数量的限制以及整个系统可同时打开的文件数量限制。
+
+1.1：单一进程的文件句柄数量受限
+我们可以ulimit命令查看当前用户进程可打开的文件句柄数限制：
+
+[root@localhost ~]# ulimit -n
+1024
+这表示当前用户的每个进程最多允许同时打开1024个文件，除去每个进程必然打开的标准输入、标准输出、标准错误、服务器监听socket、进程间通讯的unix域socket等文件，剩下的可用于客户端socket连接的文件数就只有大概1024-10=1014个左右。也就是说，在默认情况下，基于Linux的通讯程序最多允许同时1014个TCP并发连接。
+
+对于想支持更高数量的TCP并发连接的通讯处理程序，就必须修改Linux对当前用户的进程可同时打开的文件数量的软限制（soft limit）和硬限制（hardlimit）。其中：
+
+软限制是指Linux在当前系统能够承受的范围内进一步限制用户能同时打开的文件数。
+硬限制是指根据系统硬件资源状况（主要是系统内存）计算出来的系统最多可同时打开的文件数量。
+通常软限制小于或等于硬限制，可通过ulimit命令查看软限制和硬限制：
+
+[root@localhost ~]# ulimit -Sn
+1024
+
+[root@localhost ~]# ulimit -Hn
+4096
+修改单一进程能同时打开的文件句柄数有2种方法：
+
+1、直接使用ulimit命令，如：
+
+[root@localhost ~]# ulimit -n 1048576
+执行成功之后，ulimit n、Sn、Hn的值均会变为1048576。但该方法设置的值只会在当前终端有效，且设置的值不能高于方法2中设置的值。
+
+2、对 /etc/security/limits.conf 文件，添加或修改：
+
+* soft nofile 1048576
+* hard nofile 1048576
+其中，
+
+* 代表对所有用户有效，若仅想针对某个用户，可替换星号。
+soft即软限制，它只是一个警告值。
+hard代表硬限制，是一个真正意义的阈值，超过就会报错。
+nofile表示打开文件的最大数量。
+1048576 = 1024 * 1024，为什么要取这个值呢？因为
+在linux kernel 2.6.25之前通过ulimit -n(setrlimit(RLIMIT_NOFILE))设置每个进程的最大打开文件句柄数不能超过NR_OPEN（1024*1024）,也就是100多w（除非重新编译内核），而在25之后，内核导出了一个sys接口可以修改这个最大值（/proc/sys/fs /nr_open）.具体的changelog在https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=9cfe015aa424b3c003baba3841a60dd9b5ad319b
+
+注意文件保存之后，需要注销或重启系统方能生效。
+
+1.2：整个系统的文件句柄数量受限
+解决完单一进程的文件句柄数量受限问题后，还要解决整个系统的文件句柄数量受限问题。我们可通过以下命令查看Linux系统级的最大打开文件数限制：
+
+[root@localhost ~]# cat /proc/sys/fs/file-max
+98957
+file-max表示系统所有进程最多允许同时打开的文件句柄数，是Linux系统级硬限制。通常，这个系统硬限制是Linux系统在启动时根据系统硬件资源状况计算出来的最佳的最大同时打开文件数限制，如果没有特殊需要，不应该修改此限制。
+
+要修改它，需要对 /etc/sysctl.conf 文件，增加一行内容：
+
+fs.file-max = 1048576
+保存成功后，需执行下面命令使之生效：
+
+[root@localhost ~]# sysctl -p
+2：端口数量受限
+解决完文件句柄数量受限的问题后，就要解决IP端口数量受限的问题了。一般来说，对外提供请求的服务端不用考虑端口数量问题，只要监听某一个端口即可。可客户端要模拟大量的用户对服务端发起TCP请求，而每一个请求都需要一个端口，为了使一个客户端尽可能地模拟更多的用户，也就要使客户端拥有更多可使用的端口。
+
+由于端口为16进制，即最大端口数为2的16次方65536（0-65535）。在Linux系统里，1024以下端口只有超级管理员用户（如root）才可以使用，普通用户只能使用大于等于1024的端口值。
+
+我们可以通过以下命令查看系统提供的默认的端口范围：
+
+[root@localhost ~]# cat /proc/sys/net/ipv4/ip_local_port_range
+32768 61000
+即只有61000-32768=28232个端口可以使用，即单个IP对外只能同时发送28232个TCP请求。
+
+修改方法有以下2种：
+
+1、执行以下命令：
+
+echo "1024 65535"> /proc/sys/net/ipv4/ip_local_port_range
+该方法立即生效，但重启后会失效。
+
+2、修改 /etc/sysctl.conf 文件，增加一行内容：
+
+net.ipv4.ip_local_port_range = 1024 65535
+保存成功后，需执行下面命令使之生效：
+
+[root@localhost ~]# sysctl -p
+修改成功后，可用端口即增加到65535-1024=64511个，即单个客户端机器只能同时模拟64511个用户。要想突破这个限制，只能给该客户端增加IP地址，这样即可相应成倍地增加可用IP:PORT数。具体可参考yongboy的这篇文章。
+
+服务端
+1：文件描述符数量受限
+同客户端的问题1。
+
+
+2：TCP参数调优
+要想提高服务端的性能，以达到我们高并发的目的，需要对系统的TCP参数进行适当的修改优化。
+
+方法同样是修改 /etc/sysctl.conf 文件，增加以下内容：
+
+net.ipv4.tcp_tw_reuse = 1 
+当服务器需要在大量TCP连接之间切换时，会产生大量处于TIME_WAIT状态的连接。TIME_WAIT意味着连接本身是关闭的，但资源还没有释放。将net_ipv4_tcp_tw_reuse设置为1是让内核在安全时尽量回收连接，这比重新建立新连接要便宜得多。
+
+net.ipv4.tcp_fin_timeout = 15
+这是处于TIME_WAIT状态的连接在回收前必须等待的最小时间。改小它可以加快回收。
+
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+提高TCP的最大缓冲区大小，其中：
+
+net.core.rmem_max：表示接收套接字缓冲区大小的最大值（以字节为单位）。
+
+net.core.wmem_max：表示发送套接字缓冲区大小的最大值（以字节为单位）。
+
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+提高Linux内核自动对socket缓冲区进行优化的能力，其中：
+
+net.ipv4.tcp_rmem：用来配置读缓冲的大小，第1个值为最小值，第2个值为默认值，第3个值为最大值。
+
+net.ipv4.tcp_wmem：用来配置写缓冲的大小，第1个值为最小值，第2个值为默认值，第3个值为最大值。
+
+net.core.netdev_max_backlog = 4096
+每个网络接口接收数据包的速率比内核处理这些包的速率快时，允许送到队列的数据包的最大数目。默认为1000。
+
+net.core.somaxconn = 4096
+表示socket监听（listen）的backlog上限。什么是backlog呢？backlog就是socket的监听队列，当一个请求（request）尚未被处理或建立时，他会进入backlog。而socket server可以一次性处理backlog中的所有请求，处理后的请求不再位于监听队列中。当server处理请求较慢，以至于监听队列被填满后，新来的请求会被拒绝。默认为128。
+
+net.ipv4.tcp_max_syn_backlog = 20480
+表示SYN队列的长度，默认为1024，加大队列长度为8192，可以容纳更多等待连接的网络连接数。
+
+net.ipv4.tcp_syncookies = 1
+表示开启SYN Cookies。当出现SYN等待队列溢出时，启用cookies来处理，可防范少量SYN攻击，默认为0，表示关闭。
+
+net.ipv4.tcp_max_tw_buckets = 360000
+表示系统同时保持TIME_WAIT套接字的最大数量，如果超过这个数字，TIME_WAIT套接字将立刻被清除并打印警告信息。默认为180000。
+
+net.ipv4.tcp_no_metrics_save = 1
+一个tcp连接关闭后，把这个连接曾经有的参数比如慢启动门限snd_sthresh、拥塞窗口snd_cwnd，还有srtt等信息保存到dst_entry中，只要dst_entry没有失效，下次新建立相同连接的时候就可以使用保存的参数来初始化这个连接。
+
+net.ipv4.tcp_syn_retries = 2
+表示在内核放弃建立连接之前发送SYN包的数量，默认为4。
+
+net.ipv4.tcp_synack_retries = 2
+表示在内核放弃连接之前发送SYN+ACK包的数量，默认为5。
+
+完整的TCP参数调优配置如下所示：
+
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.core.netdev_max_backlog = 4096
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 20480
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_max_tw_buckets = 360000
+net.ipv4.tcp_no_metrics_save = 1
+net.ipv4.tcp_syn_retries = 2
+net.ipv4.tcp_synack_retries = 2
+其它一些参数
+vm.min_free_kbytes = 65536
+用来确定系统开始回收内存的阀值，控制系统的空闲内存。值越高，内核越早开始回收内存，空闲内存越高。
+
+vm.swappiness = 0
+控制内核从物理内存移出进程，移到交换空间。该参数从0到100，当该参数=0，表示只要有可能就尽力避免交换进程移出物理内存;该参数=100，这告诉内核疯狂的将数据移出物理内存移到swap缓存中。
+
+
+
+============================================================================================================
+
+
+
+Nginx做web服务器linux内核参数优化
+
+Nginx提供web服务时Linux内核参数调整是必不可少的，其中在优化方面就需要我们格外的注意。在下面就是对Linux内核参数优化的详细介绍，希望大家有所收获。
+
+关于Linux内核参数的优化：
+
+net.ipv4.tcp_max_tw_buckets = 6000
+
+timewait的数量，默认是180000。
+
+net.ipv4.ip_local_port_range = 1024 65000
+
+允许系统打开的端口范围。
+
+net.ipv4.tcp_tw_recycle = 1
+
+启用timewait快速回收。
+
+net.ipv4.tcp_tw_reuse = 1
+
+开启重用。允许将TIME-WAIT sockets重新用于新的TCP连接。
+
+net.ipv4.tcp_syncookies = 1
+
+开启SYN Cookies，当出现SYN等待队列溢出时，启用cookies来处理。
+
+net.core.somaxconn = 262144
+
+web应用中listen函数的backlog默认会给我们内核参数的net.core.somaxconn限制到128，而Nginx内核参数定义的NGX_LISTEN_BACKLOG默认为511，所以有必要调整这个值。
+
+net.core.netdev_max_backlog = 262144
+
+每个网络接口接收数据包的速率比内核处理这些包的速率快时，允许送到队列的数据包的最大数目。
+
+net.ipv4.tcp_max_orphans = 262144
+
+系统中最多有多少个TCP套接字不被关联到任何一个用户文件句柄上。如果超过这个数字，孤儿连接将即刻被复位并打印出警告信息。这个限制仅仅是为了防止简单的DoS攻击，不能过分依靠它或者人为地减小这个值，更应该增加这个值(如果增加了内存之后)。
+
+net.ipv4.tcp_max_syn_backlog = 262144
+
+记录的那些尚未收到客户端确认信息的连接请求的最大值。对于有128M内存的系统而言，缺省值是1024，小内存的系统则是128。
+
+net.ipv4.tcp_timestamps = 0
+
+时间戳可以避免序列号的卷绕。一个1Gbps的链路肯定会遇到以前用过的序列号。时间戳能够让内核接受这种“异常”的数据包。这里需要将其关掉。
+
+net.ipv4.tcp_synack_retries = 1
+
+为了打开对端的连接，内核需要发送一个SYN并附带一个回应前面一个SYN的ACK。也就是所谓三次握手中的第二次握手。这个设置决定了内核放弃连接之前发送SYN+ACK包的数量。
+
+net.ipv4.tcp_syn_retries = 1
+
+在内核放弃建立连接之前发送SYN包的数量。
+
+net.ipv4.tcp_fin_timeout = 1
+
+如果套接字由本端要求关闭，这个参数决定了它保持在FIN-WAIT-2状态的时间。对端可以出错并永远不关闭连接，甚至意外当机。缺省值是60秒。2.2 内核的通常值是180秒，你可以按这个设置，但要记住的是，即使你的机器是一个轻载的WEB服务器，也有因为大量的死套接字而内存溢出的风险，FIN- WAIT-2的危险性比FIN-WAIT-1要小，因为它最多只能吃掉1.5K内存，但是它们的生存期长些。
+
+net.ipv4.tcp_keepalive_time = 30
+
+当keepalive起用的时候，TCP发送keepalive消息的频度。缺省是2小时
