@@ -1,0 +1,289 @@
+tomcat相关配置技巧梳理
+
+1）nginx+tomcat；即前端放一台nginx，然后通过nginx反向代理到tomcat端口（可参考：分享一例测试环境下nginx+tomcat的视频业务部署记录）
+2）tomcat直接部署站点，不通过nginx反向代理。
+
+下面针对tomcat的有关配置使用进行说明：
+1）默认站点根目录
+tomcat的默认站点根目录是webapps/ROOT，配置文件是server.xml，
+配置文件server.xml 里的主要内容是：
+[root@huanqiu-test ~]# vim /Data/app/tomcat-7/conf/server.xml       //如若修改tomcat的访问端口，替换下面的8080即可
+.....
+   
+               connectionTimeout="20000"
+               redirectPort="8443" />
+.....
+     
+            unpackWARs="true" autoDeploy="true">
+.....
+
+上面配置说明tomcat的访问地址是http://localhost:8080
+站点目录是/Data/app/tomcat-7/webapps/ROOT
+记住提前将webapps目录清空，然后注意：
+如果代码的war包名称是ROOT.war，那么tomcat重启后，访问站点的根目录就是webapps/ROOT,访问url是http://localhost:8080 （ROOT目录，在访问时的url中可以省略）
+如果代码的war包名次不是ROOT.war，比如是jenkins.war，那么tomcat重启后，访问站点的根目录就是webapps/jenkins，访问url就是http://localhost:8080/jenkins （非ROOT目录，在访问时的url中必须要带上）
+
+[root@huanqiu-test ~]# ll /usr/local/tomcat7/webapps/
+total 62180
+drwxr-xr-x. 16 root root 4096 Dec 15 12:33 jenkins
+-rw-r--r--. 1 root root 63664946 Oct 30 20:38 jenkins.war
+
+因此这个tomcat站点访问地址是：http://localhost:8080/jenkins
+
+
+2）修改默认域名
+如下，只修改"Host name"处，将默认的localhost修改为www.wangjenkins.com
+那么此tomcat站点访问地址是：http://www.wangjenkins.com:8080/jenkins/
+[root@huanqiu-test ~]# vim /Data/app/tomcat-7/conf/server.xml      
+.....
+   
+               connectionTimeout="20000"
+               redirectPort="8443" />
+.....
+     
+            unpackWARs="true" autoDeploy="true">
+.....
+
+
+3）修改tomcat访问的默认站点目录
+如下配置，重启tomcat后，它就会把起先默认站点目录/Data/app/tomcat-7/webapps/ROOT修改成/home/tomcat/www这个目录。
+[root@huanqiu-test ~]# vim /Data/app/tomcat-7/conf/server.xml      
+.....
+   
+               connectionTimeout="20000"
+               redirectPort="8443" />
+.....
+     
+            unpackWARs="true" autoDeploy="true">
+        //这一行最好添加上，path后面的""里配置的是tomcat的子项目，""为空，表示是父项目
+.....
+
+[root@huanqiu-test ~] # ll /home/tomcat/www/
+total 62180
+drwxr-xr-x. 9 root root 4096 Dec 15 13:42 jenkins
+-rw-r--r--. 1 root root 63664946 Dec 15 13:42 jenkins.war
+
+[root@huanqiu-test ~] # ll /usr/local/tomcat7/webapps/
+total 62184
+drwxr-xr-x. 7 root root 4096 Dec 15 14:34 jenkins
+
+这个tomcat站点访问地址是：http://www.wangjenkins.com:8080/jenkins
+
+注意:
+1）上面的appBase可以配置成新的站点目录，这时下面的Context这一行配置可以不加。默认站点目录webapps下还是会产生代码目录，只是tomcat访问的时候不会去调用它。
+2）上面的appBase可以配置成默认的webapps站点目录，这种情况下，就必须添加Contest这一行，并在Context行内配置新的站点目录。tomcat启动后，解压代码的war包会往webapps这个默认站点目录里也产生一份（即新站点目录和默认的webapps站点目录都会有一份代码），只是tomcat访问时不会去调用webapps目录下的代码；
+3）Context这一行是tomcat的项目配置，path后的""内填写的是项目名称，如果""为空，则表示是父项目。Context这一行的配置：
+     在appBase配置成新的站点目录的情况下可有可无（不过建议最好还是配置上）
+     在appBase配置成默认的webapps目录的情况下就必须要有！
+
+所以配置也可以是：
+       
+                 unpackWARs="true" autoDeploy="true">
+也可以是：
+     
+                unpackWARs="true" autoDeploy="true">
+     
+
+
+4）部署多个项目
+1.在同一个tomcat下（即同一个端口）有两种方式：
+   1）共用同一个域名（同一Host name）下的多个子项目
+   2）不同域名（多个Host name）下的项目
+
+tomcat多项目部署，需要用到下面一行：
+其中，path后的""内填写的是项目名称，如果""为空，则表示是父项目（父项目情况下，这个Context行可以省略）
+
+同一个域名下的多项目部署，配置如下：
+[root@huanqiu-test ~]# vim /usr/local/tomcat7/conf/server.xml //Context行的位置放在"className"区域的下面
+.......
+     
+          unpackWARs="true" autoDeploy="true">
+......
+     
+                prefix="localhost_access_log." suffix=".txt"
+                pattern="%h %l %u %t "%r" %s %b" />
+      
+      
+ 
+......
+
+上面的配置可知：
+父项目是http://www.wangjenkins.com/8080/jenkins，站点目录是/usr/local/tomcat7/webapps，由于webapps下不是默认的ROOT，而是jenkins。所以访问的url里要带jenkins
+两个子项目分别是：
+http://www.wangjenkins.com/8080/huanqiu1，对应的站点目录是/usr/local/tomcat7/huanqiu1
+http://www.wangjenkins.com/8080/huanqiu2，对于的站点目录是/usr/local/tomcat7/huanqiu2
+
+不同域名下的多项目部署，配置如下：
+[root@huanqiu-test ~]# vim /usr/local/tomcat7/conf/server.xml
+......
+     
+                unpackWARs="true" autoDeploy="true">
+
+     
+     
+
+     
+     
+                prefix="localhost_access_log." suffix=".txt"
+                pattern="%h %l %u %t "%r" %s %b" />
+
+     
+                unpackWARs="true" autoDeploy="true">
+
+       
+       
+
+       
+       
+                  prefix="localhost_access_log." suffix=".txt"
+                  pattern="%h %l %u %t "%r" %s %b" />
+
+       
+                 unpackWARs="true" autoDeploy="true">
+
+       
+       
+
+       
+       
+             prefix="localhost_access_log." suffix=".txt"
+             pattern="%h %l %u %t "%r" %s %b" />
+        
+       
+
+
+根据上面的配置可知：
+http://localhost:8080 对应的站点目录是/usr/local/tomcat7/webapps（假设对应站点目录下的名称都是ROOT）
+http://www.beijing.com:8080 对应的站点目录是/usr/local/tomcat7/apps
+http://www.wangshibo.com:8080 对应的站点目录是/usr/local/tomcat7/wang,并且这个项目下有两个子项目分别是http://www.wangshibo.com:8080/ops1、http://www.wangshibo.com:8080/ops2
+
+2.在不同的tomcat下（不同的端口）
+将tomcat复制成多个副本，然后根据业务更改复制后的tomcat名，修改server.conf中的三个关键端口(下面会提到).注意站点目录对应关系。
+[不过，为了避免不必要的麻烦，最好还是别复制已经在使用中的tomcat，可以重新解压tomcat安装包进行使用（将其备份，以待后续再使用）].当然也可以在不同端口的tomcat下设置各自的子项目。
+--------------------------------------------------------------------------------------------------------------------------
+需要注意的问题
+在一个服务器上启用了多个tomcat实例，那么需要特别注意的就是各个实例的端口问题，很容易因为端口冲突造成tomcat实例启动失败！
+
+各个tomcat实例需要修改的端口，其实就是server.xml文件里的三个端口需要修改，如下：
+[root@huanqiu-test conf]# pwd
+/Data/app/tomcat-7-wls/conf
+[root@huanqiu-test conf]# vim server.xml 
+.......
+       
+              connectionTimeout="20000"
+              redirectPort="8443" />
+......
+       
+......
+
+       
+
+只要上面三个端口不冲突，基本就能成功启动实例了。
+
+
+另外：最好做下java的环境变量设置，不然，tomcat启动容易失败~~
+[root@huanqiu-test ~]# java -version
+java version "1.7.0_45"
+OpenJDK Runtime Environment (rhel-2.4.3.3.el6-x86_64 u45-b15)
+OpenJDK 64-Bit Server VM (build 24.45-b08, mixed mode)
+[root@huanqiu-test ~]# which java
+/usr/bin/java
+[root@huanqiu-test ~]# ll /usr/bin/java
+lrwxrwxrwx. 1 root root 22 7月 11 2015 /usr/bin/java -> /etc/alternatives/java
+[root@huanqiu-test ~]# ll /etc/alternatives/java
+lrwxrwxrwx. 1 root root 46 7月 11 2015 /etc/alternatives/java -> /usr/lib/jvm/jre-1.7.0-openjdk.x86_64/bin/java
+
+由此可知，java的home目录是/usr/lib/jvm/jre-1.7.0-openjdk.x86_64
+
+[root@huanqiu-test jvm]# ll
+总用量 8
+drwxr-xr-x. 3 root root 4096 7月 11 2015 java-1.6.0-openjdk-1.6.0.0.x86_64
+drwxr-xr-x. 3 root root 4096 7月 11 2015 java-1.7.0-openjdk-1.7.0.45.x86_64
+lrwxrwxrwx. 1 root root 21 7月 11 2015 jre -> /etc/alternatives/jre
+lrwxrwxrwx. 1 root root 27 7月 11 2015 jre-1.6.0 -> /etc/alternatives/jre_1.6.0
+lrwxrwxrwx. 1 root root 37 7月 11 2015 jre-1.6.0-openjdk.x86_64 -> java-1.6.0-openjdk-1.6.0.0.x86_64/jre
+lrwxrwxrwx. 1 root root 27 7月 11 2015 jre-1.7.0 -> /etc/alternatives/jre_1.7.0
+lrwxrwxrwx. 1 root root 38 7月 11 2015 jre-1.7.0-openjdk.x86_64 -> java-1.7.0-openjdk-1.7.0.45.x86_64/jre
+lrwxrwxrwx. 1 root root 29 7月 11 2015 jre-openjdk -> /etc/alternatives/jre_openjdk
+
+设置java的环境变量
+[root@huanqiu-test jvm]# vim /etc/profile
+.......
+export JAVA_HOME=/usr/lib/jvm/jre-1.7.0-openjdk.x86_64
+export CLASSPATH=.:$JAVA_HOME/jre/lib/rt.jar:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+export PATH=$PATH:$JAVA_HOME/bin
+
+使之生效
+[root@huanqiu-test ~]# source /etc/profile
+
+[root@huanqiu-test ~]# echo $JAVA_HOME
+/usr/lib/jvm/java-1.7.0-openjdk.x86_64
+[root@huanqiu-test ~]# echo $CLASSPATH
+.:/usr/lib/jvm/java-1.7.0-openjdk.x86_64/jre/lib/rt.jar:/usr/lib/jvm/java-1.7.0-openjdk.x86_64/lib/dt.jar:/usr/lib/jvm/java-1.7.0-openjdk.x86_64/lib/tools.jar
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+上面java的环境变量一定要设置！不然tomcat启动会失败，会有以下报错：
+INFO: The APR based Apache Tomcat Native library which allows optimal performance in production environments was not found on the java.library.path: /usr/java/packages/lib/amd64:/usr/lib64:/lib64:/lib:/usr/lib
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+[通常：在对tomcat服务进行迁移或切换的时候，需要将webapps下的ROOT和ROOT.war包都一起拷贝过去]
+
+--------------------------------------------------------------------------Tomcat中实现IP访问限制-------------------------------------------------------------------------------
+Tomcat中的ip访问限制，即设置允许某个(或某些)客户端能够访问到tomcat服务器，或不能访问tomcat服务器。
+限制tomcat的IP访问其实是一件非常容易的事情，只需要编辑tomcat的server.xml，增加适当代码即可。
+
+修改如下：
+例如有一个名为myapp的虚拟目录,打开tomcat的server.xml配置文件，找到其配置代码如下：
+将其改成下面代码：
+   
+        allow="127.0.0.1" deny="″ />
+ 
+经过这样设置后，将只允许本机访问Tomcat.
+ 
+如要限制只能192.168.1.0-192.168.5.255和192.168.10.0-192.168.15.255这样的IP段，可以类似这样写：
+   
+        allow="192.168.[1-5].*,192.168.[10-15].*" deny="″ />
+设置好后重新启动Tomcat就生效.
+ 
+注意：
+之间
+ 
+---------------------另一种玩法---------------------
+效果：只有指定的主机或IP地址才可以访问部署在Tomcat下的应用。
+Tomcat供了两个参数供你配置：RemoteHostValve 和RemoteAddrValve，前者用于限制主机名，后者用于限制IP地址。通过配置这两个参数，可以让你过滤来自请求的主机或IP地址，并允许或拒绝哪些主机/IP。
+ 
+1）全局设置，对Tomcat下所有应用生效
+server.xml中添加下面一行，重启服务器即可：
+此行放在之前。
+ 
+例子：
+只允许192.168.1.10访问：
+ 
+只允许192.168.1.*网段访问：
+ 
+只允许192.168.1.10、192.168.1.30访问：
+ 
+根据主机名进行限制：
+ 
+2）局部设置，仅对具体的应用生效
+根据项目配置情况进行设置：
+直接在server.xml中进行设置${tomcat_root}/conf/server.xml
+ 
+在上述文件对应项目的前增加下面一行：
+ 
+特别需求：测试版本不想提供别人访问
+打开tomcat6/conf/server.xml文件
+如果是要限制整个站点别人不能访问，则要将
+加入到标签中
+ 
+如果是要限制某个站点不能被访问，则要加入到里面就可以。
+  
+RemoteHostValve表示根据主机名进行限制：
+修改文件：
+tomcat/conf/server.xml
+ 
+通过tomcat限制ip访问
+         allow="*.mycompany.com,*.a.com"/>                                 //域名限制
+         deny="192.168.1.*"/>                                             //IP限制
+ 
+重启tomcat生效
