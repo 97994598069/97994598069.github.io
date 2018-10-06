@@ -1,0 +1,117 @@
+---
+published: false
+---
+自从Nodejs火了，前端能做的事、要做的事越来越多了；同时对前端的要求也就越来越高，如果现在还只是停留在浏览器端写页面做交互，估计很难找到（更好的）工作了，Node中间层、Node微服务、网关这些可以和业务分离的地方以后可能都是前端的事了；Nodejs是把锋利的瑞士军刀，但你也不要想多了；合理的选型，各司其职，职尽其能，才能发挥各自最大的作用；毕竟一切从实际出发，实事求是，理论联系实际才是最佳的方法论；比如Nodejs可以做反向代理（http-proxy），可以很快的搭建静态资源站，但这些并不是Nodejs最擅长的，这些交给Nginx显然是个更好的选择，既可以把这些事做更好，还给Nodejs服务减压了！
+
+快速拾起Nginx:
+Nginx是一个高性能的Web和反向代理服务器，稳定、强大、系统资源占用低，这些就不说了；
+
+在nginx.conf这个配置文件里，一个server {}块可以对应一个站点的服务，每个server {}块里可以配置多个location {}块来对站点进行路由级别的控制，既可以通过proxy_pass target设置反向代理的server，也可以直接通过root dir来访问目录下的静态文件；server_name设置访问的域，多个用空格隔开，或者用通配符和正则；location后面可以是正则以及nginx提供的丰富的匹配符和变量；记住大括号前面的空格不能省，每行结束语句的分号不能省；
+
+a. 比如用Nodejs启动了一个站点监听3000端口，用http://a.famanoder.cn来访问:
+server {
+    listen 80;
+    server_name a.famanoder.cn;
+
+    location / {
+        proxy_pass http://localhost:3000;
+    }
+}
+
+
+b. 比如把所有的静态资源放到了dist目录，用http://cdn.famanoder.cn来访问:
+server {
+    listen 80;
+    server_name cdn.famanoder.cn;
+
+    location / {
+        index index.html;
+        root D:\sources\dist;
+    }
+}
+
+
+c. 用vue做的一个移动端的项目，用http://m.famanoder.cn来访问，所有数据接口由http://famanoder.cn提供；
+server {
+    listen 80;
+    server_name m.famanoder.cn;
+
+    location /api {
+        # 代理api，以免跨域
+        proxy_pass https://famanoder.cn;
+    }
+    location / {
+        index index.html;
+        root D:/vue/dist;
+    }
+}
+
+
+
+
+解决前端跨域问题：
+在前后端分离的时候，前后端搭建了两套环境，前端请求数据的时候会跨域，一般是用Nodejs做中转，比如使用http-proxy和request模块，或者在webpack的dev-server里配置proxy，浏览器兼容性比较理想的情况下还可以直接设置CORS；这样对于打包上线也不需要做太多改动；当然有时候还需要jsonp；
+
+a. 设置CORS
+server {
+    listen 80;
+    server_name cdn.famanoder.cn;
+
+    location / {
+        add_header Access-Control-Allow-Origin *;  
+        add_header Access-Control-Allow-Credentials true;  
+        add_header Access-Control-Allow-Methods GET,POST,OPTIONS;
+        index index.html;
+        root D:/sources/dist;
+    }
+}
+
+如果不想设置星号的话，这个变通的做法貌似更灵活，还可以通过跨域反过来限制某些资源的是否可访问
+if ($http_referer ~* 'famanoder.cn') {  
+    add_header Access-Control-Allow-Origin *;  
+    add_header Access-Control-Allow-Credentials true;  
+    add_header Access-Control-Allow-Methods GET,POST,OPTIONS;  
+}
+
+
+b. 做api中转  类似与设置api.www.chinabim.com 二级域名
+server {
+    listen 80;
+    server_name m.famanoder.cn;
+
+    location /api {
+        proxy_pass https://localhost:3000;
+    }
+}
+
+
+
+从http切换到https：
+对于一般的散户来说，Letsencrypt是个不错的选择，可以免费为多个域名提供一套证书（散户福利！Nodejs多站点切换Htpps协议）；可以新建一个站点专门为申请证书服务，以免以后重新申请时重启应用或再次搭建；对于切换到https，只需在80端口上直接对指定域名做301跳转到https对应地址，server块内做很小改动即可：
+server {
+    listen 80;
+    server_name *.famanoder.com famanoder.com;
+
+    location / {
+        # 迁移到https
+        return 301 https://$host$request_uri;
+    }
+
+    location ~* 'acme-challenge' {
+        # 2333端口留做以后申请证书用
+        proxy_pass http://localhost:2333;
+    }
+}
+server {
+    # 监听443端口，开启ssl
+    listen 443 ssl;
+    server_name cdn.famanoder.cn;
+    # 把申请到的证书加进来
+    ssl_certificate      D:/crt.pem;
+    ssl_certificate_key  D:/key.pem;
+
+    location / {
+        index index.html;
+        root D:\sources\dist;
+    }
+}
