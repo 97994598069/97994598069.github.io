@@ -10,8 +10,7 @@ title:  个人博客
 subtitle: 分享技术，品味人生
 name: 个人博客
 email: 979945980@qq.com
-description: 本站是纯洁的微笑的技术分享博客。内容涵盖生活故事、Java后端技术、Spring Boot、Spring Cloud、微服务架构、大数据演进、高可用架构、中间件使用、系统监控等相关的研究与知识分享。
-keywords: Spring,Spring Boot,Spring Cloud,MongoDB,Jvm,Docker,生活故事,架构,大数据,一线,FastDFS,开发者,编程,代码,开源,IT网站,Developer,Programmer,Coder,Geek,IT技术博客,Java,Python,
+description: 本站是个人技术分享博客。
 encoding: "utf-8"
 favicon: favicon.png 
 
@@ -55,7 +54,7 @@ paginate: 10
 paginate_path: 'page:num'
 
 # Navigation. If you do not like these modules, just remove them :D
-navs:
+#navs:
 
 #  -
  #   href: /
@@ -182,4 +181,4 @@ navs:
  #   clientID: 61bfc53d957e74e78f8f
 #    clientSecret: 31c61e66cdcc9ada8db2267ee779d0bdafac434c
 # 在使用其它评论组件时可点击显示 Disqus
-lazy_load_disqus : true
+#lazy_load_disqus : true
