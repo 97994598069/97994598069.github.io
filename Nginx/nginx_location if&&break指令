@@ -1,0 +1,96 @@
+location:
+在 Nginx 的配置文件中，通过 location 匹配用户请求中的 URI。格式如下：
+location 前缀字符串  URL {
+    [ 配置 ]
+}
+前缀字符串及优先级:
+其中，前缀字符串部分支持 5 种：
+=：精确匹配，优先级最高。如果找到了这个精确匹配，则停止查找。
+^~：URI 以某个常规字符串开头，不是正则匹配
+~：区分大小写的正则匹配
+~*：不区分大小写的正则匹配
+/：通用匹配, 优先级最低。任何请求都会匹配到这个规则
+优先级为： = > 完整路径 > ^~ > ~、~* > 部分起始路径 > /
+示例:
+# 精确匹配 / ，域名后面不能带任何字符串。匹配到后，停止继续匹配
+location  = / {
+}
+# 匹配到所有请求
+location  / {
+    if (-f $request_filename) {
+        expires max;
+        break;
+    }
+    if (!-e $request_filename) {
+        rewrite ^/(.*)$ /index.php/$1 break;
+    }
+    index index.php;
+    autoindex off;
+}
+# 匹配任何以 /documents/ 开头的 URI。优先级低于正则表达式，匹配到后还会继续往下匹配，当后面没有正则匹配或正则匹配失败时，使用这里代码
+location /documents/ {
+}
+# 最长字符匹配到 /images/abc，继续往下，会发现 ^~ 存在
+location /images/abc {
+}
+# 匹配任何以 /images/ 开头的 URI。优先级高于正则表达式，匹配成功后，停止往下搜索正则。
+location ^~ /images/ {
+}
+# 正则匹配，区分大小写。匹配任何以 /documents/Abc 开头的地址，匹配符合以后，还要继续往下搜索
+location ~ /documents/Abc {
+}
+# 正则匹配，忽略大小写。匹配所有以 gif、jpg 或 jpeg 结尾的请求
+location ~* \.(gif|jpg|jpeg)$ {
+}
+location 匹配原则
+每个请求的处理逻辑顺序如下：
+用所有的前缀字符串测试 URI。
+等号 = 定义了前缀字符串和 URI 的精确匹配关系。如果找到了这个精确匹配，则停止查找。
+如果 ^~ 修饰符预先匹配到最长的前缀字符串，则不检查正则表达式。
+存储最长的匹配前缀字符串。
+用正则表达式测试 URI。
+匹配到第一个正则表达式后停止查找，使用对应的 location。
+如果没有匹配到正则表达式，则使用之前存储的前缀字符串对应的 location。
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+if 和 break 指令:
+if指令:
+if 的可用上下文有：server、location。if 的条件可能是以下任何一种情况：
+变量名；如果变量值是空字符串或“0”则为 FALSE。注意，在 1.0.1 版本之前，任何以“0”开头的字符串都会被当做 FALSE。
+使用“=”和“!=”的变量跟字符串的比较
+使用“~”（区分大小写匹配）和“~*”（不区分大小写匹配）运算符将变量与正则表达式匹配。正则表达式可以包含捕获，之后可以通过 $1 到 $9 这几个变量名重复使用。“!~”和“!~*”用作不匹配运算符。如果正则表达式包含“}”或“;”字符，则整个表达式应该用单引号或双引号括起来。
+用“-f”和“!-f”运算符检查文件是否存在
+用“-d”和“!-d”运算符检查目录是否存在
+用“-e”和“!-e”运算符检查文件、目录或符号链接的存在性
+用“-x”和“!-x”运算符检查可执行文件
+示例：
+# 如果用户代理 User-Agent 包含"MSIE"，rewrite 请求到 /msie/ 目录下。通过正则匹配的捕获可以用 $1 $2 等使用
+if ($http_user_agent ~ MSIE) {
+    rewrite ^(.*)$ /msie/$1 break;
+}
+# 如果 cookie 匹配正则，设置变量 $id 等于匹配到的正则部分
+if ($http_cookie ~* "id=([^;]+)(?:;|$)") {
+    set $id $1;
+}
+# 如果请求方法为 POST，则返回状态 405（Method not allowed）
+if ($request_method = POST) {
+    return 405;
+}
+# 如果通过 set 指令设置了 $slow，限速
+if ($slow) {
+    limit_rate 10k;
+}
+# 如果请求的文件存在，则开启缓存，并通过 break 停止后面的检查
+if (-f $request_filename) {
+    expires max;
+    break;
+}
+# 如果请求的文件、目录或符号链接都不存在，则用 rewrite 在 URI 头部添加 /index.php
+if (!-e $request_filename) {
+    rewrite ^/(.*)$ /index.php/$1 break;
+}
+break指令:
+break 的可用上下文有：server、location、if。用于停止处理当前的 ngx_http_rewrite_module 指令集合。
+if ($slow) {
+    limit_rate 10k;
+    break;
+}
