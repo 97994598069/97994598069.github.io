@@ -1,0 +1,297 @@
+三、nginx+tomcat+redis实现负载均衡、session共享
+1、实验环境
+主机          操作系统          IP地址
+nginx         centos7.2         192.168.31.141
+tomcat-1      centos7.2         192.168.31.83
+tomcat-2      centos7.2         192.168.31.250
+mysql         centos7.2         192.168.31.225
+redis         centos7.2         192.168.31.106
+
+2、实验拓扑
+在这个图中，nginx做为反向代理，实现静动分离，将客户动态请求根据权重随机分配给两台tomcat服务器，redis做为两台tomcat的共享session数据服务器，mysql做为两台tomcat的后端数据库。
+
+3、nginx安装配置
+使用Nginx作为Tomcat的负载平衡器，Tomcat的会话Session数据存储在Redis，能够实现零宕机的7x24效果。因为将会话存储在Redis中，因此Nginx就不必配置成stick粘贴某个Tomcat方式，这样才能真正实现后台多个Tomcat负载平衡。
+
+安装nginx：
+安装zlib-devel、pcre-devel等依赖包
+[root@www ~]# yum -y install gcc gcc-c++ make libtool zlib zlib-devel pcre pcre-devel openssl openssl-devel
+
+注：
+结合proxy和upstream模块实现后端web负载均衡
+结合nginx默认自带的ngx_http_proxy_module模块 和ngx_http_upstream_module模块实现后端服务器的健康检查
+
+创建nginx程序用户:
+[root@www ~]# useradd -s /sbin/nologin www
+
+编译安装nginx
+[root@www ~]# tar zxf nginx-1.10.2.tar.gz
+[root@www ~]# cd nginx-1.10.2/
+[root@www nginx-1.10.2]# ./configure --prefix=/usr/local/nginx1.10 --user=www --group=www --with-http_stub_status_module --with-http_realip_module --with-http_ssl_module
+--with-http_gzip_static_module  --with-pcre  --with-http_flv_module
+[root@www nginx-1.10.2]# make&& make install
+
+优化nginx程序的执行路径
+[root@www nginx-1.10.2]# ln -s /usr/local/nginx1.10/sbin/nginx /usr/local/sbin/
+[root@www nginx-1.10.2]# nginx -t
+nginx: the configuration file /usr/local/nginx1.10/conf/nginx.conf syntax is ok
+nginx: configuration file /usr/local/nginx1.10/conf/nginx.conf test is successful
+
+编写nginx服务脚本：脚本内容如下：
+[root@www ~]# cat /etc/init.d/nginx
+#!/bin/bash
+# nginx Startup script for the Nginx HTTP Server
+# chkconfig: - 85 15
+# pidfile: /usr/local/nginx1.10/logs/nginx.pid
+# config: /usr/local/nginx1.10/conf/nginx.conf
+nginxd=/usr/local/nginx1.10/sbin/nginx
+nginx_config=/usr/local/nginx1.10/conf/nginx.conf
+nginx_pid=/usr/local/nginx1.10/logs/nginx.pid
+RETVAL=0
+prog="nginx"
+# Source function library.
+. /etc/rc.d/init.d/functions
+# Start nginx daemons functions.
+start() {
+if [ -f $nginx_pid ] ; then
+echo "nginx already running...."
+exit 1
+fi
+echo -n "Starting $prog: "
+   $nginxd -c ${nginx_config}
+   RETVAL=$?
+[ $RETVAL = 0 ] && touch /var/lock/subsys/nginx
+}
+# Stop nginx daemons functions.
+stop() {
+echo -n "Stopping $prog: "
+        $nginxd -s stop
+        RETVAL=$?
+[ $RETVAL = 0 ] &&rm -f /var/lock/subsys/nginx
+}
+# reloadnginx service functions.
+reload() {
+echo -n "Reloading $prog: "
+    $nginxd -s reload
+}
+# statusngnx service functions
+status() {
+if [ -f $nginx_pid ] ; then
+echo  "$prog is running"
+else
+echo  "$prog is stop"
+fi
+}
+case "$1" in
+start)
+start
+        ;;
+stop)
+stop
+        ;;
+reload)
+reload
+        ;;
+restart)
+stop
+start
+        ;;
+status)
+status
+        ;;
+*)
+echo "Usage: $prog {start|stop|restart|reload|status}"
+exit 1
+        ;;
+esac
+
+[root@www ~]# chmod +x /etc/init.d/nginx
+[root@www ~]# chkconfig --add nginx
+[root@www ~]# chkconfignginx on
+[root@www ~]# systemctl daemon-reload
+
+配置nginx反向代理：反向代理+负载均衡+健康探测，nginx.conf文件内容：
+[root@www ~]# cat /usr/local/nginx1.10/conf/nginx.conf
+user  wwwwww;
+worker_processes  4;
+worker_cpu_affinity 0001 0010 0100 1000;
+error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+worker_rlimit_nofile 10240;
+pid        logs/nginx.pid;
+events {
+useepoll;
+worker_connections  4096;
+}
+http {
+includemime.types;
+default_type  application/octet-stream;
+log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+access_log  logs/access.log  main;
+server_tokens off;
+sendfile        on;
+tcp_nopush     on;
+    #keepalive_timeout  0;
+keepalive_timeout  65;
+    #Compression Settings
+gzip on;
+gzip_comp_level 6;
+gzip_http_version 1.1;
+gzip_proxied any;
+gzip_min_length 1k;
+gzip_buffers 16 8k;
+gzip_types text/plain text/css text/javascript application/json application/javascript application/x-javascript application/xml;
+gzip_vary on;
+    #end gzip
+    # http_proxy Settings
+client_max_body_size   10m;
+client_body_buffer_size   128k;
+proxy_connect_timeout   75;
+proxy_send_timeout   75;
+proxy_read_timeout   75;
+proxy_buffer_size   4k;
+proxy_buffers   4 32k;
+proxy_busy_buffers_size   64k;
+proxy_temp_file_write_size  64k;
+    #load balance Settings
+upstreambackend_tomcat {
+server 192.168.31.83:8080 weight=1 max_fails=2 fail_timeout=10s;
+server 192.168.31.250:8080 weight=1 max_fails=2 fail_timeout=10s;
+    }
+    #virtual host Settings
+server {
+listen       80;
+server_name  www.benet.com;
+charset utf-8;
+location / {
+root html;
+index  index.jsp index.html index.htm;
+        }
+location ~* \.(jsp|do)$ {
+proxy_pass  http://backend_tomcat;
+proxy_redirect off;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        }
+location /nginx_status {
+stub_status on;
+access_log off;
+allow 192.168.31.0/24;
+deny all;
+        }
+    }
+}
+
+重启nginx服务，使修改生效
+[root@www ~]# service  nginx restart
+
+配置防火墙规测
+[root@www ~]# firewall-cmd --permanent --add-port=80/tcp
+success
+[root@www ~]# firewall-cmd --reload 
+success
+
+
+4、安装部署tomcat应用程序服务器
+在tomcat-1和tomcat-2节点上安装JDK
+在安装tomcat之前必须先安装JDK，JDK的全称是java  development kit,是sun公司免费提供的java语言的软件开发工具包，其中包含java虚拟机（JVM），编写好的java源程序经过编译可形成java字节码，只要安装了JDK，就可以利用JVM解释这些字节码文件，从而保证了java的跨平台性。
+
+安装JDK，配置java环境：
+将jdk-7u65-linux-x64.gz解压
+[root@tomcat-1 ~]# tar zxf jdk-7u65-linux-x64.gz
+
+将解压的jdk1.7.0_65目录移致动到/usr/local/下并重命名为java
+[root@tomcat-1 ~]# mv jdk1.7.0_65/ /usr/local/java
+
+在/etc/profile文件中添加内容如下：
+export JAVA_HOME=/usr/local/java
+export PATH=$JAVA_HOME/bin:$PATH
+
+通过source命令执行profile文件，使其生效。
+[root@tomcat-1 ~]# source /etc/profile
+[root@tomcat-1 ~]# echo $PATH
+/usr/local/java/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
+
+按照相同方法在tomcat-2也安装JDK
+分别在在tomcat-1和tomcat-2节点运行java  -version命令查看java版本是否和之前安装的一致。
+[root@tomcat-1 ~]# java -version
+java version "1.7.0_65"
+64-Bit Server VM (build 24.65-b04, mixed mode)
+
+至此java环境已经配置完成
+在tomcat-1和tomcat-2节点安装配置tomcat
+解压apache-tomcat-7.0.54.tar.gz包
+[root@tomcat-1 ~]# tar zxf apache-tomcat-7.0.54.tar.gz
+
+将解压生成的文件夹移动到/usr/local/下，并改名为tomcat7
+[root@tomcat-1 ~]# mv apache-tomcat-7.0.54 /usr/local/tomcat7
+
+配置tomcat环境变量
+/etc/profile文件内容如下：
+export JAVA_HOME=/usr/local/java
+export CATALINA_HOME=/usr/local/tomcat7
+export PATH=$JAVA_HOME/bin:$CATALINA_HOME/bin:$PATH
+
+通过source命令执行profile文件，使其生效。
+[root@tomcat-1 ~]# source /etc/profile
+[root@tomcat-1 ~]# echo $PATH
+/usr/local/java/bin:/usr/local/tomcat7/bin:/usr/local/java/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
+
+查看tomcat的版本信息
+[root@tomcat-1 ~]# catalina.sh version
+Using CATALINA_BASE:   /usr/local/tomcat7
+Using CATALINA_HOME:   /usr/local/tomcat7
+Using CATALINA_TMPDIR: /usr/local/tomcat7/temp
+Using JRE_HOME:        /usr/local/java
+Using CLASSPATH:       /usr/local/tomcat7/bin/bootstrap.jar:/usr/local/tomcat7/bin/tomcat-juli.jar
+Server version: Apache Tomcat/7.0.54
+Server built:   May 19 2014 10:26:15
+Server number:  7.0.54.0
+OS Name:        Linux
+OS Version:     3.10.0-327.el7.x86_64
+Architecture:   amd64
+JVM Version:    1.7.0_65-b17
+JVM Vendor:     Oracle Corporation
+启动tomcat
+[root@tomcat-1 ~]# /usr/local/tomcat7/bin/startup.sh 
+Using CATALINA_BASE:   /usr/local/tomcat7
+Using CATALINA_HOME:   /usr/local/tomcat7
+Using CATALINA_TMPDIR: /usr/local/tomcat7/temp
+Using JRE_HOME:        /usr/local/java
+Using CLASSPATH:       /usr/local/tomcat7/bin/bootstrap.jar:/usr/local/tomcat7/bin/tomcat-juli.jar
+Tomcat started.
+
+Tomcat默认运行在8080端口，运行netstat命令查看8080端口监听的信息
+[root@tomcat-1 ~]# netstat -anpt | grep java
+tcp6       0      0 :::8009      :::*                    LISTEN      42330/java          
+tcp6       0      0 :::8080      :::*                    LISTEN      42330/java
+
+防火墙规则配置：
+[root@tomcat-1 ~]# firewall-cmd --permanent --add-port=8080/tcp
+success
+[root@tomcat-1 ~]# firewall-cmd --reload
+success
+
+按照相同方法在tomcat-2也安装
+打开浏览器分别对tomcat-1和tomcat-2访问测试
+
+
+如果想关闭tomcat则运行/usr/local/tomcat7/bin/shutdown.sh命令
+好了，大家可以看到访成功。说明我们的tomcat安装完成，下面我们来修改配置文件
+
+[root@tomcat-1 ~]# vim /usr/local/tomcat7/conf/server.xml
+
+设置默认虚拟主机，并增加jvmRoute
+
+修改默认虚拟主机，并将网站文件路径指向/web/webapp1，在host段增加context段
+unpackWARs="true" autoDeploy="true">
+
+增加文档目录与测试文件
+[root@tomcat-1 ~]# mkdir -p /web/webapp1
+[root@tomcat-1 ~]# cd /web/webapp1/
+[root@ tomcat-1 webapp1]# viindex.jsp
