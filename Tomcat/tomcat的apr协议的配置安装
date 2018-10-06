@@ -1,0 +1,143 @@
+tomcat连接器的实现类型：
+
+BIO
+tomcat默认安装后，连接器配置中的属性protocol的值应该是:HTTP/1.1,是采用BIO通信模型处理请求的,尤其在高并发的情况下性能很差。
+    protocol="HTTP/1.1" redirectPort="8443"/>
+NIO
+这种采用的是java的NIO通信模型，比上一种BIO好多了。
+           maxThreads="150" SSLEnabled="true" scheme="https" secure="true"
+           clientAuth="false" sslProtocol="TLS" />
+
+   
+APR
+他是在操作系统级别来处理IO操作的。
+       protocol="org.apache.coyote.http11.Http11AprProtocol"
+       port="8443" maxThreads="200"
+       scheme="https" secure="true" SSLEnabled="true"
+       SSLCertificateFile="..."
+       SSLCertificateKeyFile="..."
+       SSLVerifyClient="optional" SSLProtocol="TLSv1+TLSv1.1+TLSv1.2"/>
+
+总之，用上它之后，tomcat可以和你的操作系统更好的交互，性能当然会提升了。
+
+
+APR需要以下三个主要组件:
+APR library
+JNI wrappers for APR used by Tomcat (libtcnative)
+OpenSSL libraries
+
+安装apr:
+wget http://apache.mirror.rafal.ca//apr/apr-1.5.2.tar.gz   ##404 进链接自行选择下载
+wget http://apache.mirror.iweb.ca//apr/apr-util-1.5.4.tar.gz   ##404 进链接自行选择下载
+上述：
+apr下载：：https://pan.baidu.com/s/1q9Fhl7IWfO4_2p1-W-JT9g
+apr-util下载：：https://pan.baidu.com/s/1UvsovDGnWb730fVUzedqLg
+
+
+
+# apr
+tar -zxvf apr-1.5.2.tar.gz
+cd apr-1.5.2
+./configure --prefix=/usr/local/apr
+make && make install
+
+
+# apr-util
+yum -y install expat-devel
+tar -zxvf apr-util-1.5.4.tar.gz
+cd apr-util-1.5.4
+./configure --prefix=/usr/local/apr-util --with-apr=/usr/local/apr/
+make && make install
+
+
+安装tomcat-native
+/usr/local/apache-tomcat-7.0.91/bin  下面有，是tomcat自带的
+
+[root@localhost bin]# tar xf tomcat-native.tar.gz 
+[root@localhost bin]# cd /usr/local/apache-tomcat-7.0.91/bin/tomcat-native-1.2.17-src/native
+
+##根据自己的安装路径自有配置：
+##./configure --with-apr=/usr/local/apr --with-java-home=/usr/local/jdk/ --with-ssl=/usr/local/openssl-102g --prefix=/usr/local/apache-tomcat-7.0.91/
+
+[root@localhost native]# ./configure --with-apr=/usr/local/apr --with-java-home=/usr/local/jdk/ --prefix=/usr/local/apache-tomcat-7.0.91/
+checking build system type... x86_64-pc-linux-gnu
+checking host system type... x86_64-pc-linux-gnu
+checking target system type... x86_64-pc-linux-gnu
+checking for a BSD-compatible install... /usr/bin/install -c
+checking for working mkdir -p... yes
+Tomcat Native Version: 1.2.17
+checking for chosen layout... tcnative
+checking for APR... yes
+configure: APR 1.6.5 detected.
+  setting CC to "gcc"
+  setting CPP to "gcc -E"
+  setting LIBTOOL to "/usr/local/apr/build-1/libtool"
+checking JAVA_HOME... /usr/local/jdk/
+  adding "-I/usr/local/jdk//include" to TCNATIVE_PRIV_INCLUDES
+checking for JDK os include directory...  linux
+  adding "-I/usr/local/jdk//include/linux" to TCNATIVE_PRIV_INCLUDES
+checking for gcc... gcc
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... no
+checking for suffix of object files... o
+checking whether we are using the GNU C compiler... yes
+checking whether gcc accepts -g... yes
+checking for gcc option to accept ISO C89... none needed
+checking for OpenSSL library... using openssl from /usr/${exec_prefix}/lib and /usr/include
+checking OpenSSL library version >= 1.0.2... 
+
+Found   OPENSSL_VERSION_NUMBER 0x1000105f (OpenSSL 1.0.1e 11 Feb 2013)
+Require OPENSSL_VERSION_NUMBER 0x1000200f or greater (1.0.2)
+
+configure: error: Your version of OpenSSL is not compatible with this version of tcnative
+
+##上述报错openssl版本不对应该使用open-1.0.2
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+安装openssl：  ##切记不可直接升级  否则yum ssh都不能使用了，   ssh不能使用就废了
+
+切记不可升级  否则yum ssh都不能使用了，   ssh不能使用就废了、
+
+wget https://www.openssl.org/source/openssl-1.0.2g.tar.gz
+或者：https://pan.baidu.com/s/17-C-2xyU52sSudRL6Gtu5g
+
+tar -zxvf openssl-1.0.2g.tar.gz
+
+cd openssl-1.0.2g
+# 编译安装
+./config --prefix=/usr/local/openssl-102g -fPIC
+make && make install
+
+再此编译安装tomcat-native：./configure --with-apr=/usr/local/apr --with-java-home=/usr/local/jdk/ --with-ssl=/usr/local/openssl-102g --prefix=/usr/local/apache-tomcat-7.0.91/
+make && make install 
+
+
+添加Listener
+确保在server.xml中这个Listener存在：若存在则不需要更改
+[root@localhost conf]# grep -i "SSLEngine" ./server.xml --color
+ 
+  
+配置环境变量：
+vi /usr/local/apache-tomcat-7.0.91/bin/setenv.sh  ##此文件没有徐自行创建，并上权限
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/apache-tomcat-7.0.91/lib
+export LD_LIBRARY_PATH 
+
+
+启动tomcat：
+在tomcat启动日志中有如下输出，即表示成功了：
+………………
+Nov 12, 2016 2:01:36 AM org.apache.catalina.core.AprLifecycleListener lifecycleEvent
+INFO: Loaded APR based Apache Tomcat Native library 1.2.8 using APR version 1.5.2.
+…………………………
+
+[root@localhost logs]# grep "using APR version" catalina.out --color
+信息: Loaded APR based Apache Tomcat Native library 1.2.17 using APR version 1.6.5.
+  
+
+  
+配置使用：server.xml：
+protocol="org.apache.coyote.http11.Http11AprProtocol
+
