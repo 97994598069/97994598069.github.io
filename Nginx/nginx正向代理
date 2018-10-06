@@ -1,0 +1,47 @@
+nginx的代理：
+示例图:
+https://coding.net/u/aminglinux/p/nginx/git/blob/mater/proxy/pic.md
+
+nginx正向代理：
+https://coding.net/u/aminglinux/p/nginx/git/blob/master/proxy/z_proxy.md 
+
+nginx的反向代理:
+https://coding.net/u/aminglinux/p/nginx/git/blob/master/proxy/f_proxy.md
+缓冲和缓存：https://coding.net/u/aminglinux/p/nginx/git/blob/master/proxy/bu_ca.md
+
+nginx的负载均衡：
+https://coding.net/aminglinux/p/nginx/git/blob/master/proxy/lb.md
+
+
+
+正向代理：
+使用场景：机房中只有一台服务器连接外网其余都是内网，但是现在内网需要连接到外网进行安装yum包；此时就可以能连外网的服务器上配置个正向代理
+
+server {
+	listen 80 default_server;   ##必须是默认虚拟主机
+	resolver 119.29.29.29;    ##需要配置一个dns地址，119.29.29.29是一个公共的dns 可以到dns.lisect.com上去查找
+	location / {
+		proxy_pass http://$host$request_uri;  
+	
+	}
+}
+
+
+
+
+反向代理：
+使用场景：负载均衡 例如：域名没有备案，可以把域名解析到一台香港云主机上，在香港云主机上做个代理，而网站数据是在大陆的服务器上
+
+server {
+	listen 80;
+	server_name aminglinux.com;
+	
+	location / {
+		proxy_pass http://123.23.13.11/;
+		proxy_set_header Host $Host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+	}
+}
+##proxy_set_header Host $Host;  此时若不加Host则就会直接访问proxy_pass http://123.23.13.11/; 而不走server_name;;;若加了Host则会访问server_name 并指定proxy_pass的ip和port
+正常的写法是proxy_pass配置ip和port 并打开Host   
