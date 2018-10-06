@@ -1,0 +1,32 @@
+官网每个模块的运用讲解：
+https://nginx.org/en/docs/http/ngx_http_core_module.html
+nginx 1.12可试试
+
+user  nginx nginx;        ##指定nginx运行账户
+worker_processes  4;      ##指定worker进程  一般与cpu核数相同  或者设置成auto;根据情况定
+worker_cpu_affinity auto;  
+#设定绑定CPU；可以设置成auto；或者绑定具体的cpu;如下：
+#0号CPU:00000001
+#1号cpu:00000010
+#8号cpu:10000000
+#例如4颗cpu：0001 0010 0100 1000
+##查看进程在哪颗cpu上，ps axo pid,cmd,psr |grep nginx
+
+worker_priority -19;       ##设定优先级[-19,19]
+worker_rlimit_nofile 65535;   ##设定work进程能够打开的文件数量（能打开的描述符的数量）
+
+
+#error_log  logs/error.log;
+error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+
+events {
+    worker_connections  15000;   ##每个worker的并并发连接数。可稍微大些，例如150000；；例如设置了两个work进程，则整个nginx并发为30000
+use epoll;
+accept_mutex on;   ##如果设置成off多个cpu的时候则在连接过来的时候所有的cpu都会被唤醒但是连接只会选择一个cpu进行运行；若设置on在多个cpu的时候会轮询的被唤醒，而不会出现"惊群现象"
+daemon on;   ##如果设置成on则会正常的启动，输入nginx命令后台运行；若设置为off则为前台运行，ctrl +z随时调入后台；ctrl +c随时关闭方便调式
+master_process off;    ##如果设置成off；则nginx的进程则只有一个master进程；若设置成on则会有work进程存在
+}
