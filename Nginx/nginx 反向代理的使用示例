@@ -1,0 +1,198 @@
+根据URL目录地址转发的应用场景
+
+1.基于目录(uri)进行转发-网站动静分离
+根据HTTP的URL进行转发的应用情况，被称为第7层（应用层）的负载均衡，而LVS的负载均衡一般用于TCP等的转发，因此被称为第4层（传输层）的负载均衡
+
+在企业中，有时希望只用一个域名对外提供服务，不希望使用多个域名对应同一个产品业务，此时就需要在代理服务器上通过配置规则，使得匹配不同规则的请求会交给不同的服务器池处理。这类业务有：
+1.业务的域名没有拆分或者不希望拆分，但希望实现动静分离、多业务分离
+2.不同的客户端设备（例如：手机和PC端）使用同一个域名访问同一个业务网站，就需要根 据规则将不同设备的用户请求交给后端不同的服务器处理，以便得到最佳用户体验
+
+第一个里程碑： 服务器规划
+目录             ip            服务器目录             类型
+/upload        10.0.0.8:80      html/www/upload     upload服务器
+/static        10.0.0.7:80      html/www/static     static静态服务器
+/              10.0.0.9:80      html/www            默认
+
+创建/设置upstream负载信息
+upstream upload_pools {
+	server 10.0.0.8:80;
+}
+
+upstream static_pools {
+	server 10.0.0.9:80;
+}
+
+upstream default_pools {
+	server 10.0.0.9:80;
+}
+
+调用upstream信息
+
+location /static/ {
+	proxy_pass http://static_pools;
+	proxy_set_header Host $Host;
+	proxy_set_header X-Forwarded $remote_addr;
+}
+
+location /upload/ {
+	proxy_pass http://upload_pools;
+	proxy_set_header Host $Host;
+	proxy_set_header X-Forwarded $remote_addr;
+}
+
+location / {
+	proxy_pass http://default_pools;
+	proxy_set_header Host $Host;
+	proxy_set_header X-Forwarded $remote_addr;
+}
+
+
+编写配置文件lb01
+worker_processes 1;
+events {
+	worker_connections 1024;
+}
+
+http {
+	include mime.types;
+	default_type application/octet-stream;
+	sendfile on;
+	keepalive_timeout 65;
+	log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+					  
+	upstream upload_pools {
+	server 10.0.0.8:80;
+}
+
+upstream static_pools {
+	server 10.0.0.9:80;
+}
+
+upstream default_pools {
+	server 10.0.0.9:80;
+}
+
+server {
+	listen 80;
+	server_name www.etiantian.org;
+	
+	location /static/ {
+	proxy_pass http://static_pools;
+	proxy_set_header Host $Host;
+	proxy_set_header X-Forwarded $remote_addr;
+		}
+
+location /upload/ {
+	proxy_pass http://upload_pools;
+	proxy_set_header Host $Host;
+	proxy_set_header X-Forwarded $remote_addr;
+		}
+
+location / {
+	proxy_pass http://default_pools;
+	proxy_set_header Host $Host;
+	proxy_set_header X-Forwarded $remote_addr;
+		}
+	access_log logs/access_www.log main;
+	
+	}
+					  
+}
+
+
+创建环境
+www.etiantian.org/xxx.html 
+www.etiantian.org/upload/xxx.html
+www.etiantian.org/static/xxx.html
+
+web01:
+mdkir -p /application/nginx/html/www/upload
+echo "web01 upload" >/application/nginx/html/www/upload/xxx.html 
+
+web02：
+mdkir -p /application/nginx/html/www/static
+echo "web02 static" >/application/nginx/html/www/static/xxx.html
+
+web03：
+echo "web03 default" >/application/nginx/html/www/xxx.html
+
+测试：
+curl -H hostwww.etiantian.org 10.0.0.5/upload/
+web01 upload:/application/nginx/html/www/upload
+
+curl -H hostwww.etiantian.org 10.0.0.5/static/
+web02 /application/nginx/html/www/static
+
+curl -H hostwww.etiantian.org 10.0.0.5/
+web03 www
+
+
+
+根据客户端的设备实现转发（user_agent）  手机或者pc的不同
+
+user_agent的应用：
+
+修改lb01配置文件：
+
+worker_processes 1;
+events {
+	worker_connections 1024;
+}
+
+http {
+	include mime.types;
+	default_type application/octet-stream;
+	sendfile on;
+	keepalive_timeout 65;
+	log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+					  
+	upstream upload_pools {
+	server 10.0.0.8:80;
+}
+
+upstream static_pools {
+	server 10.0.0.9:80;
+}
+
+upstream default_pools {
+	server 10.0.0.9:80;
+}
+
+server {
+	listen 80;
+	server_name www.etiantian.org;
+	location / {
+		if ($http_user_agent ~* "MSIE")
+		{
+			proxy_pass http://static_pools;
+		}
+		if ($http_user_agent ~* "Chrome")
+		{
+			proxy_pass http://upload_pools;
+		}
+		access_log logs/access_www.log main;
+	}
+	
+}
+
+测试：
+curl -A 指定访问类型
+curl -A MSIE -H hostwww.etiantian.org 10.0.0.5
+web02 www 
+
+curl -A Chrome -H hostwww.etiantian.org 10.0.0.5
+web01 www 
+
+curl -A xx -H hostwww.etiantian.org 10.0.0.5
+web03 www 
+
+
+利用扩展名进行转发:
+location ~.*.(gif|ipg|jpeg|png|bmp|swf|css|js)$ {
+	proxy_pass http://static_pools;
+	include proxy.conf
+	}
