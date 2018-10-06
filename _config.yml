@@ -15,11 +15,11 @@ keywords: Spring,Spring Boot,Spring Cloud,MongoDB,Jvm,Docker,生活故事,架构
 encoding: "utf-8"
 favicon: favicon.png 
 
-repository: 979945980/979945980.github.io
-github_url: https://github.com/979945980
-cnblog_url: http://www.cnblogs.com/979945980
-url: http://www.979945980.github.io
-enforce_ssl: 979945980.com
+repository: 97994598069/97994598069.github.io
+github_url: https://github.com/97994598069
+cnblog_url: http://www.cnblogs.com/97994598069
+url: http://www.97994598069.github.io
+enforce_ssl: 97994598069.com
 
 ## Gem
 plugins:
