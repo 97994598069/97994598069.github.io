@@ -1,0 +1,109 @@
+1.到github上clone下来
+https://github.com/goharbor/harbor
+https://github.com/goharbor/harbor/releases
+https://github.com/goharbor/harbor/releases/tag/v1.6.0
+
+[root@localhost data]# tar xf harbor-offline-installer-v1.6.0.tgz 
+[root@localhost harbor]# pwd
+/data/harbor
+[root@localhost harbor]# ll
+总用量 686068
+drwxr-xr-x. 3 root root        23 10月  8 14:57 common
+-rw-r--r--. 1 root root       727 9月   7 18:51 docker-compose.chartmuseum.yml
+-rw-r--r--. 1 root root       777 9月   7 18:51 docker-compose.clair.yml
+-rw-r--r--. 1 root root      1258 9月   7 18:51 docker-compose.notary.yml
+-rw-r--r--. 1 root root      3589 9月   7 18:51 docker-compose.yml
+drwxr-xr-x. 3 root root       164 9月   7 18:51 ha
+-rw-r--r--. 1 root root      7913 9月   7 18:51 harbor.cfg
+-rw-r--r--. 1 root root 700899353 9月   7 18:52 harbor.v1.6.0.tar.gz
+-rwxr-xr-x. 1 root root      6162 9月   7 18:51 install.sh
+-rw-r--r--. 1 root root     10768 9月   7 18:51 LICENSE
+-rw-r--r--. 1 root root       482 9月   7 18:51 NOTICE
+-rw-r--r--. 1 root root   1537078 9月   7 18:51 open_source_license
+-rwxr-xr-x. 1 root root     39496 9月   7 18:51 prepare
+
+
+[root@localhost harbor]# grep hostname ./harbor.cfg
+#The IP address or hostname to access admin UI and registry service.
+hostname = harbor.bjjy.com
+
+vi docker-compose.yml    
+
+[root@localhost harbor]# ./install.sh 
+
+[Step 0]: checking installation environment ...
+
+Note: docker version: 18.06.1
+✖ Need to install docker-compose(1.7.1+) by yourself first and run this script again.
+
+##需要安装docker-compose 
+https://github.com/docker/compose/releases/download/1.23.0-rc1/docker-compose-Linux-x86_64
+
+cd /usr/local/bin
+[root@localhost bin]# wget https://github.com/docker/compose/releases/download/1.23.0-rc1/docker-compose-Linux-x86_64
+[root@localhost bin]# mv docker-compose-Linux-x86_64 docker-compose
+[root@localhost bin]# chmod +x docker-compose 
+
+
+[root@localhost harbor]# ./install.sh
+
+[root@localhost harbor]# netstat -unptl
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name    
+tcp        0      0 127.0.0.1:25            0.0.0.0:*               LISTEN      985/master          
+tcp        0      0 127.0.0.1:1514          0.0.0.0:*               LISTEN      18270/docker-proxy  
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      832/sshd            
+tcp6       0      0 ::1:25                  :::*                    LISTEN      985/master          
+tcp6       0      0 :::443                  :::*                    LISTEN      18800/docker-proxy  
+tcp6       0      0 :::4443                 :::*                    LISTEN      18771/docker-proxy  
+tcp6       0      0 :::80                   :::*                    LISTEN      18819/docker-proxy  
+tcp6       0      0 :::22                   :::*                    LISTEN      832/sshd            
+udp        0      0 0.0.0.0:68              0.0.0.0:*                           1142/dhclient   
+
+
+浏览器访问ip：172.10.10.201    配置完域名可用域名来访问harbor.bjjy.com
+登陆信息：admin Harbor12345   可在harbor.cfg中grep出来
+
+
+项目中创建项目：xiaoluzhibo
+
+添加用户：
+然后在项目中添加成员并设置角色：
+
+
+[root@localhost harbor]# docker tag goharbor/harbor-db:v1.6.0 harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db:latest
+[root@localhost harbor]# docker push harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db:latest
+The push refers to repository [harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db]
+75bb6c1ade7d: Preparing 
+f0f47321deb7: Preparing 
+c0db790e7c15: Preparing 
+17bf2c1b99af: Preparing 
+b80f7e1741b5: Preparing 
+50aa89ad4e44: Waiting 
+3bf85c5983f2: Waiting 
+dba693fc2701: Waiting 
+denied: requested access to the resource is denied
+
+需要先登录一下然后再上传：
+[root@localhost harbor]# docker login -u admin -p Harbor12345 harbor.bjjy.com
+WARNING! Using --password via the CLI is insecure. Use --password-stdin.
+WARNING! Your password will be stored unencrypted in /root/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
+[root@localhost harbor]# docker push harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db:latest
+The push refers to repository [harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db]
+75bb6c1ade7d: Pushed 
+f0f47321deb7: Pushed 
+c0db790e7c15: Pushed 
+17bf2c1b99af: Pushed 
+b80f7e1741b5: Pushed 
+50aa89ad4e44: Pushed 
+3bf85c5983f2: Pushed 
+dba693fc2701: Pushed 
+latest: digest: sha256:ee65d512c93860bd4872be296de80c079842a64e2a4002360e720222a87ec346 size: 1985
+
+
+浏览器登录harbor.bjjy.com  
+刷新界面可以看到上传的镜像
