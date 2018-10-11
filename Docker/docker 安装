@@ -32,15 +32,15 @@ yum install   # 例如：sudo yum install docker-ce-17.12.0.ce  ##必须执行?
 
 或者curl -sSL https://get.docker.com/ | sh、
 
-8.更改docker目录 默认的是/var/lib/docker  为了防止将根分区给打满。需要更改
-mv /var/lib/docker /data/
-ln -s /data/docker /var/lib/docker
-
-9、启动并加入开机启动
+8、启动并加入开机启动
 systemctl start docker
 systemctl enable docker
 
-9、验证安装是否成功(有client和service两部分表示docker安装启动都成功了)
+9.更改docker目录 默认的是/var/lib/docker  为了防止将根分区给打满。需要更改
+mv /var/lib/docker /data/
+ln -s /data/docker /var/lib/docker
+
+10、验证安装是否成功(有client和service两部分表示docker安装启动都成功了)
 docker version  
 
 二、问题
@@ -56,3 +56,28 @@ yum erase docker-common-2:1.12.6-68.gitec8512b.el7.centos.x86_64
 
 3、再次安装docker
 yum install docker-ce
+
+
+三、安装docker-compose
+方法1：
+#下载
+sudo curl -L https://github.com/docker/compose/releases/download/1.20.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+#安装
+chmod +x /usr/local/bin/docker-compose
+#查看版本
+docker-compose version
+
+方法2：
+#下载
+sudo curl -L https://github.com/docker/compose/releases/download/1.20.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+#安装
+chmod +x /usr/local/bin/docker-compose
+#查看版本
+docker-compose version
+
+为了方便我们输入命令，也可以安装 Docker 的补全提示工具帮忙我们快速输入命令
+#安装
+yum install bash-completion
+
+#下载docker-compose脚本
+curl -L https://raw.githubusercontent.com/docker/compose/$(docker-compose version --short)/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
