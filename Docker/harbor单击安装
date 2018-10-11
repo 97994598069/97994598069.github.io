@@ -27,7 +27,6 @@ drwxr-xr-x. 3 root root       164 9月   7 18:51 ha
 #The IP address or hostname to access admin UI and registry service.
 hostname = harbor.bjjy.com
 
-vi docker-compose.yml    
 
 [root@localhost harbor]# ./install.sh 
 
