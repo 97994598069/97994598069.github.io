@@ -1,108 +1,181 @@
-1.到github上clone下来
-https://github.com/goharbor/harbor
-https://github.com/goharbor/harbor/releases
-https://github.com/goharbor/harbor/releases/tag/v1.6.0
+备份原先的所有yum源
+yum源安装网易
+cat > /etc/yum.repos.d/CentOS-Base.repo << “EOF”
 
-[root@localhost data]# tar xf harbor-offline-installer-v1.6.0.tgz 
-[root@localhost harbor]# pwd
-/data/harbor
-[root@localhost harbor]# ll
-总用量 686068
-drwxr-xr-x. 3 root root        23 10月  8 14:57 common
--rw-r--r--. 1 root root       727 9月   7 18:51 docker-compose.chartmuseum.yml
--rw-r--r--. 1 root root       777 9月   7 18:51 docker-compose.clair.yml
--rw-r--r--. 1 root root      1258 9月   7 18:51 docker-compose.notary.yml
--rw-r--r--. 1 root root      3589 9月   7 18:51 docker-compose.yml
-drwxr-xr-x. 3 root root       164 9月   7 18:51 ha
--rw-r--r--. 1 root root      7913 9月   7 18:51 harbor.cfg
--rw-r--r--. 1 root root 700899353 9月   7 18:52 harbor.v1.6.0.tar.gz
--rwxr-xr-x. 1 root root      6162 9月   7 18:51 install.sh
--rw-r--r--. 1 root root     10768 9月   7 18:51 LICENSE
--rw-r--r--. 1 root root       482 9月   7 18:51 NOTICE
--rw-r--r--. 1 root root   1537078 9月   7 18:51 open_source_license
--rwxr-xr-x. 1 root root     39496 9月   7 18:51 prepare
+[base]
 
-
-[root@localhost harbor]# grep hostname ./harbor.cfg
-#The IP address or hostname to access admin UI and registry service.
-hostname = harbor.bjjy.com
-
-
-[root@localhost harbor]# ./install.sh 
-
-[Step 0]: checking installation environment ...
-
-Note: docker version: 18.06.1
-✖ Need to install docker-compose(1.7.1+) by yourself first and run this script again.
-
-##需要安装docker-compose 
-https://github.com/docker/compose/releases/download/1.23.0-rc1/docker-compose-Linux-x86_64
-
-cd /usr/local/bin
-[root@localhost bin]# wget https://github.com/docker/compose/releases/download/1.23.0-rc1/docker-compose-Linux-x86_64
-[root@localhost bin]# mv docker-compose-Linux-x86_64 docker-compose
-[root@localhost bin]# chmod +x docker-compose 
+name=CentOS-$releasever – Base
+baseurl=https://mirrors.ustc.edu.cn/centos/$releasever/os/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+[updates]
+name=CentOS-$releasever – Updates
+baseurl=https://mirrors.ustc.edu.cn/centos/$releasever/updates/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+[extras]
+name=CentOS-$releasever – Extras
+baseurl=https://mirrors.ustc.edu.cn/centos/$releasever/extras/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+[centosplus]
+name=CentOS-$releasever – Plus
+baseurl=https://mirrors.ustc.edu.cn/centos/$releasever/centosplus/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+EOF
 
 
-[root@localhost harbor]# ./install.sh
+安装阿里云EPEL源
+wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
 
-[root@localhost harbor]# netstat -unptl
-Active Internet connections (only servers)
-Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name    
-tcp        0      0 127.0.0.1:25            0.0.0.0:*               LISTEN      985/master          
-tcp        0      0 127.0.0.1:1514          0.0.0.0:*               LISTEN      18270/docker-proxy  
-tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      832/sshd            
-tcp6       0      0 ::1:25                  :::*                    LISTEN      985/master          
-tcp6       0      0 :::443                  :::*                    LISTEN      18800/docker-proxy  
-tcp6       0      0 :::4443                 :::*                    LISTEN      18771/docker-proxy  
-tcp6       0      0 :::80                   :::*                    LISTEN      18819/docker-proxy  
-tcp6       0      0 :::22                   :::*                    LISTEN      832/sshd            
-udp        0      0 0.0.0.0:68              0.0.0.0:*                           1142/dhclient   
+更新yum 缓存
+yum clean all
+yum makecache
 
 
-浏览器访问ip：172.10.10.201    配置完域名可用域名来访问harbor.bjjy.com
-登陆信息：admin Harbor12345   可在harbor.cfg中grep出来
+
+安装并启动docker：
+
+如果之前安装过docker是重装的环境则需要先删除之前的docker相关目录，并且
+yum remove docker  docker-common docker-selinux docker-engine
+
+安装docker相关依赖
+yum install -y yum-utils device-mapper-persistent-data lvm2
+yum -y install docker
+
+systemctl start docker
+systemctl enable docker
+systemctl status docker
+docker version
+
+做软链防止根分区给打满
+systemctl stop docker
+mv /var/lib/docker /mnt/
+ln -s /mnt/docker /var/lib/docker
+
+相关问题备注：
+1、因为之前已经安装过旧版本的docker，在安装的时候报错如下：
+Transaction check error:
+  file /usr/bin/docker from install of docker-ce-17.12.0.ce-1.el7.centos.x86_64 conflicts with file from package docker-common-2:1.12.6-68.gitec8512b.el7.centos.x86_64
+  file /usr/bin/docker-containerd from install of docker-ce-17.12.0.ce-1.el7.centos.x86_64 conflicts with file from package docker-common-2:1.12.6-68.gitec8512b.el7.centos.x86_64
+  file /usr/bin/docker-containerd-shim from install of docker-ce-17.12.0.ce-1.el7.centos.x86_64 conflicts with file from package docker-common-2:1.12.6-68.gitec8512b.el7.centos.x86_64
+  file /usr/bin/dockerd from install of docker-ce-17.12.0.ce-1.el7.centos.x86_64 conflicts with file from package docker-common-2:1.12.6-68.gitec8512b.el7.centos.x86_64
+  
+2、卸载旧版本的包
+yum erase docker-common-2:1.12.6-68.gitec8512b.el7.centos.x86_64
+
+3、再次安装docker
+yum install docker-ce
+
+安装docker-compose
+
+方法1：
+#下载
+sudo curl -L https://github.com/docker/compose/releases/download/1.20.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+#安装
+chmod +x /usr/local/bin/docker-compose
+#查看版本
+docker-compose version
+
+方法2：
+#下载
+sudo curl -L https://github.com/docker/compose/releases/download/1.20.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+#安装
+chmod +x /usr/local/bin/docker-compose
+#查看版本
+docker-compose version
 
 
-项目中创建项目：xiaoluzhibo
+为了方便我们输入命令，也可以安装 Docker 的补全提示工具帮忙我们快速输入命令
+#安装
+yum install bash-completion
 
-添加用户：
-然后在项目中添加成员并设置角色：
-
-
-[root@localhost harbor]# docker tag goharbor/harbor-db:v1.6.0 harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db:latest
-[root@localhost harbor]# docker push harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db:latest
-The push refers to repository [harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db]
-75bb6c1ade7d: Preparing 
-f0f47321deb7: Preparing 
-c0db790e7c15: Preparing 
-17bf2c1b99af: Preparing 
-b80f7e1741b5: Preparing 
-50aa89ad4e44: Waiting 
-3bf85c5983f2: Waiting 
-dba693fc2701: Waiting 
-denied: requested access to the resource is denied
-
-需要先登录一下然后再上传：
-[root@localhost harbor]# docker login -u admin -p Harbor12345 harbor.bjjy.com
-WARNING! Using --password via the CLI is insecure. Use --password-stdin.
-WARNING! Your password will be stored unencrypted in /root/.docker/config.json.
-Configure a credential helper to remove this warning. See
-https://docs.docker.com/engine/reference/commandline/login/#credentials-store
-
-Login Succeeded
-[root@localhost harbor]# docker push harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db:latest
-The push refers to repository [harbor.bjjy.com/xiaoluzhibo/goharbor/harbor-db]
-75bb6c1ade7d: Pushed 
-f0f47321deb7: Pushed 
-c0db790e7c15: Pushed 
-17bf2c1b99af: Pushed 
-b80f7e1741b5: Pushed 
-50aa89ad4e44: Pushed 
-3bf85c5983f2: Pushed 
-dba693fc2701: Pushed 
-latest: digest: sha256:ee65d512c93860bd4872be296de80c079842a64e2a4002360e720222a87ec346 size: 1985
+#下载docker-compose脚本
+curl -L https://raw.githubusercontent.com/docker/compose/$(docker-compose version --short)/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
 
 
-浏览器登录harbor.bjjy.com  
-刷新界面可以看到上传的镜像
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+下载和配置harbor：
+wget https://github.com/vmware/harbor/releases/download/v1.1.2/harbor-offline-installer-v1.1.2.tgz
+
+tar xf harbor-offline-installer-v1.1.2.tgz -C /mnt   (最好不要是/data  因为harbor的配置文件配置的是/data，容易乱)
+cd /mnt/harbor
+vim harbor.cfg
+hostname = 192.168.2.181 (只需要改这一处即可，登陆密码不需要更改，因为harbor的首次登陆的默认密码就是Harbor12345改成其他的也没用;; hostname 可以改成域名或者ip，但是不能是localhost和127.0.0.1)
+
+执行启动安装
+./prepare
+./install 
+
+
+harbor缓存远程docker镜像  （可配可不配自己决定）：
+要使harbor缓存远程docker镜像，需要我们做相关的配置，首先是在harbor服务器进行配置。
+在harbor服务器上，需要修改harbor的config.yml文件，如下：
+vim common/config/registry/config.yml 
+在最下面添加
+proxy:
+	remoteurl: https://registry-1.docker.io
+
+然后使用docker-compose命令，对harbor进行相关操作，如下：
+docker-compose down && docker-compose up -d 
+
+
+
+部署docker客户端：
+客户端同样安装docker环境   同上
+其次要修改客户端的docker默认仓库地址，修改为前面搭建的harbor仓库地址
+ExecStart=/usr/bin/dockerd –registry-mirror=http://docker.ilanni.com -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock
+
+同样重启docker服务
+systemctl daemon-reload && systemctl restart docker && systemctl status docker
+
+测试harbor缓存，在docker客户端拉取一个redis镜像，如下:
+登陆 docker login 192.168.2.181   1.客户端登陆不能用admin账户，需要用普通账户登陆并且该账户需要在此项目中；即使项目设置成公开也不能push成功；；必须在项目中添加才能推送进去
+
+
+docker pull redis
+docker客户端拉取完毕之后，登录harbor管理控制台看到有缓存镜像存在，如下：
+
+
+
+备注：
+PS：harbor服务器端的docker默认仓库一定不能修改，而否则harbor无法缓存远程的docker镜像。
+同时经过观察发现，能不使用harbor缓存还是别使用。如果docker客户端一定要提高拉取官方docker镜像速度的话，可以使用国内的网易和中科大的docker镜像源。
+
+PS:国内docker加速镜像源
+
+网易docker加速镜像源：
+vim /usr/lib/systemd/system/docker.service
+ExecStart=/usr/bin/dockerd –registry-mirror=http://hub.c.163.com -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock
+systemctl daemon-reload && systemctl restart docker && systemctl status docker
+
+中科大docker加速镜像源：
+vim /usr/lib/systemd/system/docker.service
+ExecStart=/usr/bin/dockerd –registry-mirror=https://docker.mirrors.ustc.edu.cn -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock
+systemctl daemon-reload && systemctl restart docker && systemctl status docker
+
+
+相关报错。客户端docker login $harbor 的时候报错
+docker的的环境变量
+ExecStart=/usr/bin/dockerd –registryXXXX  不能和daemon.json同步设置，否则docker重启报错
+
+客户端登陆报错：
+docker login 192.168.2.181 
+1.不能使用admin登陆 需有普通账号
+2.若报拒绝可加daemon.json或者环境变量来处理
+
+
+
+
+
+
+
+
+
+
+
+
+
