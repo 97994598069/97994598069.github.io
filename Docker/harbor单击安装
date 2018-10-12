@@ -53,7 +53,7 @@ docker version
 做软链防止根分区给打满
 systemctl stop docker
 mv /var/lib/docker /mnt/
-ln -s /mnt/docker /var/lib/docker
+ln -s /mnt/docker /var/lib/
 
 相关问题备注：
 1、因为之前已经安装过旧版本的docker，在安装的时候报错如下：
