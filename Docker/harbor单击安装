@@ -45,6 +45,12 @@ yum remove docker  docker-common docker-selinux docker-engine
 yum install -y yum-utils device-mapper-persistent-data lvm2
 yum -y install docker
 
+禁用docker里的selinux
+vi /etc/sysconfig/docker
+#OPTIONS='--selinux-enabled --log-driver=journald --signature-verification=false' 
+改为
+OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+
 systemctl start docker
 systemctl enable docker
 systemctl status docker
