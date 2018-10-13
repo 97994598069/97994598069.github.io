@@ -47,7 +47,7 @@ yum -y install docker
 
 禁用docker里的selinux
 vi /etc/sysconfig/docker
-#OPTIONS='--selinux-enabled --log-driver=journald --signature-verification=false' 
+OPTIONS='--selinux-enabled --log-driver=journald --signature-verification=false' 
 改为
 OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
 
