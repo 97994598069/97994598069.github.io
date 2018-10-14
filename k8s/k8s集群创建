@@ -41,8 +41,8 @@ ssh-copy-id 192.168.1.120
 ssh-copy-id 192.168.1.121
 
 5.获取针对K8S某个具体版本的Breeze资源文件并启动部署工具，例如此次实验针对刚刚发布的K8S v1.12.1
-curl -L https://raw.githubusercontent.com/wise2ck8s/breeze/v1.12.1/docker-compose.yml -o docker-compose.yml
-docker-compose up -d
+1). curl -L https://raw.githubusercontent.com/wise2ck8s/breeze/v1.12.1/docker-compose.yml -o docker-compose.yml
+2). docker-compose up -d
 
 
 二、浏览器配置
@@ -52,16 +52,30 @@ docker-compose up -d
 开始---->"+"号---->输入集群名字和相关描述----->点击进入---->右上角添加主机---->按照环境部署的配置一一填写进去包括部署机---->下一步;右上角添加组件---->
 1.选择docker;选择版本号,勾上format host name 
 
-2.选择registry;选择版本号;选择registry hosts;输入registry entry point(registry的ip);输入registry password(一般会自动生成Harbor12345);
+2.选择registry;选择版本号;选择registry hosts;输入registry entry point(registry的ip);输入registry password(一般会自动生成Harbor12345); 
+备注：registry entry point默认就填写Harbor服务器的IP地址，有些环节可能使用域名则填写域名
+
 
 3.选择ectd;选择版本号;选择etcd hosts;(全部的k8s_master;本例中k8s01,k8s02,k8s03)
+备注：这里我们将其合并部署于k8s master节点，也可以挑选单独的主机进行部署
 
-4.选择kubernetes;选择版本号;选择kubernetes master hosts(本例中k8s01,k8s02,k8s03);kubenetes node hosts(本例中k8s04);kubernetes entry point(虚拟ip)----->下一步,选择开始安装------>直到OK 
+4.选择kubernetes;选择版本号;选择kubernetes master hosts(本例中k8s01,k8s02,k8s03);kubenetes node hosts(本例中k8s04);kubernetes entry point(虚拟ip)
+
+备注：这里kubernetes entry point是为了HA场景，比如此次试验我们在每一个k8s master节点同时各部署了haproxy和keepalived组件，其产生的虚IP是192.168.9.30，端口是6444，那么我们在这里应该填写为192.168.9.30:6444，如果您只安装一个master，那么可以填写为master的入口，例如192.168.9.11:6443
+
+5.----->下一步,选择开始安装------>直到OK 
 
 
-三、配置高可用 所有的k8s_master上(本例中是k8s01/k8s02/k8s03)
-1.部署高可用脚本
-[root@k8s03 ~]# cat /root/start-haproxy.sh 
+三、配置高可用；在部署机上
+1.在部署机上下载两个镜像：
+docker pull wise2c/haproxy-k8s
+docker pull wise2c/keepalived-k8s
+
+2.保存镜像包
+docker save wise2c/haproxy-k8s wise2c/keepalived-k8s -o /root/k8s-ha.tar
+
+3.部署高可用脚本
+cat /root/start-haproxy.sh 
 #!/bin/bash
 MasterIP1=192.168.1.197
 MasterIP2=192.168.1.198
@@ -70,7 +84,7 @@ MasterPort=6443
 
 docker run -d --restart=always --name HAProxy-K8S -p 6444:6444 -e MasterIP1=$MasterIP1 -e MasterIP2=$MasterIP2 -e MasterIP3=$MasterIP3 -e MasterPort=$MasterPort wise2c/haproxy-k8s
 
-[root@k8s03 ~]# cat /root/start-keepalived.sh 
+cat /root/start-keepalived.sh 
 #!/bin/bash
 VIRTUAL_IP=192.168.1.203
 INTERFACE=ens33
@@ -82,7 +96,22 @@ MCAST_GROUP=192.168.1.203
 
 docker run -itd --restart=always --name=Keepalived-K8S --net=host --cap-add=NET_ADMIN -e VIRTUAL_IP=$VIRTUAL_IP -e INTERFACE=$INTERFACE -e CHECK_PORT=$CHECK_PORT -e RID=$RID -e VRID=$VRID -e NETMASK_BIT=$NETMASK_BIT -e MCAST_GROUP=$MCAST_GROUP wise2c/keepalived-k8s
 
-2.启动高可用脚本
+4.增加执行权限chmod +x /root/start-haproxy.sh /root/start-keepalived.sh
+
+5.拷贝镜像和高可用脚本包至所有k8s_master节点(k8s01,k8s02,k8s03)
+scp /root/k8s-ha.tar 192.168.1.197:/root/
+scp /root/k8s-ha.tar 192.168.1.198:/root/
+scp /root/k8s-ha.tar 192.168.1.200:/root/
+scp –p /root/start-haproxy.sh 192.168.1.197:/root/
+scp –p /root/start-haproxy.sh 192.168.1.198:/root/
+scp –p /root/start-haproxy.sh 192.168.1.200:/root/
+scp –p /root/start-keepalived.sh 192.168.1.197:/root/
+scp –p /root/start-keepalived.sh 192.168.1.198:/root/
+scp –p /root/start-keepalived.sh 192.168.1.200:/root/
+
+
+6.启动高可用脚本 每个k8s_master上（k8s01,k8s02,k8s03）
+docker load -i /root/k8s-ha.tar
 bash /root/start-haproxy.sh 
 bash /root/start-keepalived.sh 
 
@@ -97,5 +126,3 @@ etcd-1               Healthy     {"health": "true"}
 etcd-2               Healthy     {"health": "true"}                                                                          
 etcd-0               Healthy     {"health": "true"}
 
-
-=
