@@ -1,0 +1,101 @@
+环境准备：
+主机名       ip              角色            组件
+deploy   192.168.1.196   Breeze Deploy    docker/docker-compose/breeze
+k8s01    192.168.1.197   ks Master        k8s Master /etcd/HAProxy/Keeplived
+k8s02    192.168.1.198   ks Master        k8s Master /etcd/HAProxy/Keeplived
+k8s03    192.168.1.200   ks Master        k8s Master /etcd/HAProxy/Keeplived
+k8s04    192.168.1.201   ks Minion Node   k8s Worker
+registry 192.168.1.199   Harbor           Harbor 1.6.0
+		 192.168.1.203   vip              HA虚拟IP地址在3台k8s Master浮动
+
+6台服务器：
+1.Centos7   
+2.服务器优化、时间更新、关闭防火墙、selinux等
+3.yum -y install chrony  systemctl enable chronyd.service    systemctl start chronyd.service
+4.部署机上安装docker和docker-compose 
+5.打通部署机到其他机子的ssh免密登陆
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		 
+安装步骤：
+一、准备部署主机（deploy / 192.168.1.196）
+1. 以标准Minimal方式安装CentOS 7.5 (1804) x64之后，登录shell环境，执行以下命令开放防火墙或者关闭防火墙：
+setenforce 0
+sed –follow-symlinks -i "s/SELINUX=enforcing/SELINUX=disabled/g" /etc/selinux/config
+firewall-cmd –set-default-zone=trusted
+firewall-cmd –complete-reload
+
+2.安装docker-compose命令
+curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose 
+chmod +x /usr/local/bin/docker-compose		 
+
+3.安装docker
+yum -y install docker 
+
+4.建立部署主机到其它所有服务器的ssh免密登录途径
+ssh-keygen
+ssh-copy-id 192.168.1.197
+ssh-copy-id 192.168.1.198
+ssh-copy-id 192.168.1.199
+ssh-copy-id 192.168.1.120
+ssh-copy-id 192.168.1.121
+
+5.获取针对K8S某个具体版本的Breeze资源文件并启动部署工具，例如此次实验针对刚刚发布的K8S v1.12.1
+curl -L https://raw.githubusercontent.com/wise2ck8s/breeze/v1.12.1/docker-compose.yml -o docker-compose.yml
+docker-compose up -d
+
+
+二、浏览器配置
+访问部署工具的浏览器页面(部署机IP及端口88)，开始部署工作
+浏览器访问http://192.168.1.196:88
+ 
+开始---->"+"号---->输入集群名字和相关描述----->点击进入---->右上角添加主机---->按照环境部署的配置一一填写进去包括部署机---->下一步;右上角添加组件---->
+1.选择docker;选择版本号,勾上format host name 
+
+2.选择registry;选择版本号;选择registry hosts;输入registry entry point(registry的ip);输入registry password(一般会自动生成Harbor12345);
+
+3.选择ectd;选择版本号;选择etcd hosts;(全部的k8s_master;本例中k8s01,k8s02,k8s03)
+
+4.选择kubernetes;选择版本号;选择kubernetes master hosts(本例中k8s01,k8s02,k8s03);kubenetes node hosts(本例中k8s04);kubernetes entry point(虚拟ip)----->下一步,选择开始安装------>直到OK 
+
+
+三、配置高可用 所有的k8s_master上(本例中是k8s01/k8s02/k8s03)
+1.部署高可用脚本
+[root@k8s03 ~]# cat /root/start-haproxy.sh 
+#!/bin/bash
+MasterIP1=192.168.1.197
+MasterIP2=192.168.1.198
+MasterIP3=192.168.1.200
+MasterPort=6443
+
+docker run -d --restart=always --name HAProxy-K8S -p 6444:6444 -e MasterIP1=$MasterIP1 -e MasterIP2=$MasterIP2 -e MasterIP3=$MasterIP3 -e MasterPort=$MasterPort wise2c/haproxy-k8s
+
+[root@k8s03 ~]# cat /root/start-keepalived.sh 
+#!/bin/bash
+VIRTUAL_IP=192.168.1.203
+INTERFACE=ens33
+NETMASK_BIT=24
+CHECK_PORT=6444
+RID=10
+VRID=160
+MCAST_GROUP=192.168.1.203
+
+docker run -itd --restart=always --name=Keepalived-K8S --net=host --cap-add=NET_ADMIN -e VIRTUAL_IP=$VIRTUAL_IP -e INTERFACE=$INTERFACE -e CHECK_PORT=$CHECK_PORT -e RID=$RID -e VRID=$VRID -e NETMASK_BIT=$NETMASK_BIT -e MCAST_GROUP=$MCAST_GROUP wise2c/keepalived-k8s
+
+2.启动高可用脚本
+bash /root/start-haproxy.sh 
+bash /root/start-keepalived.sh 
+
+
+四、测试
+k8s01上
+[root@k8s01 ~]# kubectl get cs
+NAME                 STATUS      MESSAGE                                                                                     ERROR
+scheduler            Unhealthy   Get http://127.0.0.1:10251/healthz: dial tcp 127.0.0.1:10251: connect: connection refused   
+controller-manager   Healthy     ok                                                                                          
+etcd-1               Healthy     {"health": "true"}                                                                          
+etcd-2               Healthy     {"health": "true"}                                                                          
+etcd-0               Healthy     {"health": "true"}
+
+
+=
