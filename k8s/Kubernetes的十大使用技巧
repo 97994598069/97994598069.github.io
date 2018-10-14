@@ -1,0 +1,110 @@
+Kubernetes的十大使用技巧
+
+1. bash针对kubectl命令的自动补充
+这可能是在使用Kubernetes过程中最容易做的事，但它也是其中一个最有用的。要添加自动补充功能，如果使用bash，只需执行以下命令：
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+它将添加自动补全命令到你的.bashrc文件。因此每个你打开的shell窗口都支持该功能。我发现自动补全对一些长的参数，比如--all-namespaces特别有用。
+
+
+2. 给每个namespace添加默认的内存和CPU限额
+是人就会犯错。我们假定某人写了个应用，他每秒就会打开一个数据库连接，但是不会关闭。这样集群中就有了一个内存泄漏的应用。假定我们把该应用部署到了没有限额设置的集群，那么该应用就会crash掉一个节点。
+为了避免这种情况，Kubernetes允许为每个namespace设置默认的限额。要做到这很简单，我们只需创建一个limit range 的 yaml 并应用到特定namespace。以下是一个例子：
+
+apiVersion: v1  
+ kind: LimitRange  
+ metadata:  
+   name: mem-limit-range  
+ spec:  
+   limits:  
+   - default:  
+       memory: 512Mi  
+     defaultRequest:  
+       memory: 256Mi  
+     type: Container
+
+将该内容创建一个yaml文件并将它应用到任何你想应用的namespace，例如namespace limit-example。使用了限额后，任何部署到该namespace的应用，假如没有主动设置限额，都将得到一个默认的512Mi的内存限额
+
+
+3. kebelet可以帮我清理掉Docker镜像吗
+这是kubelet默认已实现的功能。如果kubelet启动时没有设置flag，当/var/lib/docker目录到达90%的容量时，它就会自动进行垃圾回收。这是极好的，但是针对inode阈值它没有默认设置（Kubernetes 1.7之前）。
+你可能会遇到/var/lib/docker只使用了50%磁盘空间，但是inode全部用光的情况。这可能会引起工作节点各种各样的问题。如果你运行的kubelet版本在1.4到1.6之间，那你得给kubelet添加以下flag：
+--eviction-hard
+=memory.available<100Mi,nodefs.available<10%,nodefs.inodesFree<5%
+如果kubelet版本是1.7或更高，它默认就有这个配置。1.6默认不会监控inode的使用率，所以得添加那个flag来解决这个问题。
+
+
+4. minikube虽然是mini，但是本地使用功能强大
+minikube绝对是本地启动Kubernetes集群最容易的方式。你只需遵循这个[1]指南去下载所有东西。
+一旦所有组件安装完毕，你只需运行如下命令：
+minikube start
+
+待命令执行完毕，你本地就有一个运行的Kubernetes集群了。
+当你想在本地构建一个应用并在本地运行时，有一个技巧。当你在本地构建一个Docker镜像时，如果不运行其它命令，你的镜像将被构建在你的本地计算机。
+为了使你构建的Docker镜像能够直接push到本地Kubernetes集群，你需要使用如下命令告知Docker机器：
+eval $(minikube docker-env)
+这将使你能直接推送本地构建的应用到你的本地集群。
+
+
+5. 不要将kubectl的权限开放给所有人
+这可能是一个明摆着的事，但是当多个团队部署应用到同一个集群时，而这种场景就是Kubernetes的目标，不要开放一个通用的kubectl给每个人。我的建议是基于namespace来隔离团队，然后使用RBAC策略来限制能且仅能访问那个namespace。
+在权限被控制之后，你可能会变得疯狂，比如只能基于Pod来读取，创建和删除Pod。但是其中一个最需要做的事是只能访问管理员凭证，这样可以隔离谁能管理集群，而谁只能在集群上部署应用。
+
+
+6. Pod中断预算（Pod Disruption Budgets）是你的朋友
+在Kubernetes集群中我们如何确保应用零宕机？
+PodDisruptionBudgetPodDisruptionBudgetPodDisruptionBudget
+集群会更新。节点会打上drain标签且Pod会被移除，这没法避免。所以我们应该针对每个deployment都设置一个PDB，保证至少有一个实例。我们可以使用一个简单的yaml来创建一个PDB，应用到集群里，并使用标签选择器来确定这个PDB覆盖了哪些资源。
+注意：PDB只对自愿中断的资源负责，某些如硬件失败这种错误，PDB无法起作用。
+PDB例子如下：
+
+apiVersion: policy/v1beta1  
+ kind: PodDisruptionBudget  
+ metadata:  
+   name: app-a-pdb  
+ spec:  
+   minAvailable: 2  
+   selector:  
+       matchLabels:  
+         app: app-a
+
+两个最需要关注的字段是matchLabels和minAvailable。
+matchLabels字段用来确定是否一个deployment可以关联到这个PDB。
+例如，如果我有一个带标签app:app-a的deployment，和另一个带标签app:app-b的deployment，例子中的PDB将只对第一个deployment起作用。
+minAvailable字段是Kubernetes在某些场景下，比如node被打上drain标签时，进行操作的依据。假设app-a运行在node1上，如果node1被打上了drain标签，那么kubernetes只会清除那些有至少2个实例的app-a。
+这允许你在任何时候都可控制运行的实例数。
+
+
+7. 你的APP还活着且可用吗
+Kubernetes允许我们定义探针，供kubelet确认我们的Pod和APP是否是健康的。
+Kubernetes提供了两种类型的探针，Readiness探针和Liveness探针。
+Readiness探针用来确认容器是否可接受流量。
+Liveness探针用来确认容器是否是健康的，或者需要被重启。
+这些配置可以很容易得追加到deployment的yaml，并且可以自定义超时时间，重试次数，延时时间等。
+
+
+8. 给所有事物都打上标签
+标签是Kubernetes的其中一个基石。它使得对象和对象之间保持松耦合，且允许我们根据标签来查询对象。你甚至可以使用go client根据标签来监控事件。
+你几乎可以用标签做任何事，其中一个极佳的例子是同一集群中的多个环境。
+我们假定你在dev和qa环境使用了相同的集群。这说明你将在dev和qa环境同时运行一个app-a应用。
+为了达到这个目的，最简单的方式是使用service对象，其中一个选择带标签app:app-a和environment:dev的Pod，而另一个，则选择带标签app:app-a和environment:qa的Pod。
+这样做的好处是，两个相同的APP，每一个有不同的endpoint，这样就支持同时测试。
+
+
+9. 主动清理
+Kubernetes是一个非常非常强大的系统，但是和其它系统一样，它最终也会陷入混乱。kubelet必须进行任何你告诉它的校验，同时它也进行自己的校验。
+当然，Kubernetes有一个服务无法连接了，系统是不会挂掉的，因为它支持扩缩容。但是一个服务一旦扩大到成千上万个endpoint，那么kubelet就会一下子陷入瘫痪。
+简单的说，不论你因为什么理由需要删除一个deployment（或者其它东西），你都必须确保清理干净和它相关的一切东西。
+
+
+
+10. 你热爱GO语言吗
+最后一点是我个人觉得最重要的：持续的学习GO语言。
+Kubernetes是由GO编写的，它的所有插件也是用GO写的，他们甚至还编写了一个GO语言的客户端。client-go可用来做各种有趣的事。你可以用它根据自己的爱好扩展kubernetes。比如数据收集，部署引擎，或者一个简单的清理应用。
+学习这个GO 客户端，并在Kubernetes中使用它，这是我给每个使用Kubernetes的用户的最大建议。
+原文链接：
+https://kubernetes.io/docs/tasks/tools/install-minikube/
+https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
+
+
+
+
