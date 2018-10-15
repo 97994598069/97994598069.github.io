@@ -59,7 +59,7 @@ ssh-copy-id 192.168.1.121
 3.选择ectd;选择版本号;选择etcd hosts;(全部的k8s_master;本例中k8s01,k8s02,k8s03)
 备注：这里我们将其合并部署于k8s master节点，也可以挑选单独的主机进行部署
 
-4.选择kubernetes;选择版本号;选择kubernetes master hosts(本例中k8s01,k8s02,k8s03);kubenetes node hosts(本例中k8s04);kubernetes entry point(虚拟ip)
+4.选择kubernetes;选择版本号;选择kubernetes master hosts(本例中k8s01,k8s02,k8s03);kubenetes node hosts(本例中k8s04);kubernetes entry point(虚拟ip:6444)
 
 备注：这里kubernetes entry point是为了HA场景，比如此次试验我们在每一个k8s master节点同时各部署了haproxy和keepalived组件，其产生的虚IP是192.168.9.30，端口是6444，那么我们在这里应该填写为192.168.9.30:6444，如果您只安装一个master，那么可以填写为master的入口，例如192.168.9.11:6443
 
