@@ -6,10 +6,10 @@ k8s02    192.168.1.198   ks Master        k8s Master /etcd/HAProxy/Keeplived
 k8s03    192.168.1.200   ks Master        k8s Master /etcd/HAProxy/Keeplived
 k8s04    192.168.1.201   ks Minion Node   k8s Worker
 registry 192.168.1.199   Harbor           Harbor 1.6.0
-		 192.168.1.203   vip              HA虚拟IP地址在3台k8s Master浮动
+         192.168.1.203   vip              HA虚拟IP地址在3台k8s Master浮动
 
 6台服务器：
-1.Centos7   
+1.Centos7     服务器最好统一版本，例如7.5都是7.5
 2.服务器优化、时间更新、关闭防火墙、selinux等
 3.yum -y install chrony  systemctl enable chronyd.service    systemctl start chronyd.service
 4.部署机上安装docker和docker-compose 
