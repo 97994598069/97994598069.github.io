@@ -9,7 +9,7 @@ registry 192.168.1.199   Harbor           Harbor 1.6.0
          192.168.1.203   vip              HA虚拟IP地址在3台k8s Master浮动
 
 6台服务器：
-1.Centos7     服务器最好统一版本，例如7.5都是7.5
+1.Centos7     ##服务器最好统一版本，例如7.5都是7.5;;上次本人安装失败原因，有一台k8snode为7.3;;不行；而且只报错docker安装失败没有任何信息
 2.服务器优化、时间更新、关闭防火墙、selinux等
 3.yum -y install chrony  systemctl enable chronyd.service    systemctl start chronyd.service
 4.部署机上安装docker和docker-compose 
