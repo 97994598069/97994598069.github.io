@@ -14,6 +14,7 @@ registry 192.168.1.199   Harbor           Harbor 1.6.0
 3.yum -y install chrony  systemctl enable chronyd.service    systemctl start chronyd.service
 4.部署机上安装docker和docker-compose 
 5.打通部署机到其他机子的ssh免密登陆
+6.可以提前安装好docker，毕竟docker也是需要些设置的
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 		 
