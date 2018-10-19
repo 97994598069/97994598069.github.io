@@ -1,0 +1,25 @@
+[root@localhost tomcat]# cat Dockerfile 
+FROM centos
+ADD apache-tomcat-8.5.34.tar.gz /root
+ADD jdk-8u11-linux-x64.tar.gz /root
+
+ENV JAVA_HOME /root/jdk1.8.0_11
+ENV PATH $JAVA_HOME/bin:$PATH
+ENTRYPOINT /root/apache-tomcat-8.5.34/bin/startup.sh && tail -f /root/apache-tomcat-8.5.34/logs/catalina.out
+
+
+
+[root@localhost tomcat]# docker build -t tomcat8:v1 .
+
+[root@localhost tomcat]# docker create --name "mytomcat1" -p 8080:8080 tomcat8:v1
+
+[root@localhost tomcat]# docker start fdd18e4b9ff4
+
+[root@localhost tomcat]# docker logs fdd18e4b9ff4
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+find -inum 3679714  |xargs -I {} rm {}
