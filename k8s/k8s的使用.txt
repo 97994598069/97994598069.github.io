@@ -1,0 +1,160 @@
+kubectl的相关命令：
+
+kubectl run命令：
+基础语法：
+kubectl run NAME --image=image [--env="key=value"] [--port=port] [--replicas=replicas] [--dry-run=bool] [--overrides=inline-json] [--command] -- [COMMAND] [args...]
+
+示例：
+启动nginx实例
+kubectl run nginx --image=nginx
+
+启动hazelcast实例，暴露容器端口 5701。
+kubectl run hazelcast --image=docker.io/nginx --port=5701
+
+启动hazelcast实例，在容器中设置环境变量“DNS_DOMAIN = cluster”和“POD_NAMESPACE = default”。
+kubectl run hazelcast --image=hazelcast --env="DNS_DOMAIN=cluster" --env="POD_NAMESPACE=default"
+
+启动nginx实例，设置副本数5
+kubectl run nginx --image=nginx --replicas=5
+
+运行 Dry  打印相应的API对象而不创建它们
+kubectl run nginx --image=nginx --dry-run
+
+备注：kubectl run --generator=deployment/apps.v1beta1 is DEPRECATED and will be removed in a future version. Use kubectl create instead.
+deployment.apps/nginx created
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+kubectl expose命令：
+expose (-f FILENAME | TYPE NAME) [--port=port] [--protocol=TCP|UDP] [--target-port=number-or-name] [--name=name] [--external-ip=external-ip-of-service] [--type=type]
+
+示例：
+为RC的nginx创建service，并通过Service的80端口转发至容器的8000端口上。
+kubectl expose rc nginx --port=80 --target-port=8000
+
+
+由"nginx-controller.yaml"中指定的type和name标识的RC创建Service，并通过Service的80端口转发至容器的8000端口上。
+kubectl expose -f nginx-controller.yaml --port=80 --target-port=8000
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+kubectl annotate:
+更新一个或多个资源的Annotations信息
+Annotations由key/value组成。
+Annotations的目的是存储辅助数据，特别是通过工具和系统扩展操作的数据，更多介绍在这里。
+如果--overwrite为true，现有的annotations可以被覆盖，否则试图覆盖annotations将会报错。
+如果设置了--resource-version，则更新将使用此resource version，否则将使用原有的resource version。
+
+基础语法：
+annotate [--overwrite] (-f FILENAME | TYPE NAME) KEY_1=VAL_1 ... KEY_N=VAL_N [--resource-version=version]
+
+示例：
+更新Pod“foo”，设置annotation “description”的value “my frontend”，如果同一个annotation多次设置，则只使用最后设置的value值。
+kubectl annotate pods foo description='my frontend'
+
+根据“pod.json”中的type和name更新pod的annotation
+kubectl annotate -f pod.json description='my frontend'
+
+更新Pod"foo"，设置annotation“description”的value“my frontend running nginx”，覆盖现有的值。
+kubectl annotate --overwrite pods foo description='my frontend running nginx'
+
+更新 namespace中的所有pod
+kubectl annotate pods --all description='my frontend running nginx'
+
+只有当resource-version为1时，才更新pod ' foo '
+kubectl annotate pods foo description='my frontend running nginx' --resource-version=1
+
+通过删除名为“description”的annotations来更新pod ' foo '。#不需要- overwrite flag
+kubectl annotate pods foo description-
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+kubectl autoscale命令：
+使用 autoscaler 自动设置在kubernetes集群中运行的pod数量（水平自动伸缩）。
+指定Deployment、ReplicaSet或ReplicationController，并创建已经定义好资源的自动伸缩器。使用自动伸缩器可以根据需要自动增加或减少系统中部署的pod数量。
+
+基础语法：
+autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MAXPODS [--cpu-percent=CPU] [flags]
+
+
+使用 Deployment “foo”设定，使用默认的自动伸缩策略，指定目标CPU使用率，使其Pod数量在2到10之间
+kubectl autoscale deployment foo --min=2 --max=10
+
+使用RC“foo”设定，使其Pod的数量介于1和5之间，CPU使用率维持在80％
+kubectl autoscale rc foo --max=5 --cpu-percent=80
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+kubectl convert命令：
+转换配置文件为不同的API版本，支持YAML和JSON格式。
+该命令将配置文件名，目录或URL作为输入，并将其转换为指定的版本格式，如果目标版本未指定或不支持，则转换为最新版本。
+默认输出将以YAML格式打印出来，可以使用- o选项改变输出格式。
+
+基础语法:
+convert -f FILENAME
+
+示例：
+将“pod.yaml”转换为最新版本并打印到stdout。
+kubectl convert -f pod.yaml
+
+将“pod.yaml”指定的资源的实时状态转换为最新版本＃，并以json格式打印到stdout
+kubectl convert -f pod.yaml --local -o json
+
+将当前目录下的所有文件转换为最新版本，并将其全部创建
+kubectl convert -f . | kubectl create -f -
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+kubectl create命令：
+通过配置文件名或stdin创建一个集群资源对象。
+支持JSON和YAML格式的文件。
+
+基础语法:
+create -f FILENAME
+
+通过pod.json文件创建一个pod
+kubectl create -f ./pod.json
+
+通过stdin的JSON创建一个pod
+cat pod.json | kubectl create -f -
+
+API版本为v1的JSON格式的docker-registry.yaml文件创建资源
+kubectl create -f docker-registry.yaml --edit --output-version=v1 -o json
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+kubectl create clusterrole:
+clusterrole NAME --verb=verb --resource=resource.group [--resource-name=resourcename] [--dry-run]
+
+创建一个名为“pod-reader”的ClusterRole，允许用户在pod上执行"get"，"watch”和“list"
+kubectl create clusterrole pod-reader --verb=get,list,watch --resource=pods
+
+kubectl create --image=nginx nginx-app --port=1112 --env="DOMAIN=cluster"deployment "nginx-app" created
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
