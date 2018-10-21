@@ -1,0 +1,284 @@
+docker运行java
+1.在docker hub找到想要运行的java版本并拉去下来
+docker pull library/openjdk
+
+docker run -ti --entrypoint bash openjdk:7-jre  #
+
+然后可以在容器中查看java版本信息等：
+ls -l 
+uname -a
+java -version
+pwd
+等等
+
+Dockerfile
+
+FROM openjdk:7-jre
+#MAINTAINER xxx xxx@126.com
+COPY target/usr-thrift-service-1.0-SNAPSHOT.jar /usr-service.jar
+ENTRYPOINT ["java", "-jar", "/usr-service.jar"] 
+
+执行Dockerfile 
+docker build -t user-service:latest .
+建立脚本：
+#!/bin/bash 
+mvn package
+docker build -t user-service:latest .
+
++++++++++++++++++++++++++++++++++++++++++++++
+
+安装python
+docker pull python:3.6
+docker run -ti --entrypoint bash python:3.6  
+可以执行下bash命令查看相关信息
+uanme -a 
+pwd
+ls -l
+python等
+
+部署Dockerfile
+因为其依赖于thrift 所以需要先做thrift的镜像然后让其作为python的依赖
+vi Dockerfile.base
+FROM python:3.6
+##MAINTAINER xxx xxx@126
+##可以在之前运行的python的docker中用pip安装thrift
+##docker exec xxxxx 进入python的docker
+##pip install thrift 测试是否可以安装thrift
+
+RUN pip install thrift
+
+建立脚本：
+#！/bin/bash
+docker build -t python-base:latest -f Dockerfile.base .
+
+编写python的Dockerfile
+FROM python-base:latest   以刚刚创建的安装完的thrift的python-base镜像为基础
+#MAINTAINER 
+ENV PYTHONPATH /   ##指定python命令的路径
+COPY message /message 
+ENTRYPOINT ["python", "/message/message_service.py"]
+
+创建脚本
+#!/usr/bin/env bash
+docker build -t message-service:latest 
+
+
+
+###docker中如果需要连接外围服务，例如数据等的相关信息
+可以在dockerfile中设置变量
+例如：
+mysql_host="mysql_host"
+mysql_port="mysql_port"
+mysql_user="mysql_user"
+mysql_password="mysql_passwd"
+然后再docker run的时候添加相关的环境变量
+例如：
+docker run -ti --name abc -p 8080:8080 -d $docker_image --mysql_host="192.168.1.112" --mysql_port="3306" --mysql_user="admin" --mysql_passwd="admin"
+
+
+docker下的服务通信：
+1.让docker都运行起来
+2.让docker互相通信
+
+联通的方式，
+1.通过docker-ip来连接，但是不稳定
+2.通过端口的映射，通过宿主机的ip+映射的端口来联通
+3.使用--link的方式，link到一个容器之后就可以直接使用名字来访问
+
+案例使用：
+1.开发的微服务环境使用--link的方式来联通
+2.所依赖的基础环境则是端口映射的方式来联通：比如mysql,redis，rabbitmq
+
+1.建立开发的微服务的link关系   使用docker-compose
+vi docker-compose.yml
+version: "3"
+services:
+	message-service:
+		image: message-service:latest  ##已存在
+	user-service：
+		image: user-service:latest   ##由于使用到了数据库所以需要配置command
+		command:
+		- "--mysql.address=192.168.2.181"
+		user-edge-service:
+			image: user-edge-service:latest  #到这里就有了依赖关系
+			links
+			- user-service   
+			- message-service
+			command:
+			- "--redis.address=192.168.2.181"
+		course-service:
+			image: course-service:latest
+			links:
+			- user-service 
+			command:
+			- "--mysql.address=192.168.2.181"
+			- "--zookeeper.address=192.168.1.7"
+		course-edge-service:
+			image: courese-edge-service:latest 
+			links：
+			- user-edge-service
+			command:
+			- "--zookeeper.address=192.168.2.181"
+		api-gateway-zuul:
+			image: api-gateway-zuul:latest
+			links:
+			- user-edge-service 
+			- course-edge-service 
+			ports:    ##由于这个端口是需要对外访问的，所以需要添加映射端口
+			- 8080:8080
+使用docker-compose启动
+docker-compose up -d    
+1.代码里的路径尽量使用相对路径  例如login.html最好不要写成/login.html 
+2.代理配置里不要使用localhost或者127.0.0.1或者其他的ip;可以写成none
+示例：
+transport = TSocket.TServerSocket(None, "9090")
+3.docker-compose 重启一个服务：
+docker-compose up -d message-service 
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+k8s集群部署微服务
+一.思路整理：
+我们有如写微服务：
+1.消息服务：message-service 
+2.课程dubbo服务： course-dubbo-service 
+3.课程web服务：course-edge-service 
+4.用户thrift服务：user-thrift-service 
+5.用户web服务：user-edge-service 
+6.api网关服务: api-gateway 
+
+
+二.把它们放到k8s集群运行我们要考虑什么问题？
+1.哪些服务适合单独称为一个pod？那些服务适合在一个pod中？
+2.在一个pod里面的服务如果彼此访问？他们的服务如何对外提供服务
+3.单独的pod如何对外提供服务？
+4.哪个服务作为整个服务的入口，入口服务如何对外提供服务？
+
+#1.消息服务和别的不搭边，所有的服务都可能需要调用消息服务，和谁单独放到一起都不合适，所以暂定消息服务为单独的pod
+2.课程的dubbo和课程web服务是紧密相关的，因为课程大部分的dubbo的接口都是由课程的web服务来调用的；他们之间的交互频率肯定很高，所以让他们两个放到一个pod里面
+3.同理用户的thrift服务和用户的web服务放到一个pod里面
+4.api网关肯定会调度很多很多的服务，适合单独的放到一个pod里面
+
+
+#同一个pod里面的服务是怎么彼此通信的？外面的服务需要调度这个pod，这个pod怎么对外提供服务？
+1.同一个pod里的两个服务可以通过本机（localhost或者127.0.01）ip和端口进行通信
+2.我们知道我们的service可以通过classip或者通过kubeDNS根据名字去解析让我们的服务可以在集群内部访问,并且在一个service里面可以定义多个端口，其实就是允许我们对外提供多个服务
+
+#单独的pod如何对外提供服务呢？
+更简单了，可以直接通过classip或者kubeDNS就可以提供集群内的服务了
+
+#很特殊的APIgeteway
+他作为的是整个服务的入口，这个入口怎么对外提供服务呢？
+它需要一个node pod；这样就可以让我们在集群外也可以访问到这个服务了
+
+
+
+三.搞定配置
+配置模板：
+cd ~/kubernetes-starter/service-config/
+ls
+api-gateway.yaml   message-service.yaml 
+course-service.yaml   user-service.yaml 
+
+备注：替换变量 -(hub.mooc.com:8080是我们的环境的镜像仓库地址，大家修改为各自的仓库)
+sed -i "s/{{HUB}}/hub.mooc.com:8080/g" *
+
+三.部署服务
+cat api-gateway.yaml 
+apiVersion: v1
+kind: Service     ##定义了一个kind service然后取了个名字api-gateway 
+metadata:
+	labels:
+		app: api-gateway
+	name: api-gateway 
+spec:
+	ports:
+	- port: 80   ##定义服务端口80
+	  protocol: TCP
+	  targetPort: 8080    ##容器端口8080
+	  nodePort: 80   ##对外的nodePort为80
+	selector:
+	  app: api-gateway
+	type: NodePort
+
+---
+apiVersion: apps/v1beta1
+kind: Deployment   ##定义了一个deployment
+metadata:
+	name: api-gateway-deployment
+spec:
+	replicas: 1
+	template:  ##定义了一个template
+	  metadata:
+	    labels:
+		  app: api-gateway   ##一定和上面的selector定义的一样
+	spec:
+	  containers:   ##定义了一个容器
+	  - name: api-gateway
+	    image: hub.mooc.com:8080/micro-service/api-gateway-zuul:latest
+		ports:
+		- comtainerPort: 8080
+
+
+vi messafe-service.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+	labels:
+	  app: messafe-service
+	name: messafe-service
+spec:
+	ports：
+	- port: 9090
+	  protocol: TCP
+	  targetPort: 9090
+	selector:
+	  app: messafe-service
+	type: ClusterIP  ##因为它不需要对外提供服务所以是clusterip
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+	name: messafe-service-deloyment
+spec:
+	replicas: 1
+	template:
+	  metadata:
+	    labels:
+		  app: messafe-service
+	 spec:
+	   containers:
+	   - name: messafe-service
+	     image: hub.micro-service/messafe-service:latest
+		 ports:
+		 - comtainerPort: 9090
+		 
+		 
+		 
+创建：
+kubectl apply -f messafe-service
+kubectl apply -f user-edge-service
+.....
+ 
+查看所有的service
+kubectl get svc
+
+查看deploy
+kubectl get deploy
+
+查看pod
+kubectl get pods -o wide
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
