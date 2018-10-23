@@ -1,0 +1,36 @@
+一。
+At least one JAR was scanned for TLDs yet contained no TLDs：
+
+07-Mar-2017 11:00:21.970 INFO [RMI TCP Connection(2)-127.0.0.1] org.apache.jasper.servlet.TldScanner.scanJars At least one JAR was scanned for TLDs yet contained no TLDs. Enable debug logging for this logger for a complete list of JARs that were scanned but no TLDs were found in them. Skipping unneeded JARs during scanning can improve startup time and JSP compilation time.
+
+如果你的项目不需要Tld，就修改一下conf/catalina.properties文件
+tomcat.util.scan.StandardJarScanFilter.jarsToSkip=*.jar
+
+
+默认配置会扫描一大堆jar包，还会输出一堆红色的log，看着闹心
+
+二。
+consider increasing the maximum size of the cache：
+
+07-Mar-2017 11:28:00.620 WARNING [RMI TCP Connection(2)-127.0.0.1] org.apache.catalina.webresources.Cache.getResource Unable to add the resource at [/WEB-INF/classes/org/hibernate/jpa/orm_2_1.xsd] to the cache because there was insufficient free space available after evicting expired cache entries - consider increasing the maximum size of the cache
+
+直接简单粗暴的关闭了cache,也是修改的conf/context.xml文件
+<Resources cachingAllowed="false" />
+
+三。
+failed to unregister it when the web application was stopped：
+07-Mar-2017 11:19:54.287 WARNING [localhost-startStop-2] org.apache.catalina.loader.WebappClassLoaderBase.clearReferencesJdbc The web application [ROOT] registered the JDBC driver [com.mysql.cj.jdbc.Driver] but failed to unregister it when the web application was stopped. To prevent a memory leak, the JDBC Driver has been forcibly unregistered.
+
+没啥问题，就是一个提示性的log。把jar放到tomcat的lib下面也不好使，依然有这个log
+
+
+四。
+com.alibaba.dubbo.rpc.RpcContext
+07-Mar-2017 11:19:54.288 SEVERE [localhost-startStop-2] org.apache.catalina.loader.WebappClassLoaderBase.checkThreadLocalMapForLeaks The web application [ROOT] created a ThreadLocal with key of type [com.alibaba.dubbo.rpc.RpcContext$1] (value [com.alibaba.dubbo.rpc.RpcContext$1@5dca88d4]) and a value of type [com.alibaba.dubbo.rpc.RpcContext] (value [com.alibaba.dubbo.rpc.RpcContext@501b84f8]) but failed to remove it when the web application was stopped. Threads are going to be renewed over time to try and avoid a probable memory leak.
+
+如果依赖dubbo（作为消费者），就会碰到上面这个log，而且还会导致jvm停不掉。原因是dubbo依赖的netty有一个non-deamon的线程导致的，修改netty NioClientBossPool 解决这个问题
+public NioClientBossPool(Executor bossExecutor, int bossCount) {
+        this(bossExecutor, bossCount, new HashedWheelTimer(new ThreadFactoryBuilder().setDaemon(true).build()), (ThreadNameDeterminer)null);
+        this.stopTimer = true;
+    }
+
