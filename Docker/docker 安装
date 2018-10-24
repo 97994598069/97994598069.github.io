@@ -49,6 +49,13 @@ ln -s /data/docker /var/lib/docker
 11、验证安装是否成功(有client和service两部分表示docker安装启动都成功了)
 docker version  
 
+注意：默认docker里面会没有yum等网络命令需要安装，怎么安装
+运行完一个docker后进入
+apt-get update
+apt-get install net-tools
+
+
+
 二、问题
 1、因为之前已经安装过旧版本的docker，在安装的时候报错如下：
 Transaction check error:
