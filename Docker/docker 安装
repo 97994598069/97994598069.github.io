@@ -54,6 +54,22 @@ docker version
 apt-get update
 apt-get install net-tools
 
+安装ping命令
+root@45abb921df16:/sbin# apt-get install ping
+Reading package lists... Done
+Building dependency tree       
+Reading state information... Done
+Package ping is a virtual package provided by:
+  iputils-ping 3:20161105-1   ##意思是从这两个包中选择一个下载
+  inetutils-ping 2:1.9.4-2+b1
+You should explicitly select one to install.
+
+E: Package 'ping' has no installation candidate
+
+#运行如下即可
+root@45abb921df16:/sbin# apt-get install inetutils-ping 2:1.9.4-2+b1
+
+
 
 
 二、问题
