@@ -1,0 +1,15 @@
+DockerUI优点：
+1）支持container批量操作；
+2）支持image管理（虽然比较薄弱）
+ 
+DockerUI缺点：
+不支持多主机。
+
+首先拉去dockerUI镜像，现在dockerUI镜像位置变了，如下：
+[root@localhost ~]# docker pull uifd/ui-for-docker          //之前镜像位置为dockerui/dockerui
+
+启动DockerUI容器。
+如果服务器开启了Selinux，那么就得使用--privileged标志。这里我在本机关闭了Selinux，所以不用添加--privileged
+[root@localhost ~]# docker run -it -d --name docker-web -p 9000:9000 -v /var/run/docker.sock:/var/run/docker.sock docker.io/uifd/ui-for-docker
+
+接着就可以在浏览器访问DockerUI管理界面了。启动了 DockerUI容器之后，就可以用它来执行启动、暂停、终止、删除以及DockerUI提供的其它操作Docker容器的命令。在浏览器里面输入 http://ip-address:9000，默认情况下登录不需要认证，但是可以配置我们的 web 服务器来要求登录认证。
