@@ -1,0 +1,193 @@
+机器环境（centos7系统）
+
+182.48.115.233     部署etcd，flannel，docker      主机名：node-1   主控端（通过etcd）
+182.48.115.235     部署flannel，docker            主机名：node-2   被控端
+
+两台服务器安装docker  方法略；
+
+一、node-1（182.48.115.233）机器操作：
+
+设置主机名及绑定hosts
+[root@node-1 ~]# hostnamectl --static set-hostname  node-1
+[root@node-1 ~]# vim /etc/hosts
+182.48.115.233    node-1
+182.48.115.233    etcd
+182.48.115.235    node-2
+
+关闭防火墙，如果开启防火墙，则最好打开2379和4001端口
+[root@node-1 ~]# systemctl disable firewalld.service
+[root@node-1 ~]# systemctl stop firewalld.service
+
+安装etcd
+k8s运行依赖etcd，需要先部署etcd，下面采用yum方式安装：
+[root@node-1 ~]# yum install etcd -y
+
+yum安装的etcd默认配置文件在/etc/etcd/etcd.conf，编辑配置文件：
+[root@node-1 ~]# cp /etc/etcd/etcd.conf /etc/etcd/etcd.conf.bak
+[root@node-1 ~]# cat /etc/etcd/etcd.conf
+#[member]
+ETCD_NAME=master                                            #节点名称
+ETCD_DATA_DIR="/var/lib/etcd/default.etcd"                  #数据存放位置
+#ETCD_WAL_DIR=""
+#ETCD_SNAPSHOT_COUNT="10000"
+#ETCD_HEARTBEAT_INTERVAL="100"
+#ETCD_ELECTION_TIMEOUT="1000"
+#ETCD_LISTEN_PEER_URLS="http://0.0.0.0:2380"
+ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379,http://0.0.0.0:4001"             #监听客户端地址
+#ETCD_MAX_SNAPSHOTS="5"
+#ETCD_MAX_WALS="5"
+#ETCD_CORS=""
+#
+#[cluster]
+#ETCD_INITIAL_ADVERTISE_PEER_URLS="http://localhost:2380"
+# if you use different ETCD_NAME (e.g. test), set ETCD_INITIAL_CLUSTER value for this name, i.e. "test=http://..."
+#ETCD_INITIAL_CLUSTER="default=http://localhost:2380"
+#ETCD_INITIAL_CLUSTER_STATE="new"
+#ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
+ETCD_ADVERTISE_CLIENT_URLS="http://etcd:2379,http://etcd:4001"           #通知客户端地址
+#ETCD_DISCOVERY=""
+#ETCD_DISCOVERY_SRV=""
+#ETCD_DISCOVERY_FALLBACK="proxy"
+#ETCD_DISCOVERY_PROXY=""
+    
+启动etcd并验证状态
+[root@node-1 ~]# systemctl start etcd
+    
+[root@node-1 ~]# ps -ef|grep etcd
+etcd     28145     1  1 14:38 ?        00:00:00 /usr/bin/etcd --name=master --data-dir=/var/lib/etcd/default.etcd --listen-client-urls=http://0.0.0.0:2379,http://0.0.0.0:4001
+root     28185 24819  0 14:38 pts/1    00:00:00 grep --color=auto etcd
+[root@node-1 ~]# lsof -i:2379
+COMMAND   PID USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+etcd    28145 etcd    6u  IPv6 1283822      0t0  TCP *:2379 (LISTEN)
+etcd    28145 etcd   18u  IPv6 1284133      0t0  TCP localhost:53203->localhost:2379 (ESTABLISHED)
+
+
+[root@node-1 ~]# etcdctl set testdir/testkey0 0
+0
+[root@node-1 ~]# etcdctl get testdir/testkey0
+0
+[root@node-1 ~]# etcdctl -C http://etcd:4001 cluster-health
+member 8e9e05c52164694d is healthy: got healthy result from http://etcd:2379
+cluster is healthy
+[root@node-1 ~]# etcdctl -C http://etcd:2379 cluster-health
+member 8e9e05c52164694d is healthy: got healthy result from http://etcd:2379
+cluster is healthy
+
+
+安装覆盖网络Flannel
+[root@node-1 ~]# yum install flannel
+   
+配置Flannel
+[root@node-1 ~]# cp /etc/sysconfig/flanneld /etc/sysconfig/flanneld.bak
+[root@node-1 ~]# vim /etc/sysconfig/flanneld
+# Flanneld configuration options
+   
+# etcd url location.  Point this to the server where etcd runs
+FLANNEL_ETCD_ENDPOINTS="http://etcd:2379"
+   
+# etcd config key.  This is the configuration key that flannel queries
+# For address range assignment
+FLANNEL_ETCD_PREFIX="/atomic.io/network"
+   
+# Any additional options that you want to pass
+#FLANNEL_OPTIONS=""
+  
+配置etcd中关于flannel的key（这个只在安装了etcd的机器上操作）
+Flannel使用Etcd进行配置，来保证多个Flannel实例之间的配置一致性，所以需要在etcd上进行如下配置（'/atomic.io/network/config'这个key与上文/etc/sysconfig/flannel中的配置项FLANNEL_ETCD_PREFIX是相对应的，错误的话启动就会出错）：
+[root@node-1 ~]# etcdctl mk /atomic.io/network/config '{ "Network": "182.48.0.0/16" }'
+{ "Network": "182.48.0.0/16" }
+ 
+温馨提示：上面flannel设置的ip网段可以任意设定，随便设定一个网段都可以。容器的ip就是根据这个网段进行自动分配的，ip分配后，容器一般是可以对外联网的（网桥模式，只要宿主机能上网就可以）
+
+启动Flannel
+[root@node-1 ~]# systemctl enable flanneld.service
+[root@node-1 ~]# systemctl start flanneld.service
+[root@node-1 ~]# ps -ef|grep flannel
+root      9305  9085  0 09:12 pts/2    00:00:00 grep --color=auto flannel
+root     28876     1  0 May15 ?        00:00:07 /usr/bin/flanneld -etcd-endpoints=http://etcd:2379 -etcd-prefix=/atomic.io/network
+ 
+启动Flannel后，一定要记得重启docker，这样Flannel配置分配的ip才能生效，即docker0虚拟网卡的ip会变成上面flannel设定的ip段
+[root@node-1 ~]# systemctl restart docker
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+二、node-2（182.48.115.235）机器操作
+
+设置主机名及绑定hosts
+[root@node-2 ~]# hostnamectl --static set-hostname  node-2
+[root@node-2 ~]# vim /etc/hosts
+182.48.115.233    node-1
+182.48.115.233    etcd
+182.48.115.235    node-2
+  
+关闭防火墙，如果开启防火墙，则最好打开2379和4001端口
+[root@node-2 ~]# systemctl disable firewalld.service
+[root@node-2 ~]# systemctl stop firewalld.service
+  
+先安装docker环境
+[root@node-2 ~]# yum install -y docker
+  
+安装覆盖网络Flannel
+[root@node-2 ~]# yum install flannel
+   
+配置Flannel
+[root@node-2 ~]# cp /etc/sysconfig/flanneld /etc/sysconfig/flanneld.bak
+[root@node-2 ~]# vim /etc/sysconfig/flanneld
+# Flanneld configuration options
+   
+# etcd url location.  Point this to the server where etcd runs
+FLANNEL_ETCD_ENDPOINTS="http://etcd:2379"
+   
+# etcd config key.  This is the configuration key that flannel queries
+# For address range assignment
+FLANNEL_ETCD_PREFIX="/atomic.io/network"
+   
+# Any additional options that you want to pass
+#FLANNEL_OPTIONS=""
+  
+启动Flannel
+[root@node-2 ~]# systemctl enable flanneld.service
+[root@node-2 ~]# systemctl start flanneld.service
+[root@node-2 ~]# ps -ef|grep flannel
+root      3841  9649  0 09:11 pts/0    00:00:00 grep --color=auto flannel
+root     28995     1  0 May15 ?        00:00:07 /usr/bin/flanneld -etcd-endpoints=http://etcd:2379 -etcd-prefix=/atomic.io/network
+ 
+启动Flannel后，一定要记得重启docker，这样Flannel配置分配的ip才能生效，即docker0虚拟网卡的ip会变成上面flannel设定的ip段
+[root@node-2 ~]# systemctl restart docker
+
+
+
+三、创建容器，验证跨主机容器之间的网络联通性
+首先在node-1（182.48.115.233）上容器容器，如下，登陆容器发现已经按照上面flannel配置的分配了一个ip段（每个宿主机都会分配一个182.48.0.0/16的网段）
+   
+[root@node-1 ~]# docker run -ti -d --name=node-1.test docker.io/nginx /bin/bash
+5e403bf93857fa28b42c9e2abaa5781be4e2bc118ba0c25cb6355b9793dd107e
+
+[root@node-1 ~]# docker exec -ti node-1.test /bin/bash
+root@5e403bf93857:/# ip addr
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2953: eth0@if2954: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1472 qdisc noqueue state UP group default
+    link/ether 02:42:b6:30:19:04 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 182.48.25.4/24 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:b6ff:fe30:1904/64 scope link
+       valid_lft forever preferred_lft forever
+
+同理在node-2上执行
+发现在两台docker里面互ping通；；ping www.baidu.com  通 
+
+
+查看两台宿主机的网卡信息，发现docker0虚拟网卡的ip（相当于容器的网关）也已经变成了flannel配置的ip段，并且多了flannel0的虚拟网卡信息
+通过下面命令，可以查看到本机的容器的ip所在的范围
+[root@node-1 ~]# ps aux|grep docker|grep "bip"
+root      2080  0.0  1.4 796864 28168 ?        Ssl  May15   0:18 /usr/bin/dockerd-current --add-runtime docker-runc=/usr/libexec/docker/docker-runc-current --default-runtime=docker-runc --exec-opt native.cgroupdriver=systemd --userland-proxy-path=/usr/libexec/docker/docker-proxy-current --insecure-registry registry:5000 --bip=182.48.25.1/24 --ip-masq=true --mtu=1472
+  
+这里面的“--bip=182.48.25.1/24”这个参数，它限制了所在节点容器获得的IP范围。
+这个IP范围是由Flannel自动分配的，由Flannel通过保存在Etcd服务中的记录确保它们不会重复。
+
+
