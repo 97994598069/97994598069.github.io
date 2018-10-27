@@ -349,7 +349,7 @@ systemctl status etcd.service
 systemctl enable etcd.service
 
 
-验证etcd集群  (如果服务器时间相差很多，会报错  查看日志/var/log/message)
+验证etcd集群  (如果服务器时间相差很多，会报错;最好提前同步下时间源  查看日志/var/log/message)
 etcdctl -ca-file=/ssl/ca.pem --cert-file=/ssl/server.pem --key-file=/ssl/server-key.pem --endpoints="https://192.168.1.21:2379,https://192.168.1.22:2379,https://192.168.1.23:2379,https://192.168.1.24:2379" cluster-health
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
