@@ -1,0 +1,229 @@
+我们的微服务：
+消息服务: message-service
+课程dubbo服务: courese-dubbo-service 
+课程web服务: courese-web-service
+用户thrift服务: user-thrift-service 
+用户web服务: user-edge-service 
+API网关: api-gateway
+
+把他们放到一个k8s集群中需要考虑什么？
+1.哪些服务适合单独成为一个pod？哪些服务适合在一个pod中？
+2.在一个pod里面的服务如何彼此访问？他们的服务如何对外提供服务
+3.单独的pod如何对外提供服务
+4.哪个服务作为整个服务的入口，入口服务如何对外提供服务
+
+
+搞定配置:
+cd ~/kubernetes-starrter/service-config/
+ls
+api-gateway.yaml 
+message-service.yaml 
+courese-service.yaml 
+user-service.yaml
+
+##替换变量:
+sed -i 's/{{HUB}}/hub.mooc.com:8080/g' *
+
+
+部署服务：
+cat api-gateway.yaml
+apiVersion: v1
+kind: Service 
+metadata:
+    labels:
+        api: api-gateway
+    name: api-gateway
+spec:
+    ports:
+    - port: 80   ##服务端口80
+      protocol: TCP
+      targetPort: 8080   ##容器端口8080
+      nodePort: 80    ##对外端口80
+    selector:
+        app: api-gateway   ##与上面的label对应
+    type: NodePort    ##对应的类型是NodePort
+
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+    name: api-gateway-deployment
+spec:
+    replicas: 1
+	template:
+	    metadata:
+		    labels:
+			    app: api-gateway   ##一定与上面的selector相同
+			spec:
+			    container:
+				- name: api-gateway
+				  image: hub.mooc.com:8080/micro-service/api-gateway-zuul:latest
+				  ports:
+				  - containerPort: 8080
+					  
+	
+vi message-service.yaml 
+apiVersion: v1 
+kind: Service
+metadata:
+    labels:
+	    app: message-service
+	name: message-service
+spec:
+    ports:
+	- port: 9090
+	  protocol: TCP
+	  targetPort: 9090
+	selector:
+	  app: message-service
+	type: ClusterIP
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+    name: message-service-deployment
+spec:
+    replicas: 1
+	template:
+	    labels:
+		    app: message-service
+		spec:
+		    container:
+			- name: message-service
+			  image: hub.mooc.com:8080/micro-service/message-service:latest 
+			  ports:
+			  - containerPort: 9090
+			  
+vi courese-service.yaml 
+apiVersion: v1 
+kind: Service
+metadata:
+    labels:
+        app: courese-service
+    name: courese-service
+spec:
+    ports:
+    - port: 8081
+      protocol: TCP 
+      targetPort: 8081
+    selector:
+        app: courese-service
+    type: ClusterIP     ###ClusterIP表示集群内访问，也就是说不对外提供服务；像上面的api-gateway就表示需要对外提供服务
+---
+apiVersion: apps/v1beta1 
+kind: Deployment
+metadata:
+    name: courese-service-deployment
+spec:
+    replicas: 1
+    template:
+	    metadata:
+		    labels:
+			    app: courese-service
+			spec:
+			    containers:   ##如果多个容器则为containers; 若为一个容器则为container
+				- name: courese-service
+				  image: hub.mooc.com:8080/micro-service/courese-service:latest 
+				  ports:
+				  -containerPort: 20880
+				- name:courese-edge-service
+				  image: hub.mooc.com:8080/micro-service/courese-edge-service:latest
+				  ports:
+				  - containerPort: 8081
+				  
+				  
+	
+vi user-service.yaml
+apiVersion: v1
+kind: service
+metadata:
+    labels:
+	    app: user-service
+	name: user-service
+	namespace: default
+spec:
+    ports:  ##定义多个port的时候需要为每个port设定一个名字
+	- name: user-edge-service-port 
+	  port: 8082
+	  protocol: TCP
+	  targetPort: 8082
+	- name: user-service-port
+	  port: 7911
+	  protocol: TCP
+	  targetPort: 7911
+	selector:
+	    app: user-service
+	sessionAffinity: None
+	type: ClusterIP
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+    name: user-service-deployment
+spec:
+    replicas: 1
+	template:
+	    metadata:
+		    labels:
+			    app: user-service
+		spec:
+		    containers:
+			- name: user-service
+			  image: hub.mooc.com:8080/micro-service/user-service:latest
+              ports:
+			  - containerPort: 7911
+			- name: user-edge-service
+			  image: hub.mooc.com:8080/micro-service/user-edge-service:latest
+			  ports:
+			  - containerPort: 8082
+			  
+部署服务：
+部署前准备:
+1.要过一遍我们现有的代码配置，看看是否有需要修改的，修改后需要更新生成镜像
+2.要启动好微服务依赖的服务，像zookeeper,mysql,registry等等
+
+启动前面可先将之前的给删除掉
+kubectl get svc 
+kubectl delete svc nginx-service 
+kubectl get deploy 
+kubectl delete deploy nginx-deployment
+
+kubectl delete deploy kubernetes-bootcamp 
+kubectl get pods
+kubectl delete pod nginx 
+
+
+创建服务:
+kubectl apply -f message-service.yaml 
+kubectl apply -f user-service.yaml 
+kubectl apply -f course-service.yaml 
+kubectl apply -f api-gateway.yaml  
+
+##注意kube-apiserver里的允许端口的配置
+
+查看当前的service kubectl get svc 
+可以发现api-gateway type是Node  其余都是ClusterIP 
+
+查看deploy 
+kubectl get deploy 
+ 
+查看日志
+kubectl get pods -o wide 
+1) 若pod里面只有一个cantainer
+则会直接返回cantainer的运行日志
+kubectl logs -f $pod_name
+
+2) 若pod里面有多个cantainer
+则需要指定cantainer的名字
+kubectl logs -f $pod_name $cantainer_name 
+
+
+访问：
+api-gateway 的端口是80
+可以用集群ip访问；也可以使用node—ip访问
+
+
+
+
+
+			  
