@@ -61,6 +61,7 @@ hostname = 172.10.10.23
 #harbor_admin_password = Harbor12345
 harbor_admin_password = admin
 
+{{ 默认的admin：：Harbor12345不能docker login？？ }}
 7. 使用官方自带脚本更新参数
 
 [root@cgsl harbor]# ./prepare
