@@ -1,0 +1,133 @@
+1. 安装，启动docker
+
+[root@cgsl ~]# yum install docker -y
+
+[root@cgsl ~]# systemctl start docker
+
+[root@cgsl ~]# systemctl enable docker
+
+2.解决docker push http 问题：
+
+[root@cgsl ~]# vi /etc/sysconfig/docker
+
+OPTIONS='--selinux-enabled=false --insecure-registry 192.168.1.110:5000'
+
+[root@cgsl ~]# systemctl restart docker
+
+3. 安装docker-compose
+
+sudo curl -L https://github.com/docker/compose/releases/download/1.20.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+#安装
+chmod +x /usr/local/bin/docker-compose
+#查看版本
+docker-compose version
+
+4. 下载harbor的包
+[root@cgsl ~]# wget -q -P /root/ https://storage.googleapis.com/harbor-releases/harbor-offline-installer-v1.3.0-rc4.tgz
+
+5.解压包，并开始配置文件
+
+[root@cgsl ~]# tar zxvf harbor-offline-installer-v1.3.0-rc4.tgz
+
+6.注意一定要进行harbor/目录再执行 docker-compose相关命令
+
+[root@cgsl ~]# cd harbor/
+
+[root@cgsl harbor]# vim docker-compose.yml
+
+这里主要修改的是registry容器参数，在network下增加port
+
+  registry:
+    image: vmware/registry:2.6.2-photon
+    container_name: registry
+    restart: always
+    volumes:
+      - /data/registry:/storage:z
+      - ./common/config/registry/:/etc/registry/:z
+    networks:
+      - harbor
+    ports:                ##增加
+      - 5000:5000         ##增加
+    environment:
+      - GODEBUG=netdns=cgo
+
+[root@cgsl harbor]# vim harbor.cfg
+修改如下：
+[root@localhost harbor]# grep -E "hostname|harbor_admin" ./harbor.cfg 
+#The IP address or hostname to access admin UI and registry service.
+hostname = 172.10.10.23
+#harbor_admin_password = Harbor12345
+harbor_admin_password = admin
+
+7. 使用官方自带脚本更新参数
+
+[root@cgsl harbor]# ./prepare
+
+8. 安装harbor，会自动导入镜像和创建相应容器
+
+[root@cgsl harbor]# ./install.sh
+
+9. harbor常用命令
+
+开启/t停止/重启harbor服务
+
+[root@cgsl harbor]# docker-compose start
+
+[root@cgsl harbor]# docker-compose stop
+
+[root@cgsl harbor]# docker-compose restart
+
+停止并删除harbor相关容器
+
+[root@cgsl harbor]# docker-compose down -v
+
+查看harbor状态
+
+[root@cgsl harbor]# docker-compose ps -a
+
+10. 启动harbor服务后，我们就可以直接去界面查看harbor效果了
+
+浏览器访问：http://192.168.1.110
+
+
+11. 上传镜像到harbor  （有坑）
+首先在http://192.168.1.110上，创建一个项目，例如cgls
+
+然后在宿主机上登陆192.168.1.110，账号是admin，密码是之前设置的admin密码。
+
+[root@cgsl ~]# docker login 192.168.1.110:5000
+
+[root@cgsl ~]# docker tag centos 192.168.1.110:5000/cgls/centos    ##tag的时候必须指定端口,必须制定项目，例如前面创建的cgls或者默认的library
+
+[root@cgsl ~]# docker push 192.168.1.110:5000/cgls/centos
+
+
+
+配置仓库客户端，在别的host上配置
+配置daemon.json，并重启docker服务
+
+echo "{"insecure-registries":["192.168.1.110:5000"]}" >> /etc/docker/daemon.json
+
+systemctl restart docker.service
+
+13.可以远程下载了
+
+docker pull 192.168.1.110:5000/cgls/centos
+
+
+或者
+[root@localhost docker]# vi /usr/lib/systemd/system/docker.service 
+ExecStart=/usr/bin/dockerd --selinux-enabled=false --insecure-registry 192.168.1.110:5000   ##修改ExecStart这一行
+备注：增加daemon.json和修改/docker.service 不能同时否则报错
+
+
+
+
+
+
+
+
+
+
+
+
