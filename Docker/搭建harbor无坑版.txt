@@ -11,6 +11,7 @@
 [root@cgsl ~]# vi /etc/sysconfig/docker
 
 OPTIONS='--selinux-enabled=false --insecure-registry 192.168.1.110:5000'
+{{ ExecStart=/usr/bin/dockerd --selinux-enabled=false --insecure-registry 192.168.1.110:5000 }}
 
 [root@cgsl ~]# systemctl restart docker
 
