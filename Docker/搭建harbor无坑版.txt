@@ -24,6 +24,7 @@ docker-compose version
 
 4. 下载harbor的包
 [root@cgsl ~]# wget -q -P /root/ https://storage.googleapis.com/harbor-releases/harbor-offline-installer-v1.3.0-rc4.tgz
+{{ https://pan.baidu.com/s/1IZ3CKMCTTOxaTDPnBmB7nQ }}
 
 5.解压包，并开始配置文件
 
