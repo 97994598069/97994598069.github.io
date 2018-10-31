@@ -1,0 +1,169 @@
+主1:192.168.2.45
+主2:192.168.2.46
+
+vip1:192.168.2.50
+vip2:192.168.2.51
+
+nginx+keepliave安装：略
+
+主机：192.168.2.45 上的配置
+[root@harbor01 keepalived]# cat keepalived.conf
+global_defs
+{
+    notification_email
+    {
+       zcg00w@126.com
+    }
+    notification_email_from zcg00w@126.com
+    smtp_server 127.0.0.1
+    stmp_connect_timeout 30
+    router_id NGINX_DEVEL
+}
+
+vrrp_script Monitor_Nginx {
+    script "/etc/keepalived/ck_ng.sh"
+    interval 2
+    weight 2
+}
+
+# 虚拟IP1, 本机作为Master
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 51
+    priority 100
+    advert_int 1
+    track_interface {
+        eth0
+    }
+
+    authentication {
+        auth_type PASS
+        auth_pass 123456
+    }
+    virtual_ipaddress {
+        192.168.2.50
+    }
+    track_script {
+        Monitor_Nginx
+    }
+
+}
+
+# 虚拟IP2, 本机作为Backup
+vrrp_instance VI_2 {
+    state BACKUP
+    interface eth0
+    virtual_router_id 52
+    priority 100
+    advert_int 1
+    track_interface {
+        eth0
+    }
+
+    authentication {
+        auth_type PASS
+        auth_pass 123456
+    }
+    virtual_ipaddress {
+        192.168.2.51
+    }
+    track_script {
+        Monitor_Nginx
+    }
+}
+
+检测脚本：
+[root@harbor02 keepalived]# cat /etc/keepalived/ck_ng.sh 
+#!/bin/bash
+time=$(date +"%F %H:%M:%S")
+mail_tag=192.168.2.46
+
+nginx_code=$(curl -o /dev/null -s -w %{http_code} http://localhost)
+if [ "$nginx_code" -ne 200 ];then
+	systemctl restart keepalived
+fi
+
+#echo -e "$time $mail_tag respond is $nginx_code; please check!" |mail -s "$mail_tag" zcg00w@126.com
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+主机：192.168.2.46上的配置
+[root@harbor02 keepalived]# cat keepalived.conf
+global_defs
+{
+    notification_email
+    {
+       zcg00w@126.com
+    }
+    notification_email_from zcg00w@126.com
+    smtp_server 127.0.0.1
+    stmp_connect_timeout 30
+    router_id NGINX_DEVEL
+}
+
+vrrp_script Monitor_Nginx {
+    script "/etc/keepalived/ck_ng.sh"
+    interval 2
+    weight 2
+}
+
+# 虚拟IP1, 本机作为BACKUP
+vrrp_instance VI_1 {
+    state BACKUP
+    interface eth0
+    virtual_router_id 51
+    priority 100
+    advert_int 1
+    track_interface {
+        eth0
+    }
+
+    authentication {
+        auth_type PASS
+        auth_pass 123456
+    }
+    virtual_ipaddress {
+        192.168.2.50
+    }
+    track_script {
+        Monitor_Nginx
+    }
+}
+
+# 虚拟IP2, 本机作为Master
+vrrp_instance VI_2 {
+    state MASTER
+    interface eth0
+    virtual_router_id 52
+    priority 100
+    advert_int 1
+    track_interface {
+        eth0
+    }
+
+    authentication {
+        auth_type PASS
+        auth_pass 123456
+    }
+    virtual_ipaddress {
+        192.168.2.51
+    }
+    track_script {
+        Monitor_Nginx
+    }
+
+}
+
+
+检测脚本:
+[root@harbor02 keepalived]# cat /etc/keepalived/ck_ng.sh 
+#!/bin/bash
+time=$(date +"%F %H:%M:%S")
+mail_tag=192.168.2.46
+
+nginx_code=$(curl -o /dev/null -s -w %{http_code} http://localhost)
+if [ "$nginx_code" -ne 200 ];then
+	systemctl restart keepalived
+fi
+
+#echo -e "$time $mail_tag respond is $nginx_code; please check!" |mail -s "$mail_tag" zcg00w@126.com
