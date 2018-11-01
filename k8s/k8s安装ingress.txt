@@ -1,0 +1,484 @@
+ingress简介：
+
+当我们将kubernetes的应用部署完之后，就需要对外发布服务的访问地址。kubernetes 将服务发布到外部访问的方式主要有：
+LoadBlancer Service
+NodePort Service
+Ingress
+
+
+一、LoadBlancer Service
+LoadBlancer Service 是 kubernetes 深度结合云平台的一个组件；当使用 LoadBlancer Service 暴露服务时，实际上是通过向底层云平台申请创建一个负载均衡器来向外暴露服务；目前 GCE、AWS、阿里云等公有云都有针对LoadBlancer Service完整的解决方案。
+
+二、NodePort Service
+因为K8s 的rc具有副本控制能力， Pod如果出现意外情况会自动销毁并重建；因此Pod 的ip地址也会跟着变化。我们可以在service中定义nodeport,在每个节点上开起一个端口，然后转发到内部 Pod IP 上。这就是所谓的NodePort Service,实质上就是在每个 node 上暴露一个端口，然后将这个端口映射到某个具体的 service 来实现的。虽然每个 node 的端口有很多(0~65535)，但是由于安全性和易用性，实际上可用的端口范围为：30000-32767。如果在service指定的nodeport超过了这个范围，则会报错如下：
+The Service "nginx-test" is invalid: spec.ports[0].nodePort: Invalid value: 38888: provided port is not in the valid range. The range of valid ports is 30000-32767
+
+采用这种方式存在着诸多不变：
+1、首先端口数受限，使用此方式每一个node上都要开启相同的port
+2、如果最终的应用访问要使用域名访问，还得在应用前端放一个nginx做转发。
+
+又或者直接在k8s集群中部署一个nginx，将请求转发到集群内的其他服务器上，这是个好想法，但每次新增或者修改服务，都要去修改nginx配置文件，无法做到服务的自动发现，也不是最终的解决方案。
+
+
+三、Ingress
+Ingress 是在kubernetes 1.2版本才出现的，通过 Ingress 用户可以实现使用 nginx 等开源的反向代理负载均衡器实现对外暴露服务。使用 Ingress 时一般会有三个组件:
+
+反向代理负载均衡器
+反向代理负载均衡器通常使用nginx，部署方式可以选择 Replication Controller、Deployment、DaemonSet 等
+
+Ingress Controller
+Ingress Controller 通过连接api server，获取 service以及pod的信息，当得到这些变化信息后，Ingress Controller 再结合Ingress 生成配置，更新反向代理负载均衡器，达到服务发现的目的。
+
+Ingress
+Ingress 简单理解就是个规则定义；其本质是根据rules规则来将对应的host访问请求转发到k8s后端的services。从而实现整体的服务发现和负载均衡。
+定义ingress前，必须先部署ingress controller ，以实现为所有后端的service 提供一个统一的入口。在ingress-controller的rc文件中定义了一个默认后端。所以在部署ingress controller前要先启动默认后端的pod，否则启动ingress-controller会不成功.
+
+[root@k8s01 ingress]# cat namespace.yaml 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+  
+[root@k8s01 ingress]# cat default-backend.yaml 
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: default-http-backend
+  labels:
+    app: default-http-backend
+  namespace: ingress-nginx
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: default-http-backend
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: default-http-backend
+        # Any image is permissable as long as:
+        # 1. It serves a 404 page at /
+        # 2. It serves 200 on a /healthz endpoint
+        image: registry.cn-hangzhou.aliyuncs.com/google_containers/defaultbackend:1.4    ##镜像源否则有可能会下载失败https://pan.baidu.com/s/1Z-TuziqA8uQgGZgTIti6DA
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 10m
+            memory: 20Mi
+          requests:
+            cpu: 10m
+            memory: 20Mi
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: default-http-backend
+  namespace: ingress-nginx
+  labels:
+    app: default-http-backend
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: default-http-backend
+	
+
+	
+[root@k8s01 ingress]# cat tcp-services-configmap.yaml 
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: tcp-services
+  namespace: ingress-nginx
+  
+  
+  
+[root@k8s01 ingress]# cat udp-services-configmap.yaml 
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: udp-services
+  namespace: ingress-nginx
+  
+  
+  
+[root@k8s01 ingress]# cat rbac.yaml 
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-ingress-serviceaccount
+  namespace: ingress-nginx
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: nginx-ingress-clusterrole
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - nodes
+      - pods
+      - secrets
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "extensions"
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+        - events
+    verbs:
+        - create
+        - patch
+  - apiGroups:
+      - "extensions"
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: nginx-ingress-role
+  namespace: ingress-nginx
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - pods
+      - secrets
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      # Defaults to "<election-id>-<ingress-class>"
+      # Here: "<ingress-controller-leader>-<nginx>"
+      # This has to be adapted if you change either parameter
+      # when launching the nginx-ingress-controller.
+      - "ingress-controller-leader-nginx"
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - endpoints
+    verbs:
+      - get
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: nginx-ingress-role-nisa-binding
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: nginx-ingress-role
+subjects:
+  - kind: ServiceAccount
+    name: nginx-ingress-serviceaccount
+    namespace: ingress-nginx
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: nginx-ingress-clusterrole-nisa-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nginx-ingress-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: nginx-ingress-serviceaccount
+    namespace: ingress-nginx
+	
+	
+	
+[root@k8s01 ingress]# cat deployment.yaml 
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-ingress-controller
+  namespace: ingress-nginx 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingress-nginx
+  template:
+    metadata:
+      labels:
+        app: ingress-nginx
+      annotations:
+        prometheus.io/port: '10254'
+        prometheus.io/scrape: 'true'
+    spec:
+      serviceAccountName: nginx-ingress-serviceaccount
+      hostNetwork: true
+      containers:
+        - name: nginx-ingress-controller
+          image: lizhenliang/nginx-ingress-controller:0.9.0    ###https://pan.baidu.com/s/1ayWKBJwYJzqWOpMhES2BFQ
+          args:
+            - /nginx-ingress-controller
+            - --default-backend-service=$(POD_NAMESPACE)/default-http-backend
+            - --configmap=$(POD_NAMESPACE)/nginx-configuration
+            - --tcp-services-configmap=$(POD_NAMESPACE)/tcp-services
+            - --udp-services-configmap=$(POD_NAMESPACE)/udp-services
+#            - --annotations-prefix=nginx.ingress.kubernetes.io
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+          - name: http
+            containerPort: 80
+          - name: https
+            containerPort: 443
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+			
+
+##创建服务
+kubectl create -f namespace.yaml
+kubectl create -f default-backend.yaml 
+kubectl create -f tcp-services-configmap.yaml
+kubectl create -f udp-services-configmap.yaml
+kubectl create -f rbac.yaml 
+kubectl create -f deployment.yaml
+
+
+##查看运行情况
+[root@k8s01 ingress]# kubectl get pods -n ingress-nginx
+NAME                                        READY     STATUS    RESTARTS   AGE
+default-http-backend-7ddd8d57f4-2w69g       1/1       Running   0          4m
+nginx-ingress-controller-7494c4c66d-zpzlg   1/1       Running   0          3m
+
+
+
+验证：
+kubectl run nginx --image=nginx 
+kubectl expose deployment nginx --port=80  ##应该是{{ kubectl expose deployment nginx --port=80 --target-port=80 --type=NodePort }}
+
+
+
+
+kubectl run httpd --image=httpd
+kubectl expose deployment httpd --port=80  ##应该是{{ kubectl expose deployment httpd --port=80 --target-port=80 --type=NodePort }}
+
+
+[root@k8s01 ingress]# kubectl get svc
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+httpd        ClusterIP   10.1.7.95    <none>        80/TCP    4s
+kubernetes   ClusterIP   10.1.7.1     <none>        443/TCP   1d
+nginx        ClusterIP   10.1.7.183   <none>        80/TCP    13s
+[root@k8s01 ingress]# kubectl get pods
+NAME                    READY     STATUS    RESTARTS   AGE
+httpd-8576c89d7-nf66p   1/1       Running   0          11s
+nginx-8586cf59-tjw9c    1/1       Running   0          22s
+
+
+##修改nginx和httpd的默认界面
+nginx-8586cf59-tjw9c    1/1       Running   0          52s
+[root@k8s01 ingress]# kubectl exec -ti httpd-8576c89d7-nf66p /bin/bash
+root@httpd-8576c89d7-nf66p:/usr/local/apache2# ls
+bin  build  cgi-bin  conf  error  htdocs  icons  include  logs	modules
+root@httpd-8576c89d7-nf66p:/usr/local/apache2# cd htdocs/
+root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# ls
+index.html
+root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# cat index.html 
+<html><body><h1>It works!</h1></body></html>
+ oot@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# echo "httpd" >./index.html 
+root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# ls
+index.html
+root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# cat index.html 
+httpd
+
+
+
+[root@k8s01 ingress]# kubectl exec -ti nginx-8586cf59-tjw9c /bin/bash
+root@nginx-8586cf59-tjw9c:/# ls
+bin   dev  home  lib64	mnt  proc  run	 srv  tmp  var
+boot  etc  lib	 media	opt  root  sbin  sys  usr
+root@nginx-8586cf59-tjw9c:/# cd /usr/share/nginx/
+root@nginx-8586cf59-tjw9c:/usr/share/nginx# ls
+html
+root@nginx-8586cf59-tjw9c:/usr/share/nginx# cat html/
+cat: html/: Is a directory
+root@nginx-8586cf59-tjw9c:/usr/share/nginx# cd html/
+root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# ls
+50x.html  index.html
+root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# cat index.html 
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# echo "nginx" >./index.html 
+root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# cat index.html 
+nginx
+
+
+[root@k8s01 ingress]# kubectl get svc
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+httpd        ClusterIP   10.1.7.95    <none>        80/TCP    4m
+kubernetes   ClusterIP   10.1.7.1     <none>        443/TCP   1d
+nginx        ClusterIP   10.1.7.183   <none>        80/TCP    4m
+[root@k8s01 ingress]# curl 10.1.7.95
+httpd
+[root@k8s01 ingress]# curl 10.1.7.183
+nginx
+
+
+###创建ingress的规则
+vi test-ingress.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+    name: httpd-test
+spec:
+    rules:
+    - host: foo.bar.com
+      http:
+        paths:
+        - backend:
+            serviceName: nginx   ##指定代理的service的名称;也就是说访问foo.bar.com会被转发到nginx的service
+            servicePort: 80      ##指定service的端口；可以通过kubectl get svc查看(node内部端口不是cluster-ip的端口)
+    - host: bar.baz.com
+      http:
+        paths:
+        - backend:
+            serviceName: httpd    ##同nginx；访问bar.baz.com会被转发到httpd这个service上
+            servicePort: 80       ##同nginx;指定httpd的service的端口；可以通过kubectl get svc查看(node内部端口不是cluster-ip的端口)
+
+[root@k8s01 ingress]# kubectl create -f test-ingress.yaml 
+
+
+[root@k8s01 ingress]# kubectl get ingress   ##查看我的这个对象
+NAME         HOSTS                     ADDRESS   PORTS     AGE
+httpd-test   foo.bar.com,bar.baz.com             80        3m
+
+
+查看后端的pod跑在哪些节点上
+[root@k8s01 ingress]# kubectl get pods -o wide
+NAME                    READY     STATUS    RESTARTS   AGE       IP            NODE
+httpd-8576c89d7-nf66p   1/1       Running   0          31m       172.19.22.2   192.168.2.44
+nginx-8586cf59-tjw9c    1/1       Running   0          31m       172.19.43.2   192.168.2.41
+
+
+配置本机hosts；添加如下
+192.168.2.41   foo.bar.com
+192.168.2.44   bar.baz.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+			
+	
