@@ -350,46 +350,16 @@ kubectl expose deployment httpd --port=80  ##应该是{{ kubectl expose deployme
 
 [root@k8s01 ingress]# kubectl get svc
 NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
-httpd        ClusterIP   10.1.7.95    <none>        80/TCP    4s
-kubernetes   ClusterIP   10.1.7.1     <none>        443/TCP   1d
-nginx        ClusterIP   10.1.7.183   <none>        80/TCP    13s
+httpd        ClusterIP   10.1.7.67    <none>        80/TCP    5s
+kubernetes   ClusterIP   10.1.7.1     <none>        443/TCP   3d
+nginx        ClusterIP   10.1.7.199   <none>        80/TCP    14s
+
 [root@k8s01 ingress]# kubectl get pods
 NAME                    READY     STATUS    RESTARTS   AGE
-httpd-8576c89d7-nf66p   1/1       Running   0          11s
-nginx-8586cf59-tjw9c    1/1       Running   0          22s
+httpd-8576c89d7-hd9km   1/1       Running   0          14s
+nginx-8586cf59-7n2qw    1/1       Running   0          26s
 
-
-##修改nginx和httpd的默认界面
-nginx-8586cf59-tjw9c    1/1       Running   0          52s
-[root@k8s01 ingress]# kubectl exec -ti httpd-8576c89d7-nf66p /bin/bash
-root@httpd-8576c89d7-nf66p:/usr/local/apache2# ls
-bin  build  cgi-bin  conf  error  htdocs  icons  include  logs	modules
-root@httpd-8576c89d7-nf66p:/usr/local/apache2# cd htdocs/
-root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# ls
-index.html
-root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# cat index.html 
-<html><body><h1>It works!</h1></body></html>
- oot@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# echo "httpd" >./index.html 
-root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# ls
-index.html
-root@httpd-8576c89d7-nf66p:/usr/local/apache2/htdocs# cat index.html 
-httpd
-
-
-
-[root@k8s01 ingress]# kubectl exec -ti nginx-8586cf59-tjw9c /bin/bash
-root@nginx-8586cf59-tjw9c:/# ls
-bin   dev  home  lib64	mnt  proc  run	 srv  tmp  var
-boot  etc  lib	 media	opt  root  sbin  sys  usr
-root@nginx-8586cf59-tjw9c:/# cd /usr/share/nginx/
-root@nginx-8586cf59-tjw9c:/usr/share/nginx# ls
-html
-root@nginx-8586cf59-tjw9c:/usr/share/nginx# cat html/
-cat: html/: Is a directory
-root@nginx-8586cf59-tjw9c:/usr/share/nginx# cd html/
-root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# ls
-50x.html  index.html
-root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# cat index.html 
+[root@k8s01 ingress]# curl 10.1.7.199
 <!DOCTYPE html>
 <html>
 <head>
@@ -415,20 +385,9 @@ Commercial support is available at
 <p><em>Thank you for using nginx.</em></p>
 </body>
 </html>
-root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# echo "nginx" >./index.html 
-root@nginx-8586cf59-tjw9c:/usr/share/nginx/html# cat index.html 
-nginx
 
-
-[root@k8s01 ingress]# kubectl get svc
-NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
-httpd        ClusterIP   10.1.7.95    <none>        80/TCP    4m
-kubernetes   ClusterIP   10.1.7.1     <none>        443/TCP   1d
-nginx        ClusterIP   10.1.7.183   <none>        80/TCP    4m
-[root@k8s01 ingress]# curl 10.1.7.95
-httpd
-[root@k8s01 ingress]# curl 10.1.7.183
-nginx
+[root@k8s01 ingress]# curl 10.1.7.67
+<html><body><h1>It works!</h1></body></html>
 
 
 ###创建ingress的规则
@@ -455,16 +414,15 @@ spec:
 [root@k8s01 ingress]# kubectl create -f test-ingress.yaml 
 
 
-[root@k8s01 ingress]# kubectl get ingress   ##查看我的这个对象
+[root@k8s01 ingress]# kubectl get ingress
 NAME         HOSTS                     ADDRESS   PORTS     AGE
-httpd-test   foo.bar.com,bar.baz.com             80        3m
-
+httpd-test   foo.bar.com,bar.baz.com             80        9s
 
 查看后端的pod跑在哪些节点上
 [root@k8s01 ingress]# kubectl get pods -o wide
 NAME                    READY     STATUS    RESTARTS   AGE       IP            NODE
-httpd-8576c89d7-nf66p   1/1       Running   0          31m       172.19.22.2   192.168.2.44
-nginx-8586cf59-tjw9c    1/1       Running   0          31m       172.19.43.2   192.168.2.41
+httpd-8576c89d7-hd9km   1/1       Running   0          17m       172.19.22.2   192.168.2.44
+nginx-8586cf59-7n2qw    1/1       Running   0          17m       172.19.43.2   192.168.2.41
 
 
 配置本机hosts；添加如下
