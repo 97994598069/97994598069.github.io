@@ -253,7 +253,7 @@ subjects:
 [root@k8s01 ingress]# cat deployment.yaml 
 apiVersion: extensions/v1beta1
 #kind: Deployment
-#kind: DaemonSet   ##将deployment改成daemonset（会自动为每个节点创建一个服务；否则只会调度到哪个节点在哪个节点上创建服务但是和后端的pod不一定是在一个节点上；；然后将下面的replicas: 1给注释掉）
+kind: DaemonSet   ##将deployment改成daemonset（会自动为每个节点创建一个服务；否则只会调度到哪个节点在哪个节点上创建服务但是和后端的pod不一定是在一个节点上；；然后将下面的replicas: 1给注释掉）
 metadata:
   name: nginx-ingress-controller
   namespace: ingress-nginx 
