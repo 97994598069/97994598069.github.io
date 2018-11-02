@@ -328,9 +328,12 @@ kubectl create -f deployment.yaml
 
 ##查看运行情况
 [root@k8s01 ingress]# kubectl get pods -n ingress-nginx
-NAME                                        READY     STATUS    RESTARTS   AGE
-default-http-backend-7ddd8d57f4-2w69g       1/1       Running   0          4m
-nginx-ingress-controller-7494c4c66d-zpzlg   1/1       Running   0          3m
+NAME                                    READY     STATUS    RESTARTS   AGE
+default-http-backend-7ddd8d57f4-5m6zf   1/1       Running   0          21m
+nginx-ingress-controller-lbcrv          1/1       Running   0          31s
+nginx-ingress-controller-x26kf          1/1       Running   0          31s
+nginx-ingress-controller-znssm          1/1       Running   0          31s
+nginx-ingress-controller-zwdnm          1/1       Running   0          31s
 
 
 
