@@ -426,9 +426,58 @@ nginx-8586cf59-7n2qw    1/1       Running   0          17m       172.19.43.2   1
 
 
 配置本机hosts；添加如下
-192.168.2.41   foo.bar.com
-192.168.2.44   bar.baz.com
+[root@k8s01 ingress]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.2.44  bar.baz.com
+192.168.2.41  foo.bar.com
 
+
+[root@k8s01 ingress]# curl bar.baz.com
+<html><body><h1>It works!</h1></body></html>
+[root@k8s01 ingress]# curl foo.bar.com
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+
+本地浏览器测试：
+配置本机hosts
+192.168.2.44  bar.baz.com
+192.168.2.41  foo.bar.com
+
+浏览器访问：
+bar.baz.com    OK
+foo.bar.com    OK 
+
+
+至此ingress部署完成
+
+一般企业访问会在外层再部署一层转发，例如nginx；来反向代理bar.baz.com  foo.bar.com
+最终形成：
+外网---->外层转发nginx---->内层转发ingress-nginx---->相关pod
 
 
 
