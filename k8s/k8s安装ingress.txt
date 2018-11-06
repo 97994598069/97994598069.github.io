@@ -338,13 +338,13 @@ nginx-ingress-controller-zwdnm          1/1       Running   0          31s
 
 
 验证：
-kubectl run nginx --image=nginx 
+kubectl run nginx --image=nginx  （--replicas=3）
 kubectl expose deployment nginx --port=80  ##应该是{{ kubectl expose deployment nginx --port=80 --target-port=80 --type=NodePort }}
 
 
 
 
-kubectl run httpd --image=httpd
+kubectl run httpd --image=httpd  （--replicas=3）
 kubectl expose deployment httpd --port=80  ##应该是{{ kubectl expose deployment httpd --port=80 --target-port=80 --type=NodePort }}
 
 
