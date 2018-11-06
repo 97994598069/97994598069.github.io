@@ -1,0 +1,123 @@
+k8s对外提供服务（nginx为例）
+
+[root@k8s01 services]# kubectl run nginx --image=nginx
+
+[root@k8s01 services]# kubectl expose deployment nginx --port=80 --target-port=80 --type=NodePort
+
+[root@k8s01 services]# kubectl get pods -o wide
+NAME                   READY     STATUS    RESTARTS   AGE       IP            NODE
+nginx-8586cf59-88dsq   1/1       Running   0          1m        172.19.43.2   192.168.2.41
+
+
+[root@k8s01 services]# kubectl get svc -o wide
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)        AGE       SELECTOR
+kubernetes   ClusterIP   10.1.7.1     <none>        443/TCP        7d        <none>
+nginx        NodePort    10.1.7.229   <none>        80:38732/TCP   4m        run=nginx
+
+
+[root@k8s01 services]# curl 192.168.2.41:38732   OK
+[root@k8s01 services]# curl 192.168.2.42:38732   OK
+[root@k8s01 services]# curl 192.168.2.43:38732   OK
+[root@k8s01 services]# curl 192.168.2.44:38732   OK
+
+
+配置k8s集群外部的负载均衡   ##可以配置上所有的node-ip（也可以部分保证高可用即可）
+[root@harbor02 vhost]# cat k8s-ingress-test.conf 
+upstream ingress_test {
+	server 192.168.2.41:38732;
+	server 192.168.2.42:38732;
+	server 192.168.2.43:38732;
+	server 192.168.2.44:38732;
+}
+
+server{ 
+    listen 80; 
+    server_name jianyi.abc.com; 
+    location / { 
+        proxy_pass         http://ingress_test; 
+        proxy_set_header   Host             $host; 
+        proxy_set_header   X-Real-IP        $remote_addr; 
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for; 
+    } 
+}
+
+
+由于是测试需要配置hosts
+[root@harbor02 vhost]# hostname -I
+192.168.2.46 172.17.0.1 172.18.0.1 
+[root@harbor02 vhost]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.2.46 jianyi.abc.com
+
+
+[root@harbor02 vhost]# curl jianyi.abc.com
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+##上述经测试访问OK；；但是我担心node-port会改变（其实不会改变；无论后端的pod如何的创建均不改变）
+如下测试：
+
+1.更新nginx的镜像  将nginx镜像改为httpd的
+[root@k8s01 services]# kubectl set image deploy nginx nginx=httpd
+deployment "nginx" image updated
+
+
+[root@k8s01 services]# kubectl get pod -o wide   ##只看到pod所在的node的ip改变了
+NAME                    READY     STATUS    RESTARTS   AGE       IP            NODE
+nginx-66c6df655-vxnzv   1/1       Running   0          19s       172.19.22.2   192.168.2.44    
+
+
+[root@k8s01 services]# kubectl get svc -o wide  ##可见port没有改变
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)        AGE       SELECTOR
+kubernetes   ClusterIP   10.1.7.1     <none>        443/TCP        7d        <none>
+nginx        NodePort    10.1.7.229   <none>        80:38732/TCP   13m       run=nginx
+
+
+2.再次访问
+[root@harbor02 vhost]# curl jianyi.abc.com
+<html><body><h1>It works!</h1></body></html>
+
+
+达到更新的目的
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
