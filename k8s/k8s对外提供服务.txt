@@ -1,6 +1,6 @@
 k8s对外提供服务（nginx为例）
 
-[root@k8s01 services]# kubectl run nginx --image=nginx
+[root@k8s01 services]# kubectl run nginx --image=nginx  （--replicas=3）
 
 [root@k8s01 services]# kubectl expose deployment nginx --port=80 --target-port=80 --type=NodePort
 
