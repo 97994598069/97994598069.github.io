@@ -1,0 +1,22 @@
+[root@iZ1v4t0t5piwgpZ mp4]# pwd      ##上传视频到服务器本地
+/mnt/mp4
+
+配置nginx
+
+[root@iZ1v4t0t5piwgpZ vhost]# cat mp4.conf 
+server {
+	listen 80;
+	server_name mp4.chinabim.com;
+	location / {
+		root /mnt/mp4;
+		autoindex on;     ###开启或者关闭列出目录中文件的功能
+		autoindex_exact_size on;    ##显示大小  若为on；则显示的大小为字节；  若为off则限制的大小是KB/MB/GB
+		autoindex_localtime on;     ##显示时间  若为off时，显示文件的时间为GMT时间，默认情况下为 off， 设置为on 则显示本地时间，也就是服务器的时间
+	}
+}
+
+
+此时浏览器访问mp4.chinabim.com  会限制/mnt/mp4下的所有文件
+
+若能解析；比如MP4文件；txt文件等  左键打开限制内容
+若压缩包等不能解析的，左键打开则直接下载
