@@ -104,6 +104,7 @@ nginx        NodePort    10.1.7.229   <none>        80:38732/TCP   13m       run
 
 达到更新的目的
 
+当然：更改service的yaml同样达到目的
 
 
 
