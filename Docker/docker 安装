@@ -73,7 +73,7 @@ root@45abb921df16:/sbin# apt-get install inetutils-ping 2:1.9.4-2+b1
 安装ps
 apt-get install procps
 
-
+}}
 
 二、问题
 1、因为之前已经安装过旧版本的docker，在安装的时候报错如下：
