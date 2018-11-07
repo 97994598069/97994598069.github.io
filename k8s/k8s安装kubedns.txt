@@ -463,5 +463,13 @@ Address 1: 10.1.7.2 kube-dns.kube-system.svc.cluster.local
 Name:      kubernetes.default
 Address 1: 10.1.7.1 kubernetes.default.svc.cluster.local
 
+[root@k8s01 dns-test]# kubectl exec -ti curl-util -- nslookup my-nginx
+Server:    10.1.7.2
+Address 1: 10.1.7.2 kube-dns.kube-system.svc.cluster.local
+
+Name:      my-nginx
+Address 1: 10.1.7.169 my-nginx.default.svc.cluster.local
+
+
 解析成功 说明部署的dns没有问题
 
