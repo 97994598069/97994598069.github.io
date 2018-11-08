@@ -1,0 +1,107 @@
+[root@k8sm1 www]# cat mysql-dm.yaml 
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:5.7
+        ports:
+        - containerPort: 3306 
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "123456"
+		  
+
+[root@k8sm1 www]# cat mysql-svc.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  ports:
+  - port: 3306
+  selector:
+    app: mysql
+	
+	
+[root@k8sm1 www]# cat myweb-dm.yaml 
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: myweb
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myweb
+  template:
+    metadata:
+      labels:
+        app: myweb
+    spec:
+      containers:
+      - name: myweb
+        image: kubeguide/tomcat-app:v1
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MYSQL_SERVICE_HOST
+          value: 'mysql'
+        - name: MYSQL_SERVICE_PORT
+          value: '3306'
+		  
+		  
+[root@k8sm1 www]# cat myweb-svc.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: myweb
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    nodePort: 30001
+  selector:
+    app: myweb
+	
+##嘴还顺序启动，等mysql的pod running状态后再create tomcat 	
+[root@k8sm1 www]# kubectl create -f mysql-dm.yaml 
+[root@k8sm1 www]# kubectl create -f  mysql-svc.yaml 
+[root@k8sm1 www]# kubectl create -f myweb-dm.yaml 
+[root@k8sm1 www]# kubectl create -f myweb-svc.yaml
+或者
+kubectl apply -f ./
+
+
+
+
+[root@k8sm1 www]# kubectl get pods -o wide
+NAME                     READY     STATUS    RESTARTS   AGE       IP            NODE
+mysql-6dd6f69f84-x2282   1/1       Running   0          10m       172.19.58.2   192.168.1.23
+myweb-546c89b47-5dnpx    1/1       Running   0          7m        172.19.18.3   192.168.1.24
+myweb-546c89b47-rlfps    1/1       Running   0          7m        172.19.43.2   192.168.1.22
+
+
+浏览器访问：（192.168.1.24或者192.168.1.22 均可）
+
+http://192.168.1.24:30001   ##此时出现tomcat首页 正常
+http://192.168.1.24:30001/demo/ ##此时出现一表格 正常
+
+##提示若不正常则，最好顺序启动应用
+
+
+点击add可添加
+
+
+
