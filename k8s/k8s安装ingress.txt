@@ -509,7 +509,7 @@ server{
 
 3.ingress的方式
 原理：安装ingress-controller（可以利用DaemonSet的模式在每个节点上都跑一个）；然后配置ingress的规则；指定域名来代理后盾的service（具体见上述test-ingress.yaml）；同nodePort的方式；使用k8s集群外的nginx来进行调度；并将域名解析到公网nginx转发服务器上
-示例： 如果是测试需配置hosts
+示例： 如果是测试需配置hosts 127.0.0.1 foo.bar.com
 [root@harbor02 vhost]# cat k8s-ingress-test.conf 
 upstream ingress_test {
 	server 192.168.2.41;
@@ -529,22 +529,3 @@ server{
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for; 
     } 
 }
-
-
-
-问题：
-如果nginx在k8s集群内呢？？
-
-两台k8s-master上跑两个nginx用keepalived做高可用
-
-
-
-
-
-
-
-
-
-
-			
-	
