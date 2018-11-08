@@ -480,6 +480,19 @@ foo.bar.com    OK
 外网---->外层转发nginx---->内层转发ingress-nginx---->相关pod
 
 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+有关上述需要配置hosts的问题
+
+一般发布会使用三种方法
+1.公有云的loadbalancer  略
+
+2.nodePort 的方式
+原理：利用svc的nodePort不会改变（可以直接在yaml里指定）和在随意的node节点上均可以访问即使pod不在该node上运行也可以的特性；在k8s集群外配置upstream 负载均衡（随意找2个node:port或者多个）；此时将域名解析到负载均衡器上就可以同归域名解析到后端的pod
+
+3.ingress的方式
+原理：安装ingress-controller（可以利用DaemonSet的模式在每个节点上都跑一个）；然后配置ingress的规则；指定域名来代理后盾的service（具体见上述test-ingress.yaml）；然后将域名解析到随便的后端的两个（或多个）pod上；然后就可以通过域名来访问后端的pod；此处可以利用vip来代理后端的两个（或多个pod） {{ DNS的负载均衡？？ }}
+
+
 
 
 
