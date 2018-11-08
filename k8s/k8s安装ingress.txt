@@ -507,21 +507,28 @@ server{
 }
 
 
-
-
-
 3.ingress的方式
-原理：安装ingress-controller（可以利用DaemonSet的模式在每个节点上都跑一个）；然后配置ingress的规则；指定域名来代理后盾的service（具体见上述test-ingress.yaml）；然后将域名解析到随便的后端的两个（或多个）pod上；然后就可以通过域名来访问后端的pod；此处可以利用vip来代理后端的两个（或多个pod） {{ DNS的负载均衡？？ }}
-感觉ingress还是适合公有云；因为为了高可用；需要将域名解析到后端的node上；也就是说需要 需要大量的公网ip
-或者前端再次用nginx做负载均衡的调度，应用域名解析到外层的nginx转发服务器上；然后转发服务器上配置hosts将指定ingress的域名绑定到后端随意的两台或者多台上；然后配置upstream负载均衡 upstream { foo.bar.com }   与nodePort的方式相同的是如果hosts里的pods挂掉的话；应用会挂掉
+原理：安装ingress-controller（可以利用DaemonSet的模式在每个节点上都跑一个）；然后配置ingress的规则；指定域名来代理后盾的service（具体见上述test-ingress.yaml）；同nodePort的方式；使用k8s集群外的nginx来进行调度；并将域名解析到公网nginx转发服务器上
+示例： 如果是测试需配置hosts
+[root@harbor02 vhost]# cat k8s-ingress-test.conf 
+upstream ingress_test {
+	server 192.168.2.41;
+	server 192.168.2.42;
+	server 192.168.2.43;
+	server 192.168.2.44;
 
-外层nginx转发服务器上配置hosts
-[root@harbor02 vhost]# cat /etc/hosts
-127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-192.168.2.42 foo.bar.com
-192.168.2.41 foo.bar.com
+}
 
+server{ 
+    listen 80; 
+    server_name foo.bar.com; 
+    location / { 
+        proxy_pass         http://ingress_test; 
+        proxy_set_header   Host             $host; 
+        proxy_set_header   X-Real-IP        $remote_addr; 
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for; 
+    } 
+}
 
 
 
