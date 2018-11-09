@@ -1,0 +1,271 @@
+Volume的四种方式：
+1.emptyDir
+2.hostpath
+3.nfs
+4.glusterfs
+
+
+第一种：emptyDir
+[root@k8s01 volume]# cat edir.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+    name: test-pd
+spec:
+    containers:
+    - image: nginx
+      name: test-container
+      volumeMounts:     ###指明数据卷；数据卷的挂载都是两个选项
+      - mountPath: /cache    ###在容器里面引用刚才创建的数据卷到容器里的/cache 
+        name: cache-volume   ##指定要挂载的目录名
+    volumes:   ##在容器的同一级目录创建一个数据卷；可以是一个空目录（emptyhDir）或者是一个hostpath或者是nfs或者glusterfs  ##必须先创建
+    - name: cache-volume  ##指定一个名字就cache-volume 
+      emptyDir: {}  ##创建一个空目录
+
+为了更好的演示改成redis
+[root@k8s01 volume]# cat edir.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+    name: redis-pd
+spec:
+    containers:
+    - image: redis
+      name: redis
+      volumeMounts:
+      - mountPath: /cache
+        name: cache-volume
+    volumes:
+    - name: cache-volume
+      emptyDir: {}   ##指定挂载类型
+	  
+	  
+
+[root@k8s01 volume]# kubectl apply -f .   更新yaml
+pod "redis-pd" created
+
+[root@k8s01 volume]# kubectl get pods redis-pd
+NAME       READY     STATUS    RESTARTS   AGE
+redis-pd   1/1       Running   0          46s
+
+进入pod查看挂载情况
+[root@k8s01 volume]# kubectl exec -ti redis-pd /bin/bash
+root@redis-pd:/data# mount |grep cache
+/dev/mapper/cl-root on /cache type xfs (rw,relatime,seclabel,attr2,inode64,noquota)
+
+
+[root@k8s01 volume]# kubectl describe pod redis-pd 
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+第2种 hostpath使用较多 （将宿主机的文件和目录挂载到容器中）
+
+###[root@k8s01 volume]# mkdir /data  ##如果你下面指定了node可以先创建否则容器会失败
+
+[root@k8s01 volume]# cat hostpath.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+    name: hostpath-pod
+spec:
+    containers:
+    - image: nginx
+      name: hostpath-test
+      volumeMounts:
+      - mountPath: /test-volume
+        name: test-volume
+    volumes:
+    - name: test-volume
+      hostPath:  ##指定挂载类型
+         #path: /data  ##因为不知道该pod会被分配到哪个node上；哪个node上也不一定有data这个目录；所以咱们这里使用每个node上都会有的目录来演示/tmp
+		 path: /tmp 
+         type: Directory
+		 
+[root@k8s01 volume]# kubectl get pods hostpath-pod
+NAME           READY     STATUS    RESTARTS   AGE
+hostpath-pod   1/1       Running   0          18s
+
+[root@k8s01 volume]# kubectl exec -ti hostpath-pod /bin/bash
+root@hostpath-pod:/# ls /test-volume/
+此时发现容器内的 /test-volume/为空，因为宿主机上的/tmp为空
+
+
+查看pod所在的宿主机
+[root@k8s01 tmp]# kubectl get pod hostpath-pod -o wide   
+NAME           READY     STATUS    RESTARTS   AGE       IP            NODE
+hostpath-pod   1/1       Running   0          3m        172.19.43.5   192.168.2.41
+
+退出容器后在该pod的宿主机上创建文件测试
+[root@k8s01 tmp]# cat /tmp/host-test.txt 
+hostpath-test
+
+再次进入pod查看
+[root@k8s01 tmp]# cat /tmp/host-test.txt 
+hostpath-test
+[root@k8s01 tmp]# kubectl exec -ti hostpath-pod /bin/bash
+root@hostpath-pod:/# ls /test-volume/
+host-test.txt
+root@hostpath-pod:/# cat /test-volume/host-test.txt 
+hostpath-test
+
+
+备注： 还是实时更新的  （很方便也很危险）
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+nfs的使用
+
+[root@k8s01 volume]# cat nfs.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+    name: nginx-deployment
+spec:
+    replicas: 2
+    template:
+        metadata:
+            labels:
+                app: nginx
+            spec:
+                containers:
+                - name: nginx
+                  image: nginx
+                  volumeMounts:
+                  - name: wwwroot
+                    mountPath: /usr/share/nginx/html
+                  ports:
+                  - containerPort: 80
+                volumes:
+                - name: wwwroot
+                  nfs:  ##指定挂载类型
+                    server: 192.168.2.144  ##指定nfs-server的ip
+                    path: /opt/wwwroot   ##指定nfs暴露的资源地址。即/etc/exports里设置的
+
+##备注：nfs没有演示，/opt/wwwroot这里是两个界面index.html和index.php两个界面；；也就是说将这两个文件挂载到容器内的/usr/share/nginx/html下	
+
+上面只是创建了一个pod无法演示；下面给nginx-deployment这个pod创建一个service来暴露服务
+[root@k8s01 volume]# cat nginx-service.yaml 
+apiVersion: v1
+kind: Service
+metadata: 
+    name: nginx-service
+    labels: 
+        app: nginx
+spec:
+    ports:
+    - port: 80
+      targetPort: 80
+    selector:
+        app: nginx
+#    type: NodePort  ##类型可以不要
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+glusterfs  分布式储存 
+
+略
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+持久卷
+
+persistentVolume(PV: 持久卷)：对储存抽象实现，使得储存作为集群中的资源  ##后端可以是nfs glusterfs
+persistentVolumeClaim(PVC: 持久卷申请)：PVC消费PV的资源    ##pvc就是消费PV的
+
+pod申请PVC作为卷来使用，集群通过PVC查找绑定的PV，并Mount给Pod
+
+
+##后端储存是glusterfs：
+
+cat glusterfs-example.yaml 
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gluster-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  glusterfs:
+    endpoints: "glusterfs-cluster"
+    path: "gv0"
+    readOnly: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: glusterfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+      volumeMounts:
+      - mountPath: "/usr/share/nginx/html/"
+        name: wwwroot
+  volumes:
+    - name: wwwroot
+      persistentVolumeClaim:
+        claimName: pvc001
+
+
+##后端储存是nfs：
+cat nfs-example.yaml 
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    path: "/opt/nfs/data"
+    server: 192.168.0.200
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+      volumeMounts:
+      - mountPath: "/usr/share/nginx/html/"
+        name: wwwroot
+  volumes:
+    - name: wwwroot
+      persistentVolumeClaim:
+        claimName: pvc001
+		
+
+
+					
+
