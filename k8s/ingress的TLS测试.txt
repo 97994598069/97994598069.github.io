@@ -1,0 +1,121 @@
+1.生成自签证书
+mkdir https
+cfssl print-defaults csr > ./ca-csr.json
+[root@k8s01 https]# vi ca-csr.json
+{
+    "CN": "bjjy",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "Beijing",
+            "ST": "Beijing"
+        }
+    ]
+}
+
+
+
+cfssl print-defaults config > ./ca-config.json
+[root@k8s01 https]# vi ca-config.json
+{
+    "signing": {
+        "default": {
+            "expiry": "168h"
+        },
+        "profiles": {
+            "www": {
+                "expiry": "8760h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth"
+                ]
+            },
+            "client": {
+                "expiry": "8760h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "client auth"
+                ]
+            }
+        }
+    }
+}
+
+
+[root@k8s01 https]# cfssl gencert --initca ca-csr.json |cfssljson -bare ca -
+2018/11/09 13:47:23 [INFO] generating a new CA key and certificate from CSR
+2018/11/09 13:47:23 [INFO] generate received request
+2018/11/09 13:47:23 [INFO] received CSR
+2018/11/09 13:47:23 [INFO] generating key: rsa-2048
+2018/11/09 13:47:23 [INFO] encoded CSR
+2018/11/09 13:47:23 [INFO] signed certificate with serial number 231307900459227289512607324492218400767690507271
+
+
+
+[root@k8s01 https]# cfssl print-defaults csr > ./server-csr.json
+vi server-csr.json
+
+{
+    "CN": "www.aliangedu.com",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "Beijing",
+            "ST": "Beijing"
+        }
+    ]
+}
+
+[root@k8s01 https]# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem --config=ca-config.json --profile=www server-csr.json |cfssljson -bare server
+
+
+
+[root@k8s01 https]# kubectl create secret tls aliangedu-https --key server-key.pem --cert server.pem 
+secret "aliangedu-https" created
+
+
+[root@k8s01 https]# kubectl get secret
+NAME                  TYPE                                  DATA      AGE
+aliangedu-https       kubernetes.io/tls                     2         31s
+default-token-xr52d   kubernetes.io/service-account-token   3         10d
+
+[root@k8s01 https]# cat https-test.yaml 
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+    name: https-test
+spec:
+    tls:
+    - hosts:
+      - www.aliangedu.com
+      secretName: aliangedu-https
+    rules:
+    - host: www.aliangedu.com 
+      http:
+        paths:
+        - backend:
+            serviceName: nginx   ##来反向代理nginx的服务
+            servicePort: 80
+
+1.配置本地hosts
+2.浏览器分别访问 www.aliangedu.com和https www.aliang.com 
+3.确定证书的颁发 浏览器访问后，F12--->security-->Viewcertificate
+
+
+		
+
+
+
+
+				
+				
