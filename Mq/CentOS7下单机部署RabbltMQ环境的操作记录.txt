@@ -1,0 +1,290 @@
+一、RabbitMQ简单介绍
+在日常工作环境中，你是否遇到过两个（多个）系统间需要通过定时任务来同步某些数据？你是否在为异构系统的不同进程间相互调用、通讯的问题而苦恼、挣扎？如果是，那么恭喜你，消息服务让你可以很轻松地解决这些问题。消息服务擅长于解决多系统、异构系统间的数据交换（消息通知/通讯）问题，你也可以把它用于系统间服务的相互调用，即适用于云计算集群的远程调用(RPC)。毫无疑问，RabbitMQ就是当前最主流的消息中间件之一。
+
+AMQP（Advanced Message Queuing Protocol）即高级消息队列协议，是应用层协议的一个开放标准，为面向消息的中间件设计。消息中间件主要用于组件之间的解耦，消息的发送者无需知道消息使用者的存在，反之亦然。AMQP的主要特征是面向消息、队列、路由（包括点对点和发布/订阅）、可靠性、安全。RabbitMQ是一个开源的AMQP实现，服务器端用Erlang语言编写，支持多种客户端，如：Python、Ruby、.NET、Java、JMS、C、PHP、ActionScript、XMPP、STOMP等，支持AJAX。用于在分布式系统中存储转发消息，在易用性、扩展性、高可用性等方面表现不俗。
+
+二、CentOS7下部署RabbitMQ记录
+由于RabbitMQ是通过Erlang来开发的，需要需要安装Erlang，然而在安装Erlang的时候又有一大波依赖需要安装，但是郁闷的是这些依赖不在CentOS默认的yum库中。
+
+1）添加Erlang Solutions key 支持
+[root@sh-op-mq01 ~]# rpm --import http://binaries.erlang-solutions.com/debian/erlang_solutions.asc
+[root@sh-op-mq01 ~]# wget http://binaries.erlang-solutions.com/rpm/centos/erlang_solutions.repo
+
+2）安装Erlang
+[root@sh-op-mq01 ~]# yum install epel-release
+[root@sh-op-mq01 ~]# yum install erlang
+
+3）安装RabbitMQ
+[root@sh-op-mq01 ~]# rpm -ivh  http://www.rabbitmq.com/releases/rabbitmq-server/v3.6.5/rabbitmq-server-3.6.5-1.noarch.rpm
+[root@sh-op-mq01 ~]# wget http://www.rabbitmq.com/releases/rabbitmq-server/v3.6.5/rabbitmq-server-3.6.5-1.noarch.rpm
+[root@sh-op-mq01 ~]# rpm -ivh rabbitmq-server-3.6.5-1.noarch.rpm
+
+4）优化配置
+[root@sh-op-mq01 ~]# cat /etc/security/limits.conf
+.......
+* soft nofile 65535
+* hard nofile 65535
+[root@sh-op-mq01 ~]# ulimit -n
+65535
+
+[root@sh-op-mq01 ~]# vim /etc/sysctl.conf       //添加下面一行
+fs.file-max = 100000
+[root@sh-op-mq01 ~]# sysctl -p
+
+5）启动RabbitMQ
+[root@sh-op-mq01 ~]# systemctl enable rabbitmq-server.service
+[root@sh-op-mq01 ~]# systemctl start/restart/stop/status rabbitmq-server.service
+
+RabbitMQ默认监听端口是15672
+[root@sh-op-mq01 rabbitmq]# lsof -i:15672
+COMMAND    PID     USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+beam.smp 12776 rabbitmq   50u  IPv4 582895      0t0  TCP *:15672 (LISTEN)
+ 
+默认RabbitMQ的安装目录路径是/var/lib/rabbitmq、默认log路径是/var/log/rabbitmq/
+
+
+[root@sh-op-mq01 ~]# rabbitmqctl --help
+[root@sh-op-mq01 ~]# rabbitmqctl status
+[root@sh-op-mq01 ~]# rabbitmqctl environment
+
+6) 可以自定义RabbitMQ配置
+[root@sh-op-mq01 ~]# cd /etc/rabbitmq/
+[root@sh-op-mq01 rabbitmq]# cat rabbitmq-env.conf
+LOG_BASE=/data/log/rabbitmq                            //定义RabbitMQ的日志路径
+
+
+[root@sh-op-mq01 rabbitmq]# mkdir /data/log/rabbitmq
+[root@sh-op-mq01 rabbitmq]# chown -R rabbitmq.rabbitmq /data/log/rabbitmq
+
+
+重启RabbitMQ
+[root@sh-op-mq01 rabbitmq]# systemctl restart rabbitmq-server.service
+
+
+rabbit-server当前状态
+[root@sh-op-mq01 rabbitmq]# rabbitmqctl status
+Status of node 'rabbit@sh-op-mq01' ...
+[{pid,12776},
+ {running_applications,
+     [{rabbitmq_management,"RabbitMQ Management Console","3.6.5"},
+      {rabbitmq_web_dispatch,"RabbitMQ Web Dispatcher","3.6.5"},
+      {webmachine,"webmachine","1.10.3"},
+      {mochiweb,"MochiMedia Web Server","2.13.1"},
+      {rabbitmq_management_agent,"RabbitMQ Management Agent","3.6.5"},
+      {rabbit,"RabbitMQ","3.6.5"},
+      {os_mon,"CPO  CXC 138 46","2.2.14"},
+      {ssl,"Erlang/OTP SSL application","5.3.3"},
+      {public_key,"Public key infrastructure","0.21"},
+      {crypto,"CRYPTO version 2","3.2"},
+      {amqp_client,"RabbitMQ AMQP Client","3.6.5"},
+      {rabbit_common,[],"3.6.5"},
+      {inets,"INETS  CXC 138 49","5.9.8"},
+      {mnesia,"MNESIA  CXC 138 12","4.11"},
+      {compiler,"ERTS  CXC 138 10","4.9.4"},
+      {xmerl,"XML parser","1.3.6"},
+      {syntax_tools,"Syntax tools","1.6.13"},
+      {asn1,"The Erlang ASN1 compiler version 2.0.4","2.0.4"},
+      {ranch,"Socket acceptor pool for TCP protocols.","1.2.1"},
+      {sasl,"SASL  CXC 138 11","2.3.4"},
+      {stdlib,"ERTS  CXC 138 10","1.19.4"},
+      {kernel,"ERTS  CXC 138 10","2.16.4"}]},
+ {os,{unix,linux}},
+ {erlang_version,
+     "Erlang R16B03-1 (erts-5.10.4) [source] [64-bit] [smp:8:8] [async-threads:128] [hipe] [kernel-poll:true]\n"},
+ {memory,
+     [{total,61117832},
+      {connection_readers,0},
+      {connection_writers,0},
+      {connection_channels,0},
+      {connection_other,2800},
+      {queue_procs,2800},
+      {queue_slave_procs,0},
+      {plugins,669584},
+      {other_proc,19656864},
+      {mnesia,67096},
+      {mgmt_db,521824},
+      {msg_index,39960},
+      {other_ets,1445264},
+      {binary,29648},
+      {code,27158116},
+      {atom,992409},
+      {other_system,10531467}]},
+ {alarms,[]},
+      ...........
+      ...........
+ 
+------------------------------------------------------------------------
+
+可以用下面命令安装更新维护插件：
+[root@sh-op-mq01 rabbitmq]# rabbitmq-plugins enable rabbitmq_management
+[root@sh-op-mq01 rabbitmq]# systemctl restart rabbitmq-server.service
+在浏览器里输入http://localhost:15672访问RabbitMQ，默认用户名和密码都是guest，若能正常访问和登陆，即说明正常连接RabbitMQ
+
+
+如果使用默认的guest/guest账号密码登陆不上，解决办法如下：
+[root@sh-op-mq01 rabbitmq]# vim /etc/rabbitmq/rabbitmq.config
+[{rabbit, [{loopback_users, []}]}].
+ 
+[root@sh-op-mq01 rabbitmq]# systemctl restart rabbitmq-server.service
+ 
+然后使用guest/guest登陆即可！
+ 
+--------------------------------------------------------------------------------
+如果还是使用guest/guest登陆不上RabbitMQ，可以自己创建了一个账户，赋予管理员权限
+[root@sh-op-mq01 rabbitmq]# rabbitmqctl  add_user  username  password
+[root@sh-op-mq01 rabbitmq]# rabbitmqctl  set_user_tags  username  administrator
+ 
+创建完后用以下命令查看创建完的账号
+[root@sh-op-mq01 rabbitmq]# rabbitmqctl list_users
+
+
+
+===================Web插件的用户配置管理===================
+1）用户管理
+用户管理包括增加用户，删除用户，查看用户列表，修改用户密码，设置用户角色，权限等等。
+  
+新增一个用
+# rabbitmqctl  add_user  Username Password
+  
+删除一个用户
+# rabbitmqctl  delete_user  Username
+ 
+修改用户的密码
+# rabbitmqctl  oldPassword  Username  newPassword
+ 
+查看当前用户列表
+# rabbitmqctl  list_users
+
+
+2）用户角色
+按照个人理解，用户角色可分为五类，超级管理员, 监控者, 策略制定者, 普通管理者以及其他。
+ 
+超级管理员(administrator)
+可登陆管理控制台(启用management plugin的情况下)，可查看所有的信息，并且可以对用户，策略(policy)进行操作。
+ 
+监控者(monitoring)
+可登陆管理控制台(启用management plugin的情况下)，同时可以查看rabbitmq节点的相关信息(进程数，内存使用情况，磁盘使用情况等)
+ 
+策略制定者(policymaker)
+可登陆管理控制台(启用management plugin的情况下), 同时可以对policy进行管理。但无法查看节点的相关信息(上图红框标识的部分)。
+ 
+普通管理者(management)
+仅可登陆管理控制台(启用management plugin的情况下)，无法看到节点信息，也无法对策略进行管理。
+
+
+其他
+无法登陆管理控制台，通常就是普通的生产者和消费者。
+ 
+了解了这些后，就可以根据需要给不同的用户设置不同的角色，以便按需管理。
+设置用户角色的命令为：
+ 
+# rabbitmqctl  set_user_tags  User Tag
+User为用户名， Tag为角色名(对应于上面的administrator，monitoring，policymaker，management，或其他自定义名称)。
+ 
+也可以给同一用户设置多个角色，例如
+# rabbitmqctl  set_user_tags  hncscwc monitoring  policymaker
+
+
+3）用户权限
+用户权限指的是用户对exchange，queue的操作权限，包括配置权限，读写权限。配置权限会影响到exchange，queue的声明和删除。读写权限影响到从queue里取消息，
+向exchange发送消息以及queue和exchange的绑定(bind)操作。
+ 
+例如：将queue绑定到某exchange上，需要具有queue的可写权限，以及exchange的可读权限；向exchange发送消息需要具有exchange的可写权限；从queue里取数据
+需要具有queue的可读权限。详细请参考官方文档中"Howpermissions work"部分。
+ 
+相关命令为：
+设置用户权限
+# rabbitmqctl  set_permissions  -p VHostPath  User  ConfP  WriteP  ReadP
+ 
+查看(指定hostpath)所有用户的权限信息
+# rabbitmqctl  list_permissions [-p  VHostPath]
+ 
+查看指定用户的权限信息
+# rabbitmqctl  list_user_permissions User
+ 
+清除用户的权限信息
+# rabbitmqctl  clear_permissions  [-pVHostPath]  User
+
+
+4）实际应用配置
+根据以上讲解，进行用户的简单创建：
+# rabbitmqctl  add_user  admin  admin
+# rabbitmqctl set_user_tags  admin  administrator
+# rabbitmqctl list_users
+
+
+
+----------------------CentOS6安装rabbitmq----------------------------
+
+1）安装erlang
+安装依赖包
+# yum install xmlto gcc gcc-c++ kernel-devel m4 ncurses-devel openssl-devel unixODBC-devel wxBase wxGTK wxGTK-gl perl -y
+ 
+安装elang
+下载地址：https://pan.baidu.com/s/1nuGy64h   提取密码：fv9r
+# yum install -y erlang-19.0.4-1.el6.x86_64.rpm
+# erl -v
+ 
+安装rabbitmq
+下载地址：https://pan.baidu.com/s/1slJU2iL   提取密码：zxwb
+# wget --no-cache http://www.convirture.com/repos/definitions/rhel/6.x/convirt.repo -O /etc/yum.repos.d/convirt.repo
+# yum install -y socat
+# rpm --import http://www.rabbitmq.com/rabbitmq-signing-key-public.asc
+# yum install -y rabbitmq-server-3.6.8-1.el6.noarch.rpm
+ 
+启动RabbitMQ
+启动web管理界面(启动后，15672端口就起来了)（这个要先启动rabbitmq-server服务后才能启动这个）
+# rabbitmq-plugins enable rabbitmq_management
+# lsof -i:15672
+ 
+启动服务
+# service rabbitmq-server start
+ 
+添加用户admin
+# rabbitmqctl add_user admin 123456          
+ 
+设置admin角色为管理员
+# rabbitmqctl set_user_tags admin administrator    
+ 
+设置admin默认vhost（"/"）访问权限      
+# rabbitmqctl set_permissions -p "/" admin "." "." ".*"
+ 
+删除guest用户   
+# rabbitmqctl delete_user guest
+ 
+修改guest用户的密码
+命令：rabbitmqctl  change_password  Username  Newpassword
+# rabbitmqctl  change_password  guest  guest
+ 
+查看当前用户列表
+# rabbitmqctl  list_users
+ 
+浏览器访问：http://IP:15672
+用户名admin，密码123456进行登录
+ 
+注意几点：
+rabbitmq的默认监听端口5672；web管理端口是15672
+ 
+----------------------------------------------------------------------
+或者采用下面方式安装
+ 
+# wget http://packages.erlang-solutions.com/erlang-solutions-1.0-1.noarch.rpm
+# rpm -Uvh erlang-solutions-1.0-1.noarch.rpm
+# yum -y install erlang
+# erl -v
+ 
+# wget –no-cache http://www.convirture.com/repos/definitions/rhel/6.x/convirt.repo -O /etc/yum.repos.d/convirt.repo
+# yum install socat
+# wget http://www.rabbitmq.com/releases/rabbitmq-server/v3.6.6/rabbitmq-server-3.6.6-1.el6.noarch.rpm
+# yum -y install rabbitmq-server-3.6.6-1.el6.noarch.rpm
+ 
+启动rabbitmq服务:  
+前台运行：
+# rabbitmq-server start (用户关闭连接后,自动结束进程) 
+ 
+后台运行：
+# rabbitmq-server -detached
+----------------------------------------------------------------------
+
+
+
