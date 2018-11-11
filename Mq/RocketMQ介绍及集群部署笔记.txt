@@ -1,0 +1,472 @@
+二、RocketMQ集群部署记录
+
+部署需求（如果是两台机器，可以做一主一从，即broker-a主节点和nameserver在一台机器，broker-a-s从节点在另一台机器），本案例是5台机器：
+准备5台虚拟机，其中4台作为rocektmq broker（双master 双slave，同步双写，异步刷盘），另1台用作rocektmq的console（rocketmq监控平台）和nameserver。
+0）基础信息
+ip地址                  主机名                     角色
+192.168.10.202         mq-master01              broker-a
+192.168.10.203         mq-master02              broker-b
+192.168.10.205         mq-slave01               broker-a-s
+192.168.10.206         mq-slave02               broker-b-s
+192.168.10.207         mq-console-nameserver    nameserver、console
+
+--------------------------------------------------------------------------
+其实也可以不用那么多机器，2台机器也可以，broker-a和broker-b-s在一台机器（也就是说broker-a的主节点与broker-b的从节点部署在一台服务器），
+broker-a-s和broker-b在一台机器。nameserver和console部署到2台中的任一台上。
+--------------------------------------------------------------------------
+
+关闭5台机器的iptables和selinux（所有节点机器上都要操作）
+[root@mq-master01 ~]# /etc/init.d/iptables stop
+[root@mq-master01 ~]# vim /etc/sysconfig/selinux
+......
+SELINUX=disabled
+[root@mq-master01 ~]# setenforce 0
+[root@mq-master01 ~]# getenforce
+Permissive
+ 
+5台机器都要安装统一的java环境（这里安装jdk1.8，参考：http://www.cnblogs.com/kevingrace/p/7607442.html）
+[root@mq-master01 ~]# java -version
+java version "1.8.0_131"
+Java(TM) SE Runtime Environment (build 1.8.0_131-b11)
+Java HotSpot(TM) 64-Bit Server VM (build 25.131-b11, mixed mode)
+--------------------------------------------------------------------------
+5台机器一定要提前做hosts绑定，否则后续启动broker的时候，会报错诸如：
+java.net.UnknownHostException: mq-master01: mq-master01: Name or service not known
+
+[root@mq-master01 bin]# cat /etc/hosts
+......
+192.168.10.202         mq-master01
+192.168.10.203         mq-master02
+192.168.10.205         mq-slave01
+192.168.10.206         mq-slave02
+192.168.10.207         mq-console-nameserver
+
+
+1）rocektmq broker 双master双slave部署
+1）安装rocketmq（四台broker节点机器操作一样）
+下载地址：https://pan.baidu.com/s/16UAXHwzzy0DoGX4u93vK7A
+提取密码：rjib
+ 
+[root@mq-master01 software]# pwd
+/data/software
+[root@mq-master01 software]# unzip rocketmq3.2.6.zip
+[root@mq-master01 software]# ln -s /data/software/alibaba-rocketmq3.2.6 /data/rocketmq
+ 
+创建存储路径
+[root@mq-master01 software]# mkdir -p /data/rocketmq/store
+[root@mq-master01 software]# mkdir -p /data/rocketmq/store/commitlog
+[root@mq-master01 software]# mkdir -p /data/rocketmq/store/consumequeue
+[root@mq-master01 software]# mkdir -p /data/rocketmq/store/index
+ 
+[root@mq-master01 software]# ls /data/rocketmq/
+benchmark  bin  conf  issues  lib  LICENSE.txt  readme.txt  store  test  wiki
+[root@mq-master01 software]# ls /data/rocketmq/store/
+commitlog  consumequeue  index
+---------------------------------------------------------------------------------
+
+2）配置rocektmq broker （四个节点机器都要操作）
+ 
+mq-master01节点配置/data/rocketmq/conf/2m-2s-sync/broker-a.properties
+[root@mq-master01 ~]# vim /data/rocketmq/conf/2m-2s-sync/broker-a.properties
+#所属集群名字
+brokerClusterName=rocketmq-cluster
+#broker名字，注意此处不同的配置文件填写的不一样  例如：在a.properties 文件中写 broker-a  在b.properties 文件中写 broker-b
+brokerName=broker-a
+#0 表示 Master，>0 表示 Slave
+brokerId=0
+#nameServer地址，这里nameserver是单台，如果nameserver是多台集群的话，就用分号分割（即namesrvAddr=ip1:port1;ip2:port2;ip3:port3）
+namesrvAddr=192.168.10.207:9876;
+#在发送消息时，自动创建服务器不存在的topic，默认创建的队列数。由于是4个broker节点，所以设置为4
+defaultTopicQueueNums=4
+#是否允许 Broker 自动创建Topic，建议线下开启，线上关闭
+autoCreateTopicEnable=true
+#是否允许 Broker 自动创建订阅组，建议线下开启，线上关闭
+autoCreateSubscriptionGroup=true
+#Broker 对外服务的监听端口
+listenPort=10911
+#删除文件时间点，默认凌晨 4点
+deleteWhen=04
+#文件保留时间，默认 48 小时
+fileReservedTime=120
+#commitLog每个文件的大小默认1G
+mapedFileSizeCommitLog=1073741824
+#ConsumeQueue每个文件默认存30W条，根据业务情况调整
+mapedFileSizeConsumeQueue=300000
+#destroyMapedFileIntervalForcibly=120000
+#redeleteHangedFileInterval=120000
+#检测物理文件磁盘空间
+diskMaxUsedSpaceRatio=88
+#存储路径
+storePathRootDir=/data/rocketmq/store
+#commitLog 存储路径
+storePathCommitLog=/data/rocketmq/store/commitlog
+#消费队列存储路径存储路径
+storePathConsumeQueue=/data/rocketmq/store/consumequeue
+#消息索引存储路径
+storePathIndex=/data/rocketmq/store/index
+#checkpoint 文件存储路径
+storeCheckpoint=/data/rocketmq/store/checkpoint
+#abort 文件存储路径
+abortFile=/data/rocketmq/store/abort
+#限制的消息大小
+maxMessageSize=65536
+#flushCommitLogLeastPages=4
+#flushConsumeQueueLeastPages=2
+#flushCommitLogThoroughInterval=10000
+#flushConsumeQueueThoroughInterval=60000
+#Broker 的角色
+#- ASYNC_MASTER 异步复制Master
+#- SYNC_MASTER 同步双写Master
+#- SLAVE
+brokerRole=MASTER                       #要配置为MASTER或SLAVE的角色
+#刷盘方式
+#- ASYNC_FLUSH 异步刷盘
+#- SYNC_FLUSH 同步刷盘
+flushDiskType=SYNC_FLUSH
+#checkTransactionMessageEnable=false
+#发消息线程池数量
+#sendMessageThreadPoolNums=128
+#拉消息线程池数量
+#pullMessageThreadPoolNums=128
+ 
+mq-master02节点配置的是/data/rocketmq/conf/2m-2s-sync/broker-b.properties      #就下面三行配置不一样，其他配置行都一样！
+
+
+[root@mq-master02 software]# vim /data/rocketmq/conf/2m-2s-sync/broker-b.properties     
+......
+brokerName=broker-b           
+brokerId=0
+brokerRole=MASTER  
+ 
+mq-slave01节点配置的是/data/rocketmq/conf/2m-2s-sync/broker-a-s.properties
+[root@mq-slave01 software]# vim /data/rocketmq/conf/2m-2s-sync/broker-a-s.properties
+......
+brokerName=broker-a          #注意这一行的名称要和master保持一致
+brokerId=1                   #这个ID要跟master的不一致！
+brokerRole=SLAVE             #要配置为从
+ 
+mq-slave01节点配置的是/data/rocketmq/conf/2m-2s-sync/broker-b-s.properties
+[root@mq-slave02 software]# vim /data/rocketmq/conf/2m-2s-sync/broker-b-s.properties
+......
+brokerName=broker-b         #注意这一行的名称要和master的保持一致
+brokerId=1                  #这个ID要跟master的不一致
+brokerRole=SLAVE            #要配置为从
+---------------------------------------------------------------------------------
+3）修改日志文件（四个节点机器都要操作）
+[root@mq-master01 ~]# mkdir -p /data/rocketmq/logs
+[root@mq-master01 ~]# cd /data/rocketmq/conf
+[root@mq-master01 conf]# sed -i 's#${user.home}#/data/rocketmq#g' *.xml
+---------------------------------------------------------------------------------
+
+
+2）nameserver 部署（192.168.10.207节点机上操作）
+下载地址：https://pan.baidu.com/s/1vPI0eB5f2dQLTai02wA2_w
+提取密码：ytv6
+  
+[root@mq-console-nameserver ~]# cd /data/software/
+[root@mq-console-nameserver ~]# ls
+rocketmq_namesrv.zip
+[root@mq-console-nameserver software]# unzip rocketmq_namesrv.zip
+[root@mq-console-nameserver software]# ln -s /data/software/rocketmq_namesrv /data/rocketmq_namesrv
+[root@mq-console-nameserver software]# vim /data/rocketmq_namesrv/conf/namesrv.properties             #该文件只有下面一行内容
+stenPort=9876
+
+
+3）启动NameServer和BrokerServer
+温馨提示：
+启动顺序：先启动NameServer，再启动BrokerServer（启动BrokerServer之前先关闭防火墙）
+停止顺序：先停止BrokerServer，再停止NameServer
+  
+首先在5个节点机器上设置下rocketmq启动的java路径，否则会报错：
+ERROR: Please set the JAVA_HOME variable in your environment, We need java(x64)! !!
+（可以使用find / -name java找出java的安装路径，取出JAVA_HOME路径）
+[root@mq-master01 bin]# vim /data/rocketmq/bin/runbroker.sh
+.....
+JAVA_HOME=/usr/java/jdk1.8.0_131          #加入这一行
+ 
+1）首先在192.168.10.207节点机器上启动NameServer
+NameServer默认有一个启动脚本startNameServer.sh，修改如下：
+[root@mq-console-nameserver ~]# cat /data/rocketmq_namesrv/startNameServer.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_131
+nohup sh /data/rocketmq_namesrv/alibaba-rocketmq/bin/mqnamesrv -c /data/rocketmq_namesrv/conf/namesrv.properties  > ./nohup.out 2>&1 &
+ 
+[root@mq-console-nameserver ~]# chmod 755 /data/rocketmq_namesrv/alibaba-rocketmq/bin/*
+[root@mq-console-nameserver ~]# sh /data/rocketmq_namesrv/startNameServer.sh
+[root@mq-console-nameserver ~]# lsof -i:9876
+COMMAND   PID USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+java    32336 root   49u  IPv6 24559963      0t0  TCP *:sd (LISTEN)
+ 
+2）接着在四个broker节点机器上启动BrokerServer
+[root@mq-master01 ~]# cd /data/rocketmq/bin
+[root@mq-master01 bin]# nohup sh mqbroker -c /data/rocketmq/conf/2m-2s-sync/broker-a.properties >/dev/null 2>&1 &
+[root@mq-master01 bin]# ps -ef|grep rocketmq
+root      9978  9167  0 17:51 pts/0    00:00:00 sh mqbroker -c /data/rocketmq/conf/2m-2s-sync/broker-a.properties
+root      9982  9978  0 17:51 pts/0    00:00:00 sh /data/rocketmq/bin/runbroker.sh com.alibaba.rocketmq.broker.BrokerStartup -c /data/rocketmq/conf/2m-2s-sync/broker-a.properties
+root      9985  9982  4 17:51 pts/0    00:00:03 /usr/java/jdk1.8.0_131/bin/java -server -Xms4g -Xmx4g -Xmn2g -XX:PermSize=128m -XX:MaxPermSize=320m -XX:+UseConcMarkSweepGC -XX:+UseCMSCompactAtFullCollection -XX:CMSInitiatingOccupancyFraction=70 -XX:+CMSParallelRemarkEnabled -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+CMSClassUnloadingEnabled -XX:SurvivorRatio=8 -XX:+DisableExplicitGC -verbose:gc -Xloggc:/root/rmq_bk_gc.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:-OmitStackTraceInFastThrow -Djava.ext.dirs=/data/rocketmq/bin/../lib -cp .:/data/rocketmq/bin/../conf:.:/lib/dt.jar:/lib/tools.jar com.alibaba.rocketmq.broker.BrokerStartup -c /data/rocketmq/conf/2m-2s-sync/broker-a.properties
+root     10039  9167  0 17:52 pts/0    00:00:00 grep rocketmq
+ 
+[root@mq-master01 bin]# lsof -i:10911          #注意只有master节点的10911端口才能起来，slave节点的10911端口不会起来。
+COMMAND  PID USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+java    9985 root   68u  IPv6 7969295      0t0  TCP *:10911 (LISTEN)
+[root@mq-master01 bin]# jps
+9985 BrokerStartup
+10044 Jps
+[root@mq-master01 bin]# tail -f -n 500 /data/rocketmq/logs/rocketmqlogs/broker.log
+2018-05-09 17:59:57 INFO main - rocketmqHome=/data/rocketmq
+2018-05-09 17:59:57 INFO main - namesrvAddr=192.168.10.207:9876;
+2018-05-09 17:59:57 INFO main - brokerIP1=192.168.10.202
+2018-05-09 17:59:57 INFO main - brokerIP2=192.168.10.202
+2018-05-09 17:59:57 INFO main - brokerName=broker-a
+........
+2018-05-09 19:06:04 INFO main - flushDelayOffsetInterval=10000
+2018-05-09 19:06:04 INFO main - cleanFileForciblyEnable=true
+2018-05-09 19:06:04 INFO main - user specfied name server address: 192.168.10.207:9876;
+2018-05-09 19:06:05 INFO main - load /data/software/rocketmq/store/config/consumerOffset.json OK
+2018-05-09 19:06:05 INFO main - load /data/software/rocketmq/store/config/delayOffset.json OK
+2018-05-09 19:06:05 INFO PullRequestHoldService - PullRequestHoldService service started
+2018-05-09 19:06:05 INFO main - register broker to name server 192.168.10.207:9876 OK
+2018-05-09 19:06:05 INFO main - The broker[broker-a, 192.168.10.202:10911] boot success. and name server is 192.168.10.207:9876;
+2018-05-09 19:06:15 INFO BrokerControllerScheduledThread1 - slave fall behind master, how much, 0 bytes
+2018-05-09 19:06:15 INFO BrokerControllerScheduledThread1 - register broker to name server 192.168.10.207:9876 OK
+2018-05-09 19:06:45 INFO BrokerControllerScheduledThread1 - register broker to name server 192.168.10.207:9876 OK
+  
+其他三个节点启动的时候，指定的配置文件分别是broker-b.properties、broker-a-s.properties、broker-b-s.properties。
+[root@mq-master02 bin]# nohup sh mqbroker -c /data/rocketmq/conf/2m-2s-sync/broker-b.properties >/dev/null 2>&1 &
+[root@mq-slave01 bin]# nohup sh mqbroker -c /data/rocketmq/conf/2m-2s-sync/broker-a-s.properties >/dev/null 2>&1 &
+[root@mq-slave02 bin]# nohup sh mqbroker -c /data/rocketmq/conf/2m-2s-sync/broker-b-s.properties >/dev/null 2>&1 &
+ 
+-----------------------------------------------------------------
+停止服务
+先停止BrokerServer，再停止NameServer
+[root@mq-master01 ~]# cd /data/rocketmq/bin
+[root@mq-master01 bin]# sh mqshutdown broker
+The mqbroker(10495) is running...
+Send shutdown request to mqbroker(10495) OK
+[root@mq-master01 bin]# lsof -i:10911
+[root@mq-master01 bin]#
+  
+[root@mq-console-nameserver ~]# cd /data/rocketmq_namesrv/alibaba-rocketmq/bin/
+[root@mq-console-nameserver bin]# sh mqshutdown namesrv
+The mqnamesrv(32336) is running...
+Send shutdown request to mqnamesrv(32336) OK
+[root@mq-console-nameserver bin]# lsof -i:9876
+[root@mq-console-nameserver bin]#
+
+
+4）rocketMq监控平台rocketmq-console部署（192.168.10.207上操作）
+rocketmq有一个管理界面叫incubator-rocketmq-externals
+百度网盘下载地址：https://pan.baidu.com/s/19PROiNivWBiOIV5NkOBBqA
+提取密码：r1cf
+   
+也可以直接git在线下载
+[root@mq-console-nameserver ~]# cd /opt
+[root@mq-console-nameserver opt]# git clone https://github.com/apache/rocketmq-externals.git
+   
+做软链接
+[root@mq-console-nameserver opt]# ln -s /opt/rocketmq-externals /data/
+[root@mq-console-nameserver opt]# ll /data/rocketmq-externals
+lrwxrwxrwx. 1 root root 23 May  9 14:10 /data/rocketmq-externals -> /opt/rocketmq-externals
+   
+修改配置文件
+[root@mq-console-nameserver ~]# vim /data/rocketmq-externals/rocketmq-console/src/main/resources/application.properties
+server.contextPath=
+server.port=8080                              #默认访问端口是8080
+#spring.application.index=true
+spring.application.name=rocketmq-console
+spring.http.encoding.charset=UTF-8
+spring.http.encoding.enabled=true
+spring.http.encoding.force=true
+logging.config=classpath:logback.xml
+#if this value is empty,use env value rocketmq.config.namesrvAddr  NAMESRV_ADDR | now, you can set it in ops page.default localhost:9876
+rocketmq.config.namesrvAddr=192.168.10.207:9876               #如果nameserver是多台集群机器，则后面就配置多个ip+port，即"rocketmq.config.namesrvAddr=ip1:port;ip2:port"
+#if you use rocketmq version < 3.5.8, rocketmq.config.isVIPChannel should be false.default true
+rocketmq.config.isVIPChannel=false                            #注意这个参数，是否设置为false或true取决于rocketmq的版本号
+#rocketmq-console's data path:dashboard/monitor
+rocketmq.config.dataPath=/tmp/rocketmq-console/data
+#set it false if you don't want use dashboard.default true
+rocketmq.config.enableDashBoardCollect=true
+  
+------------------------------------------------------------------------------------------
+温馨提示：
+由于我这里使用的rocketmq是3.2.6版本，低于3.5.8版本，所以上面的rocketmq.config.isVIPChannel应设置为false，默认为true！
+Rocket如果开启了VIP通道，VIP通道端口为10911-2=10909。若Rocket服务器未启动端口10909，则报connect to <：10909> failed。
+------------------------------------------------------------------------------------------
+   
+安装Maven的安装
+[root@mq-console-nameserver ~]# cd /data/software/
+[root@mq-console-nameserver software]# wget http://mirrors.hust.edu.cn/apache/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz
+[root@mq-console-nameserver software]# tar -zvxf apache-maven-3.3.9-bin.tar.gz
+[root@mq-console-nameserver software]# mv apache-maven-3.3.9 /usr/local/maven
+[root@mq-console-nameserver software]# vim /etc/profile
+........
+export MAVEN_HOME=/usr/local/maven
+export PATH=$PATH:$MAVEN_HOME/bin
+[root@mq-console-nameserver software]# source /etc/profile
+[root@mq-console-nameserver software]# mvn --version
+Apache Maven 3.3.9 (bb52d8502b132ec0a5a3f4c09453c07478323dc5; 2015-11-11T00:41:47+08:00)
+Maven home: /usr/local/maven
+Java version: 1.8.0_131, vendor: Oracle Corporation
+Java home: /usr/java/jdk1.8.0_131/jre
+Default locale: en_US, platform encoding: UTF-8
+OS name: "linux", version: "2.6.32-696.el6.x86_64", arch: "amd64", family: "unix"
+   
+接着对rocketmq-console进行编译打包运行（mvn的编辑过程需要等待一段时间）
+[root@mq-console-nameserver ~]# cd /data/rocketmq-externals/rocketmq-console/
+[root@mq-console-nameserver rocketmq-console]# mvn clean package -Dmaven.test.skip=true
+   
+编译成功后在target下找到文件：rocketmq-console-ng-1.0.0.jar
+[root@mq-console-nameserver rocketmq-console]# ls
+doc  LICENSE  NOTICE  pom.xml  README.md  src  style  target
+[root@mq-console-nameserver rocketmq-console]# ls target/
+checkstyle-cachefile    classes            maven-status                            rocketmq-console-ng-1.0.0-sources.jar
+checkstyle-checker.xml  generated-sources  rocketmq-console-ng-1.0.0.jar
+checkstyle-result.xml   maven-archiver     rocketmq-console-ng-1.0.0.jar.original
+   
+启动rocketmq-console，执行命令：
+[root@mq-console-nameserver rocketmq-console]# nohup java -jar target/rocketmq-console-ng-1.0.0.jar >/dev/null 2>&1 &
+----------------------------------------------------------------------------------------------------
+也可以直接跟NameServer的ip和端口进行启动
+# java -jar rocketmq-console-ng-1.0.0.jar --server.port=8080 --rocketmq.config.namesrvAddr=192.168.10.207:9876
+   
+如果NameServer有多台集群机器的话，后面就多加
+# java -jar rocketmq-console-ng-1.0.0.jar --server.port=8080 --rocketmq.config.namesrvAddr=192.168.10.207:9876;192.168.10.208:9876
+ 
+这里需要注意两个参数：
+--server.port=8080   指定console访问端口，默认的就是8080，也可以指定为其他端口
+--rocketmq.config.namesrvAddr   指定nameserver的地址
+----------------------------------------------------------------------------------------------------
+   
+rocketmq-console的默认端口是8080
+[root@mq-console-nameserver rocketmq-console]# lsof -i:8080
+COMMAND  PID       USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+java    5574 confluence   81u  IPv6 24674767      0t0  TCP mq-console-nameserver:44888->mq-console-nameserver:webcache (CLOSE_WAIT)
+java    5649       jira  157u  IPv6   879851      0t0  TCP *:webcache (LISTEN)
+java    5649       jira  249u  IPv6  4166247      0t0  TCP mq-console-nameserver:46886->mq-console-nameserver:webcache (CLOSE_WAIT)
+java    5649       jira  262u  IPv6 24669705      0t0  TCP mq-console-nameserver:43464->mq-console-nameserver:webcache (CLOSE_WAIT)
+   
+最后再浏览器里输入：http://192.168.10.207:8080，即可访问rockermq的web管理界面了
+
+
+5）RocketMQ常用命令
+需要切换到bin目录下，即：
+[root@mq-master01 ~]# cd /data/rocketmq/bin
+[root@mq-master01 bin]#
+ 
+获取所有可用命令：
+[root@mq-master01 bin]# sh mqadmin
+ 
+查看帮助：
+# sh mqadmin <command> -h
+查询Producer的网络连接情况：
+# sh mqadmin producerConnection -n localhost:9876 -g <producer-group> -t <producer-topic>
+查询Consumer的网络连接情况：
+# sh mqadmin consumerConnection -n localhost:9876 -g <consumer-group>
+查询Consumer的消费状态：
+# sh mqadmin consumerProgress -n localhost:9876 -g <consumer-group>
+ 
+查询消息是否发送成功
+获取指定Topic：
+# sh mqadmin topicList -n localhost:9876 | grep <topicName>
+查看Topic状态：
+# sh mqadmin topicStatus -n localhost:9876 -t <topicName>
+根据offset获取消息：
+# sh sh mqadmin queryMsgByOffset -n localhost:9876 -b <broker-name> -i <queueId> -o <offset> -t <topicName>
+根据offsetMsgId查询消息：
+# sh sh mqadmin queryMsgById -n localhost:9876 -i <offsetMsgId>
+ 
+查询消息是否被消费成功
+查询消息详情：
+# sh mqadmin queryMsgById -i {MsgId} -n {NameServerAddr}
+查看Consumer Group订阅了哪些TOPIC：
+# sh mqadmin consumerProgress -g <ConsumerGroup> -n <NameServerAddr>
+ 
+查询TOPIC被哪些Consumer Group订阅了
+没有查询特定TOPIC订阅情况，只能查询所有后再过滤：
+# sh mqadmin statsAll -n <NameServerAddr> | grep <TOPIC>
+返回结果：#Topic #Consumer Group #InTPS #OutTPS #InMsg24Hour #OutMsg24Hour
+ 
+关闭nameserver和所有的broker:
+# sh mqshutdown namesrv
+# sh mqshutdown broker
+ 
+查看所有消费组group:
+# sh mqadmin consumerProgress -n 192.168.23.159:9876
+查看指定消费组（kevinGroupConsumer）下的所有topic数据堆积情况：
+# sh mqadmin consumerProgress -n 192.168.23.159:9876 -g kevinGroupConsumer
+查看所有topic :
+# sh mqadmin topicList -n 192.168.23.159:9876
+查看topic信息列表详情统计
+# sh mqadmin topicstatus -n 192.168.23.159:9876 -t myTopicTest1
+新增topic
+# sh mqadmin updateTopic –n 10.45.47.168 –c DefaultCluster –t ZTEExample
+删除topic
+# sh mqadmin deleteTopic –n 10.45.47.168:9876 –c DefaultCluster –t ZTEExample
+
+一、RocketMQ基础知识介绍
+Apache RocketMQ是阿里开源的一款高性能、高吞吐量、队列模型的消息中间件的分布式消息中间件。
+
+RocketMQ具有以下特点：
+1）是一个队列模型的消息中间件，具有高性能、高可靠、高实时、分布式特点。
+2）Producer、Consumer、队列都可以分布式。
+3）Producer向一些队列轮流发送消息，队列集合称为Topic，Consumer如果做广播消费，则一个consumer实例消费这个Topic对应的所有队列，如果做集群消费，则多个Consumer实例平均消费这个topic对应的队列集合。
+4）支持严格的消息顺序；
+5）提供丰富的消息拉取模式
+6）高效的订阅者水平扩展能力
+7）实时的消息订阅机制
+8）亿级消息堆积能力
+9）较少的依赖
+10）支持Topic与Queue两种模式；
+11）同时支持Push与Pull方式消费消息；
+
+消息队列的应用场景
+1）异步处理
+将不是必须的业务逻辑，进行异步处理，比如注册之后短信、邮箱的发送
+
+2）应用解耦
+订单系统：用户下单后，订单系统完成持久化处理，将消息写入消息队列，返回用户订单下单成功。
+库存系统：订阅下单的消息，采用拉/推的方式，获取下单信息，库存系统根据下单信息，进行库存操作。
+假如：在下单时库存系统不能正常使用。也不影响正常下单，因为下单后，订单系统写入消息队列就不再关心其他的后续操作了。实现订单系统与库存系统的应用解耦。
+
+3）流量削锋，也是消息队列中的常用场景，一般在秒杀或团抢活动中使用广泛。
+应用场景：秒杀活动，一般会因为流量过大，导致流量暴增，应用挂掉。为解决这个问题，一般需要在应用前端加入消息队列。
+a）可以控制活动的人数；
+b）可以缓解短时间内高流量压垮应用；
+c）用户的请求，服务器接收后，首先写入消息队列。假如消息队列长度超过最大数量，则直接抛弃用户请求或跳转到错误页面；
+d）秒杀业务根据消息队列中的请求信息，再做后续处理。
+
+4）日志处理
+
+5）消息通讯
+消息通讯是指，消息队列一般都内置了高效的通信机制，因此也可以用在纯的消息通讯。比如实现点对点消息队列，或者聊天室等。
+
+6）性能
+RocketMQ单机也可以支持亿级的消息堆积能力。单机写入TPS单实例约7万条/秒，单机部署3个Broker，可以跑到最高12万条/秒，消息大小10个字节
+
+
+RocketMQ的部署结构有以下特点：
+1）Name Server 可集群部署，节点之间无任何信息同步。
+2）Broker(消息中转角色，负责存储消息，转发消息) 部署相对复杂，Broker 分为Master 与Slave，一个Master 可以对应多个Slave，但是一个Slave 只能对应一个Master，Master 与Slave 的对应关系通过指定相同的BrokerName，不同的BrokerId来定 义，BrokerId为0 表示Master，非0 表示Slave。Master 也可以部署多个。
+3）Producer 与Name Server 集群中的其中一个节点（随机选择）建立长连接，定期从Name Server 取Topic 路由信息，并向提供Topic 服务的Master 建立长连接，且定时向Master 发送心跳。Producer 完全无状态，可集群部署。
+4）Consumer 与Name Server 集群中的其中一个节点（随机选择）建立长连接，定期从Name Server 取Topic 路由信息，并向提供Topic 服务的Master、Slave 建立长连接，且定时向Master、Slave 发送心跳。Consumer既可以从Master 订阅消息，也可以从Slave 订阅消息，订阅规则由Broker 配置决定。
+
+Broker：消息中转角色，负责存储消息，转发消息
+Broker集群有多种配置方式：
+1）单Master
+优点：除了配置简单没什么优点
+缺点：不可靠，该机器重启或宕机，将导致整个服务不可用
+2）多Master
+优点：配置简单，性能最高
+缺点：可能会有少量消息丢失（配置相关），单台机器重启或宕机期间，该机器下未被消费的消息在机器恢复前不可订阅，影响消息实时性
+3）多Master多Slave，每个Master配一个Slave，有多对Master-Slave，集群采用异步复制方式，主备有短暂消息延迟，毫秒级
+优点：性能同多Master几乎一样，实时性高，主备间切换对应用透明，不需人工干预
+缺点：Master宕机或磁盘损坏时会有少量消息丢失
+4）多Master多Slave，每个Master配一个Slave，有多对Master-Slave，集群采用同步双写方式，主备都写成功，向应用返回成功
+优点：服务可用性与数据可用性非常高
+缺点：性能比异步集群略低，当前版本主宕备不能自动切换为主
+
+Master和Slave的配置文件参考conf目录下的配置文件
+Master与Slave通过指定相同的brokerName参数来配对，Master的BrokerId必须是0，Slave的BrokerId必须是大于0的数。
+一个Master下面可以挂载多个Slave，同一Master下的多个Slave通过指定不同的BrokerId来区分。
+
+
+
