@@ -1,0 +1,107 @@
+问题说明：
+在公司办公网内的一台物理机A上安装了linux系统（ip:192.168.9.120），在上面部署了jenkins，redmine，svn程序。由于是在办公网内，这台机器和同事电脑都是在同一网段的。
+突然某天问题出来了：有部分同事远程ssh登陆不上这台linux系统的机器，jenkins/redmine/svn也登陆不上，其他部分同事可以正常使用。
+
+后来发现，是因为这台linux机器的ip被人占用了，ip地址冲突引起的！！
+
+下面介绍下检查ip地址是否冲突的方法：
+---------------------------------------------------
+第一种方法（arping）：
+
+只需要在另一台同网段的linux机器B上（比如：129.168.9.200）上执行下面的命令（不能在本机arping检验自己的ip）：
+
+只需要在另一台同网段的linux机器B上（比如：129.168.9.200）上执行下面的命令（不能在本机arping检验自己的ip）：
+[root@dev ~]# arping 192.168.9.120
+ARPING 192.168.1.120 from 192.168.9.200 eth0
+Unicast reply from 192.168.9.120 [40:F4:EC:76:79:C2] 3.084ms
+Unicast reply from 192.168.9.120 [50:7B:9D:25:29:59] 0.817ms
+Unicast reply from 192.168.9.120 [50:7B:9D:25:29:59] 0.810ms
+
+........
+
+如果只检查出一个MAC地址，则表示网内A机器的的IP：192.168.9.120是唯一的
+
+如果有以上信息即查出两个MAC地址，则表示网内有一台MAC地址为40:F4:EC:76:79:C2的主机IP地址与A机器相同。
+
+这时可以通过ifconfig命令验证A机器，如下发现：A机器的MAC地址是50:7B:9D:25:29:59 。
+我们可以用局域网扫描软件找到MAC地址为40:F4:EC:76:79:C2的主机，并将其隔离或更换IP地址。
+[root@redmine ~]# ifconfig
+eth0 Link encap:Ethernet HWaddr 50:7B:9D:25:29:59 
+inet addr:192.168.9.120 Bcast:192.168.9.255 Mask:255.255.255.0
+inet6 addr: fe80::527b:9dff:fe25:2959/64 Scope:Link
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:573710854 errors:0 dropped:0 overruns:0 frame:0
+TX packets:849943293 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:1000 
+RX bytes:58543890628 (54.5 GiB) TX bytes:1248037935176 (1.1 TiB)
+
+lo Link encap:Local Loopback 
+inet addr:127.0.0.1 Mask:255.0.0.0
+inet6 addr: ::1/128 Scope:Host
+UP LOOPBACK RUNNING MTU:16436 Metric:1
+RX packets:17370722 errors:0 dropped:0 overruns:0 frame:0
+TX packets:17370722 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:0 
+RX bytes:65642509325 (61.1 GiB) TX bytes:65642509325 (61.1 GiB)
+
+---------------------------------------------------------
+检验原理：
+arping命令是以广播地址发送arp packets，以太网内所有的主机都会收到这个arp packets，但是本机收到之后不会Reply任何信息。
+当我们在linux主机端上执行下面的命令时：
+arping 192.168.9.120　　
+会默认使用eth0，向局域网内所有的主机发送一个：
+who has 192.168.9.120的arp request，tell 192.168.9.120 your mac address，
+
+当这台windows主机端收到这个arp packets后，则会应答：
+"I am 192.168.9.120 , mac是00:25:e4:6a:4b:f4"，这样我们会收到mac地址为00:25:e4:6a:4b:f4的windows主机的Reply信息。
+---------------------------------------------------------
+
+---------------------------------------------------------
+第二种方法（arp-scan）
+
+arp-scan这个工具会在本地网络发送ARP（Address Resolution Protocol）(地址解析协议)包来收集地址。如果有多个MAC地址声称拥有相同的IP地址，那么这里就存在冲突。
+
+首先安装arp-scan则输入：
+[root@dev ~]# yum install -y arp-scan 
+------------------------------------
+如果报错说没有这个软件包，则需要提前安装epel软件仓库
+centos5 64位：
+rpm -ivh http://dl.fedoraproject.org/pub/epel/5/x86_64/epel-release-5-4.noarch.rpm
+
+centos6 64位：
+rpm -ivh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+
+centos6 64位：
+yum install -y http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-8.noarch.rpm
+------------------------------------
+
+要检测IP冲突，运行下面的命令:
+
+[root@dev ~]# arp-scan -l
+Interface: eth0, datalink type: EN10MB (Ethernet)
+Starting arp-scan 1.9.2 with 256 hosts (http://www.nta-monitor.com/tools-resources/security-tools/arp-scan/)
+192.168.9.1 00:25:b3:f9:16:3e Hewlett Packard
+192.168.9.2 30:8d:99:ab:42:40 Hewlett Packard
+192.168.9.4 24:26:42:a6:81:f9 SHARP Corporation.
+192.168.9.7 f4:ce:46:3e:15:d6 Hewlett Packard
+192.168.9.8 08:2e:5f:bd:0f:43 Hewlett Packard
+192.168.9.9 00:21:5a:84:9d:0c Hewlett Packard
+................
+................
+192.168.9.119 68:f7:28:d5:d4:26 LCFC(HeFei) Electronics Technology co., ltd
+192.168.9.120 50:7b:9d:25:29:59 LCFC(HeFei) Electronics Technology co., ltd
+192.168.9.120 40:F4:EC:76:79:C2 VMware, Inc. (DUP: 2)
+192.168.9.121 00:23:24:9b:09:89 G-PRO COMPUTER
+192.168.9.122 b8:88:e3:35:8e:74 COMPAL INFORMATION (KUNSHAN) CO., LTD.
+...............
+...............
+
+110 packets received by filter, 0 packets dropped by kernel
+Ending arp-scan 1.9.2: 256 hosts scanned in 2.257 seconds (113.42 hosts/sec). 110 responded
+
+由上面信息可知：192.168.9.120这个IP冲突了，因为它出现了两次，并且可知这个ip被vmware虚拟机占用了。
+需要找到使用这个ip的机器，将其ip更换即可！
+
+1）“arp-scan -l” 命令表示查看与本机在同一局域网内的所有机器的ip使用情况
+2）“arp-scan –I eth0 -l” 命令表示查看与本机在同一局域网内的所有主机的eth0网卡的ip使用情况
+

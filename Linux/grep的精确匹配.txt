@@ -1,0 +1,176 @@
+grep（global search regular expression(RE) and print out the line，全面搜索正则表达式并把行打印出来）是一种强大的文本搜索工具，它能使用正则表达式搜索文本，并把匹配的行打印出来。
+
+使用grep搜索某个关键字时，默认搜索出来的是所有包含该关键字的行，如下：
+搜索/var/named/veredholdings.cn_zone文件中172.16.50.24所在的行，默认会把所有包括172.16.50.24所在的行打印出来。
+[root@uatdns01 ~]# cat /var/named/veredholdings.cn_zone|grep 172.16.50.24
+devzl-app01                   IN      A       172.16.50.243
+devzl-app02                   IN      A       172.16.50.244
+devzl-redis01                 IN      A       172.16.50.245
+devzl-redis02                 IN      A       172.16.50.246
+devzl-redis03                 IN      A       172.16.50.247
+devzl-oracle01               IN      A       172.16.50.242
+wiki02                            IN      A       172.16.50.24
+
+[root@uatdns01 ~]# cat /var/named/veredholdings.cn_zone|grep 172.16.50.24 --color
+devzl-app01                   IN      A       172.16.50.243
+devzl-app02                   IN      A       172.16.50.244
+devzl-redis01                 IN      A       172.16.50.245
+devzl-redis02                 IN      A       172.16.50.246
+devzl-redis03                 IN      A       172.16.50.247
+devzl-oracle01               IN      A       172.16.50.242
+wiki02                            IN      A        172.16.50.24
+
+[root@uatdns01 ~]# cat /var/named/veredholdings.cn_zone|grep -o 172.16.50.24 
+172.16.50.24
+172.16.50.24
+172.16.50.24
+172.16.50.24
+172.16.50.24
+172.16.50.24
+172.16.50.24
+
+要想精确地搜索出文件中某个单词所在的行，而不是打印所有包括该单词字样的行，可以使用grep -w参数
+-w（--word-regexp）：表示强制PATTERN仅完全匹配字词
+[root@uatdns01 ~]# cat /var/named/veredholdings.cn_zone|grep -w 172.16.50.24 
+wiki02                        IN      A       172.16.50.24
+或者使用grep "\<\>"形式也可以实现精确匹配
+[root@uatdns01 named]# cat /var/named/veredholdings.cn_zone|grep "\<172.16.50.24\>" 
+wiki02                        IN      A       172.16.50.24
+
+====================面试时给出下面两个简单问题===================
+1）精确地找出名为abc的进程名。
+   ps -ef|grep -w abc
+   或者
+   ps -ef|grep "\<abc\>"
+2）判断该进程的数量是否在3-5之间。
+   ps -ef|grep -w abc|wc -l
+   或者
+   ps -ef|grep "\<abc\>"|wc -l
+
+================grep选项集锦====================
+-a       不要忽略二进制数据。
+-A      <显示列数> 除了显示符合范本样式的那一行之外，并显示该行之后的内容。
+-b       在显示符合范本样式的那一行之外，并显示该行之前的内容。
+-c       计算符合范本样式的列数。
+-C      <显示列数>或-<显示列数>  除了显示符合范本样式的那一列之外，并显示该列之前后的内容。
+-d       <进行动作> 当指定要查找的是目录而非文件时，必须使用这项参数，否则grep命令将回报信息并停止动作。
+-e       <范本样式> 指定字符串作为查找文件内容的范本样式。
+-E       将范本样式为延伸的普通表示法来使用，意味着使用能使用扩展正则表达式。
+-f        <范本文件> 指定范本文件，其内容有一个或多个范本样式，让grep查找符合范本条件的文件内容，格式为每一列的范本样式。
+-F       将范本样式视为固定字符串的列表。
+-G      将范本样式视为普通的表示法来使用。
+-h       在显示符合范本样式的那一列之前，不标示该列所属的文件名称。
+-H       在显示符合范本样式的那一列之前，标示该列的文件名称。
+-i         忽略字符大小写的差别。
+-l         列出文件内容符合指定的范本样式的文件名称。
+-L        列出文件内容不符合指定的范本样式的文件名称。
+-n         在显示符合范本样式的那一列之前，标示出该列的编号。
+-q        不显示任何信息。
+-R/-r    此参数的效果和指定“-d recurse”参数相同。
+-s        不显示错误信息。
+-v        反转查找。
+-w       只显示全字符合的列。
+-x        只显示全列符合的列。
+-y        此参数效果跟“-i”相同。
+-o        只输出文件中匹配到的部分。
+
+========================grep常用示例========================
+1）在文件中搜索一个单词，命令会返回一个包含"match_pattern"的文本行：
+[root@test ~]# grep match_pattern file_name
+2）在多个文件中查找：
+[root@test ~]# grep "match_pattern" file_1 file_2 file_3 ...
+3）输出除之外的所有行 -v 选项：
+[root@test ~]# grep -v "match_pattern" file_name
+4）标记匹配颜色 --color=auto 选项：
+[root@test ~]# grep "match_pattern" file_name --color=auto
+5）使用正则表达式 -E 选项：
+[root@test ~]# grep -E "[1-9]+"
+或
+[root@test ~]# egrep "[1-9]+"
+6) 只输出文件中匹配到的部分 -o 选项：
+[root@test ~]# echo this is a test line. | grep -o -E "[a-z]+\."
+line.
+[root@test ~]# echo this is a test line. | egrep -o "[a-z]+\."
+line.
+7）统计文件或者文本中包含匹配字符串的行数 -c 选项：
+[root@test ~]# grep -c "text" file_name
+8）输出包含匹配字符串的行数 -n 选项：
+[root@test ~]# grep "text" -n file_name
+或
+[root@test ~]# cat file_name | grep "text" -n
+9）多个文件
+[root@test ~]# grep "text" -n file_1 file_2
+10）打印样式匹配所位于的字符或字节偏移：
+[root@test ~]# echo gun is not unix | grep -b -o "not"
+7:not
+#一行中字符串的字符便宜是从该行的第一个字符开始计算，起始值为0。选项 -b -o 一般总是配合使用。
+11）搜索多个文件并查找匹配文本在哪些文件中：
+[root@test ~]# grep -l "text" file1 file2 file3...
+
+grep递归搜索文件
+12）在多级目录中对文本进行递归搜索：
+[root@test ~]# grep "text" . -r -n
+.表示当前目录。
+13）忽略匹配样式中的字符大小写：
+[root@test ~]# echo "hello world" | grep -i "HELLO"
+hello
+14）选项 -e 制动多个匹配样式：
+[root@test ~]# echo this is a text line | grep -e "is" -e "line" -o
+is
+is
+line
+15）也可以使用-f选项来匹配多个样式，在样式文件中逐行写出需要匹配的字符。
+[root@test ~]# cat patfile
+aaa
+bbb
+[root@test ~]# echo aaa bbb ccc ddd eee | grep -f patfile -o
+
+在grep搜索结果中包括或者排除指定文件：
+16）只在目录中所有的.php和.html文件中递归搜索字符"main()"
+[root@test ~]# grep "main()" . -r --include *.{php,html}
+17）在搜索结果中排除所有README文件
+[root@test ~]# grep "main()" . -r --exclude "README"
+18）在搜索结果中排除filelist文件列表里的文件
+[root@test ~]# grep "main()" . -r --exclude-from filelist
+19）使用0值字节后缀的grep与xargs：
+#测试文件：
+[root@test ~]# echo "aaa" > file1
+[root@test ~]# echo "bbb" > file2
+[root@test ~]# echo "aaa" > file3
+[root@test ~]# grep "aaa" file* -lZ | xargs -0 rm
+20）执行后会删除file1和file3，grep输出用-Z选项来指定以0值字节作为终结符文件名（\0），xargs -0 读取输入并用0值字节终结符分隔文件名，然后删除匹配文件，-Z通常和-l结合使用。
+grep静默输出：
+[root@test ~]# grep -q "test" filename
+不会输出任何信息，如果命令运行成功返回0，失败则返回非0值。一般用于条件测试。
+
+打印出匹配文本之前或者之后的行：
+21）显示匹配某个结果之后的3行，使用 -A 选项：
+[root@test ~]# seq 10 | grep "5" -A 3
+5
+6
+7
+8
+22）显示匹配某个结果之前的3行，使用 -B 选项：
+[root@test ~]# seq 10 | grep "5" -B 3
+2
+3
+4
+5
+23）显示匹配某个结果的前三行和后三行，使用 -C 选项：
+[root@test ~]# seq 10 | grep "5" -C 3
+2
+3
+4
+5
+6
+7
+8
+24）如果匹配结果有多个，会用"--"作为各匹配结果之间的分隔符：
+[root@test ~]# echo -e "a\nb\nc\na\nb\nc" | grep a -A 1
+a
+b
+--
+a
+b
+[root@test ~]# grep "match_pattern" file_name
+

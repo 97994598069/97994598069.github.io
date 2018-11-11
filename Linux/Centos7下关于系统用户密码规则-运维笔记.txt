@@ -1,0 +1,305 @@
+针对Centos7下的系统用户的密码规则复杂度的设置，处于安全考虑，说明如下：
+
+一、设置密码规则
+
+1）密码长度、有效期 
+/etc/login.defs文件是当创建用户时的一些规划，比如创建用户时，是否需要家目录，UID和GID的范围；用户的期限等等，这个文件是可以通过root来定义的。
+PASS_MAX_DAYS 90 —-两次改变密码之间相距的最大天数，密码有效最大天数
+PASS_MIN_DAYS 6 —-两次改变密码之间相距的最小天数，为零时代表任何时候都可以更改密码
+PASS_MIN_LEN 6 —-密码最小长度
+PASS_WARN_AGE 30 —-在密码过期之前警告的天数
+ 
+注意：以上只对之后新增的用户有效，如果要修改已存在的用户密码规则，需要使用chage命令
+
+
+2）查看用户的密码规则
+Last password change                                    : Sep 11, 2018
+Password expires                                        : Sep 30, 2030
+Password inactive                                       : never
+Account expires                                         : never
+Minimum number of days between password change          : 6
+Maximum number of days between password change          : 90
+Number of days of warning before password expires       : 7
+ 
+翻译过来：
+最近一次密码修改时间 ： 9月 11, 2018
+密码过期时间 ： 9月 30, 2030
+密码失效时间 ：从不
+帐户过期时间 ：从不
+两次改变密码之间相距的最小天数 ：6
+两次改变密码之间相距的最大天数 ：90
+在密码过期之前警告的天数 ：7
+ 
+=============================================================
+chage是用了修改账户有效期限的命令。
+注意：不要用该命令给root用户加上有效期，如果密码过期，再加上后文说的/etc/shadow文件加锁禁止修改，会导致root提示修改密码，
+无法成功修改密码，从而无法登陆。 如果要修改密码过期时间为"从不"
+ 
+修改方法：
+# chage -M 90 -m 6 -W 30 test
+# chage -M 99999 kevin
+# chage -l username   查看系统账户的当前设置
+# chage -M 600 fzwb_word   修改fzwb_word账户密码的有效天数为600天。过了这个天数，账户密码无效
+# chage -E "Jun 16, 2016" fzwb_word  设定fzwb_word账户的具体到期时间。过了这个日期，账户就无效。默认是never  （fzwb_word为ftp的账户账户）
+  
+注意：
+chage -M  针对的是账户密码过期时间。
+chage -E  这个命令针对的是账户过期时间
+  
+设定账户过期时间，除了使用chage -E命令，还可以使用usermod -e命令
+# usermod -e "Jun 16, 2016" fzwb_word   设定fzwb_word账户的具体到期时间。默认是never  （fzwb_word为ftp的账户账户）
+  
+下面命令查看， fzwb_word 这个账户的时间到 2015 年 6 月 10 号就到期了！！
+修改为 2016 月 6 月 16 号到期！
+[root@kevin ~]# chage -l fzwb_word
+Minimum: 0
+Maximum: 99999
+Warning: 7
+Inactive: -1
+Last Change: Jun 15, 2012
+Password Expires: Never
+Password Inactive: Never
+Account Expires: Jun 10, 2015
+  
+[root@kevin ~]# usermod -e "Jun 16, 2016" fzwb_word
+[root@kevin ~]# chage -l fzwb_word
+Minimum: 0
+Maximum: 99999
+Warning: 7
+Inactive: -1
+Last Change: Jun 15, 2012
+Password Expires: Never
+Password Inactive: Never
+Account Expires: Jun 16, 2016
+  
+--------------------------------------------------------------------------------
+可以使用chage命令来手动修改账户的相关属性：
+格式：chage [选项] 账户名
+  
+[选项]
+-m：密码可更改的最小天数。为零时代表任何时候都可以更改密码。
+-M：密码保持有效的最大天数。
+-w：账户密码到期前，提前收到警告信息的天数。
+-E：帐号到期的日期。过了这天，此帐号将不可用。
+-d：上一次更改的日期。
+-i：停滞时期。如果一个密码已过期这些天，那么此帐号将不可用。
+-l：例出当前的设置。由非特权账户来确定他们的密码或帐号何时过期。
+  
+实例如下：
+[root@kevin ~]# chage -l wangshibo
+Last password change          : Mar 09, 2017       //账户创建时间
+Password expires          : Aug 30, 2022           //账户密码过期时间
+Password inactive         : never
+Account expires           : never                 //账户过期时间
+Minimum number of days between password change    : 0
+Maximum number of days between password change    : 2000
+Number of days of warning before password expires : 7
+  
+[root@kevin ~]# usermod -e "Jun 16, 2018" wangshibo
+  
+[root@kevin ~]# chage -l wangshibo
+Last password change          : Mar 09, 2017
+Password expires          : Aug 30, 2022
+Password inactive         : never
+Account expires           : Jun 16, 2018                     
+Minimum number of days between password change    : 0
+Maximum number of days between password change    : 2000
+Number of days of warning before password expires : 7
+  
+[root@kevin ~]# chage -M 20 wangshibo
+  
+[root@kevin ~]# chage -l wangshibo
+Last password change          : Mar 09, 2017
+Password expires          : Mar 29, 2017       
+Password inactive         : never
+Account expires           : Jun 16, 2018
+Minimum number of days between password change    : 0
+Maximum number of days between password change    : 20
+Number of days of warning before password expires : 7
+  
+[root@kevin ~]# chage -E "Jun 2, 2020" wangshibo
+  
+[root@kevin ~]# chage -l wangshibo
+Last password change          : Mar 09, 2017
+Password expires          : Mar 29, 2017
+Password inactive         : never
+Account expires           : Jun 02, 2020
+Minimum number of days between password change    : 0
+Maximum number of days between password change    : 20
+Number of days of warning before password expires : 7
+
+
+
+3) 设置密码过期的天数。 用户必须在几天内更改密码。 此设置仅在创建用户时才会产生影响，而不会影响到现有用户。 如果设置为现有用户，请运行命令"chage -M（days）（user）"
+[root@kevin ~]# vim /etc/login.defs
+# line 25: set 60 for Password Expiration
+PASS_MAX_DAYS 60
+
+
+4）设置可用密码的最短天数。 至少在改变它之后，用户必须至少使用他们的密码。 此设置仅在创建用户时才会产生影响，而不会影响到现有用户。 如果设置为现有用户，请运行命令"chage -m（days）（user）"
+[root@kevin ~]# vim /etc/login.defs
+# line 26: set 2 for Minimum number of days available
+PASS_MIN_DAYS 2
+
+
+5）在到期前设置警告的天数。 此设置仅在创建用户时才会产生影响，而不会影响到现有用户。 如果设置为存在用户，请运行命令"chage -W（days）（user）"
+[root@kevin ~]# vim /etc/login.defs
+# line 28: set 7 for number of days for warnings
+PASS_WARN_AGE 7
+
+
+6）5次更改密码不能有重复(即最近5次使用过的密码就不能再用作新密码了)，并且每次修改密码都会将历史密码记录在/etc/security/opasswd文件中
+[root@kevin ~]# vim /etc/pam.d/system-auth
+# near line 15: prohibit to use the same password for 5 generation in past
+password     sufficient     pam_unix.so sha512 shadow nullok try_first_pass use_authtok remember=5
+
+
+7）设置最小密码长度。 用户不能将密码长度设置为小于此参数
+[root@kevin ~]# authconfig --passminlen=8 --update
+[root@kevin ~]# grep "^minlen" /etc/security/pwquality.conf
+minlen = 8
+
+
+8）为新密码设置所需的最少字符类数（种类⇒大写字母/小写字母/数字/特殊字符）
+[root@kevin ~]# authconfig --passminclass=2 --update
+[root@kevin ~]# grep "^minclass" /etc/security/pwquality.conf
+minclass = 2
+
+
+9）在新密码中设置允许的连续相同字符的最大数量
+[root@kevin ~]# authconfig --passmaxrepeat=3 --update
+[root@kevin ~]# grep "^maxrepeat" /etc/security/pwquality.conf
+maxrepeat = 3
+
+
+10）在新密码中设置同一类的最大允许连续字符数
+[root@kevin ~]# authconfig --passmaxclassrepeat=4 --update
+[root@kevin ~]# grep "^maxclassrepeat" /etc/security/pwquality.conf
+maxclassrepeat = 4
+
+
+11）新密码中至少需要一个小写字符
+[root@kevin ~]# authconfig --enablereqlower --update
+[root@kevin ~]# grep "^lcredit" /etc/security/pwquality.conf
+lcredit = -1
+
+
+12）新密码中至少需要一个大写字符
+[root@kevin ~]# authconfig --enablerequpper --update
+[root@kevin ~]# grep "^ucredit" /etc/security/pwquality.conf
+ucredit = -1
+
+
+13）新密码中至少需要一位数字
+[root@kevin ~]# authconfig --enablereqdigit --update
+[root@kevin ~]# grep "^dcredit" /etc/security/pwquality.conf
+dcredit = -1
+
+
+14）新密码中至少需要一个其他字符
+[root@kevin ~]# authconfig --enablereqother --update
+[root@kevin ~]# grep "^ocredit" /etc/security/pwquality.conf
+ocredit = -1
+
+
+15）在新密码中设置单调字符序列的最大长度（ex⇒’12345’，’fedcb’）
+[root@kevin ~]# vim /etc/security/pwquality.conf
+# add to the end
+maxsequence = 3
+
+
+16）设置旧密码中不能出现的新密码中的字符数
+[root@kevin ~]# vim /etc/security/pwquality.conf
+# add to the end
+difok = 5
+
+
+17）检查新密码中是否包含用户passwd项的GECOS字段中长度超过3个字符的单词
+[root@kevin ~]# vim /etc/security/pwquality.conf
+# add to the end
+gecoscheck = 1
+
+
+18）设置不能包含在密码中的Ssace分隔列表
+[root@kevin ~]# vim /etc/security/pwquality.conf
+# add to the end
+badwords = denywords1 denywords2 denywords3
+
+
+19）为新密码设置散列/密码算法。 （默认是sha512）
+[root@kevin ~]# authconfig --test | grep hashing
+ password hashing algorithm is sha512
+  
+[root@kevin ~]# authconfig --passalgo=md5 --update  
+[root@kevin ~]# authconfig --test | grep hashing 
+ password hashing algorithm is md5
+
+ 
+二、账户锁定策略实现 
+策略要求如下：
+- 设定锁定的阈值为5次
+- 锁定时间为5分钟即300秒
+- 必须所有用户都受限，包括root
+
+
+1）修改配置文件/etc/pam.d/system-auth-ac，写入策略
+[root@server ~]# vim /etc/pam.d/system-auth-ac
+auth        required      pam_env.so
+auth        required      pam_tally2.so even_deny_root deny=5 unlock_time=60
+auth        sufficient    pam_unix.so nullok try_first_pass
+auth        requisite     pam_succeed_if.so uid >= 1000 quiet_success
+auth        required      pam_deny.so
+ 
+account     required      pam_unix.so
+account     required      pam_tally2.so
+account     sufficient    pam_localuser.so
+account     sufficient    pam_succeed_if.so uid < 1000 quiet
+account     required      pam_permit.so
+ 
+2）修改配置文件/etc/pam.d/password-auth-ac)
+[[root@server ~]# vimm /etc/pam.d/password-auth-ac
+auth        required      pam_env.so
+auth        required      pam_tally2.so deny=5 unlock_time=60
+auth        sufficient    pam_unix.so nullok try_first_pass
+auth        requisite     pam_succeed_if.so uid >= 1000 quiet_success
+auth        required      pam_deny.so
+ 
+account     required      pam_unix.so
+account     required      pam_tally2.so
+account     sufficient    pam_localuser.so
+account     sufficient    pam_succeed_if.so uid < 1000 quiet
+account     required      pam_permit.so
+
+
+3）查看用户锁定状态
+[root@ server pam.d]# pam_tally2 -u wangshibo
+Login           Failures Latest failure     From
+wangshibo                 7    12/20/16 14:02:55  192.168.10.86
+
+
+4）解锁状态
+[root@kevin ~]# pam_tally2 -r -u  wangshibo
+Login           Failures Latest failure     From
+wangshibo                 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

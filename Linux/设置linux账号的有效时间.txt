@@ -1,0 +1,38 @@
+在linux系统中，默认创建的用户的有效期限都是永久的，但有时候，我们需要对某些用户的有效期限做个限定！
+比如：公司给客户开的ftp账号，用于客户下载新闻稿件的。这个账号是有时间限制的，因为是付费的。合同到期了，这个账号就要求停用。
+
+废话不多说，直接说下操作记录：
+
+需求：
+创建lzwb账号，用于下载/home/hqsb里面的新闻稿件，这个账号的合同到期时间是2018年10月26号
+
+1）创建账号lzwb
+[root@dev ~]# useradd lzwb -d /home/hqsb -s /sbin/nologin
+
+2）默认情况下，这个账号建立后，有效期限是永久的。注意下面命令结果：
+Last password change： 表示账号创建时的时间
+Account expires： 表示账号到期时间
+命令格式：chage -l username 查看用户的到期时间情况
+[root@dev ~]# chage -l lzwb
+Last password change : Oct 26, 2016
+Password expires : never
+Password inactive : never
+Account expires : never
+Minimum number of days between password change : 0
+Maximum number of days between password change : 99999
+Number of days of warning before password expires : 7
+
+3）按照需求，修改账号的到期时间
+命令格式：usermod -e "到期时间" username 修改系统用户的时间
+[root@dev ~]# usermod -e "Oct 26,2018" lzwb
+
+再次查看，发现lzwb的有效时间截止到2018年的10月26号了。
+[root@dev ~]# chage -l lzwb
+Last password change : Oct 26, 2016
+Password expires : never
+Password inactive : never
+Account expires : Oct 26, 2018
+Minimum number of days between password change : 0
+Maximum number of days between password change : 99999
+Number of days of warning before password expires : 7
+
