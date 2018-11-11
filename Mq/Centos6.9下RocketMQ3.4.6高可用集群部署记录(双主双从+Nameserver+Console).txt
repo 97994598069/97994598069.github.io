@@ -1,0 +1,327 @@
+之前的文章已对RocketMQ做了详细介绍,这里就不再赘述了，下面是本人在测试和生产环境下RocketMQ3.4.6高可用集群的部署手册，在此分享下:
+
+1) 基础环境
+ip地址                 主机名                    角色
+192.168.10.200         mq-master01               broker-a
+192.168.10.201         mq-master02               broker-b
+192.168.10.202         mq-slave01                broker-a-s
+192.168.10.239         mq-slave02                broker-b-s
+192.168.10.205         mq-console-nameserver     nameserver、console
+
+
+生产环境准备5台虚拟机,如上,其中4台服务器为broker节点,2主2从;1台服务器作为nameserver和console节点.
+测试环境的话,可以只用两台,分别为broker的一主一从节点,nameserver和console服务一同部署到master节点上.
+关闭5台机器的iptables和selinux（所有节点机器上都要操作）
+[root@mq-master01 ~]# /etc/init.d/iptables stop
+[root@mq-master01 ~]# vim /etc/sysconfig/selinux
+......
+SELINUX=disabled
+[root@mq-master01 ~]# setenforce 0
+[root@mq-master01 ~]# getenforce
+Permissive
+   
+5台机器都要安装统一的java环境
+将jdk-8u131-linux-x64.rpm下载到/usr/local/src目录下
+下载地址：https://pan.baidu.com/s/1pLaAjPp
+提取密码：x27s
+
+
+[root@mq-master01 ~]# java -version
+-bash: java: command not found
+   
+如果自带了java环境,就卸载掉
+yum list installed |grep java
+yum -y remove java-1.7.0-openjdk*
+yum -y remove tzdata-java.noarch
+   
+[root@mq-master01 ~]# cd /usr/local/src/
+[root@mq-master01 src]# ll jdk-8u131-linux-x64_.rpm
+-rw-r--r-- 1 root root 169983496 Nov 19  2017 jdk-8u131-linux-x64_.rpm
+[root@mq-master01 src]# rpm -ivh jdk-8u131-linux-x64_.rpm --force
+   
+[root@mq-master01 src]# vim /etc/profile
+......
+JAVA_HOME=/usr/java/jdk1.8.0_131
+JAVA_BIN=/usr/java/jdk1.8.0_131/bin
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin:/bin:/sbin/
+CLASSPATH=.:/lib/dt.jar:/lib/tools.jar
+export JAVA_HOME JAVA_BIN PATH CLASSPATH
+   
+[root@mq-master01 src]# source /etc/profile
+[root@mq-master01 src]# java -version
+java version "1.8.0_131"
+Java(TM) SE Runtime Environment (build 1.8.0_131-b11)
+Java HotSpot(TM) 64-Bit Server VM (build 25.131-b11, mixed mode)
+  
+5台机器最好前做hosts绑定，否则后续启动broker的时候，会报错诸如：
+java.net.UnknownHostException: mq-master01: mq-master01: Name or service not known
+   
+[root@mq-master01 ~]# cat /etc/hosts
+......
+192.168.10.200         mq-master01
+192.168.10.201         mq-master02
+192.168.10.202         mq-slave01
+192.168.10.239         mq-slave02
+192.168.10.205         mq-console-nameserver
+ 
+5台机器的系统时间统一下
+[root@mq-master01 ~]# ntpdate ntp1.aliyun.com
+ 6 Sep 12:59:51 ntpdate[1203]: adjust time server 120.25.115.20 offset -0.000831 sec
+  
+本案例rocketmq3.4.6的相关软件包下载地址: https://pan.baidu.com/s/1VOYA60vIobtSxo9-9rTI6w
+提取密码: bxhr
+  
+软件包分别是:rocketmq_admin.zip, rocketmq_namesrv.zip, rocketmq.zip
+下载后放到/usr/local/src目录下
+服务安装目录都在/data下
+
+
+
+2) RocektMQ Broker双主双从环境部署(mq-master01,mq-master02,mq-slave01,mq-slave02四节点上操作)
+
+1）安装rocketmq（四台broker节点机器操作一样）
+[root@mq-master01 ~]# cd /usr/local/src/
+[root@mq-master01 src]# ll rocketmq.zip
+-rw-rw-r--. 1 1000 1000 16048060 May 22 10:33 rocketmq.zip
+[root@mq-master01 src]# unzip rocketmq.zip
+[root@mq-master01 src]# mv rocketmq /data/
+   
+2) 配置rocektmq broker （四个节点机器都要操作）.
+[root@mq-master01 src]# cd /data/rocketmq/conf/2m-2s-sync/
+[root@mq-master01 2m-2s-sync]# vim broker-a.properties
+brokerClusterName=Kevin-MQ-Cluster
+brokerName=broker-a
+brokerId=0
+namesrvAddr=192.168.10.205:20901
+autoCreateTopicEnable=false
+clusterTopicEnable=false
+brokerTopicEnable=false
+autoCreateSubscriptionGroup=false
+sendMessageThreadPoolNums=128
+pullMessageThreadPoolNums=128
+fetchNamesrvAddrByAddressServer=true
+filterServerNums=1
+serverWorkerThreads=32
+deleteWhen=04
+fileReservedTime=168
+brokerRole=SYNC_MASTER
+flushDiskType=SYNC_FLUSH
+#netty监听端口
+listenPort=20911
+ 
+====================================================================
+mq-master02节点配置
+[root@mq-master02 src]# cat /data/rocketmq/conf/2m-2s-sync/broker-b.properties
+brokerClusterName=Kevin-MQ-Cluster
+brokerName=broker-b
+brokerId=0
+namesrvAddr=192.168.10.205:20901
+autoCreateTopicEnable=false
+clusterTopicEnable=false
+brokerTopicEnable=false
+autoCreateSubscriptionGroup=false
+sendMessageThreadPoolNums=128
+pullMessageThreadPoolNums=128
+fetchNamesrvAddrByAddressServer=true
+filterServerNums=1
+serverWorkerThreads=32
+deleteWhen=04
+fileReservedTime=168
+brokerRole=SYNC_MASTER
+flushDiskType=SYNC_FLUSH
+#netty监听端口
+listenPort=20911
+ 
+====================================================================
+mq-slave01节点配置
+[root@mq-slave01 src]# cat /data/rocketmq/conf/2m-2s-sync/broker-a-s.properties
+brokerClusterName=Kevin-MQ-Cluster
+brokerName=broker-a
+brokerId=1
+namesrvAddr=192.168.10.205:20901
+autoCreateTopicEnable=false
+clusterTopicEnable=false
+brokerTopicEnable=false
+autoCreateSubscriptionGroup=false
+sendMessageThreadPoolNums=128
+pullMessageThreadPoolNums=128
+fetchNamesrvAddrByAddressServer=true
+filterServerNums=1
+serverWorkerThreads=32
+deleteWhen=04
+fileReservedTime=168
+brokerRole=SLAVE
+flushDiskType=SYNC_FLUSH
+#netty监听端口
+listenPort=20911
+ 
+====================================================================
+mq-slave02节点配置
+[root@mq-slave02 src]# cat /data/rocketmq/conf/2m-2s-sync/broker-b-s.properties
+brokerClusterName=Kevin-MQ-Cluster
+brokerName=broker-b
+brokerId=1
+namesrvAddr=192.168.10.205:20901
+autoCreateTopicEnable=false
+clusterTopicEnable=false
+brokerTopicEnable=false
+autoCreateSubscriptionGroup=false
+sendMessageThreadPoolNums=128
+pullMessageThreadPoolNums=128
+fetchNamesrvAddrByAddressServer=true
+filterServerNums=1
+serverWorkerThreads=32
+deleteWhen=04
+fileReservedTime=168
+brokerRole=SLAVE
+flushDiskType=SYNC_FLUSH
+#netty监听端口
+listenPort=20911
+ 
+3) 启动NameServer （四台broker节点机器操作一样）
+只需要将/data/rocketmq/startBrokerAM.sh中的JAVA_HOME改成自己服务的java路径就行了.
+本案例的java家目录路径是/usr/java/jdk1.8.0_131
+   
+[root@mq-master01 ~]# cat /data/rocketmq/startBrokerAM.sh |grep JAVA_HOME
+export JAVA_HOME=/data/software/jdk1.7.0_80
+[root@mq-master01 ~]# sed -i 's#/data/software/jdk1.7.0_80#/usr/java/jdk1.8.0_131#g' /data/rocketmq/startBrokerAM.sh
+[root@mq-master01 ~]# cat /data/rocketmq/startBrokerAM.sh |grep JAVA_HOME                                        
+export JAVA_HOME=/usr/java/jdk1.8.0_131
+  
+温馨提示：
+启动顺序：最好是先启动NameServer，再启动BrokerServer（启动BrokerServer之前关闭防火墙）
+停止顺序：最好先停止BrokerServer，再停止NameServer
+  
+四台节点的启动脚本分别为:
+[root@mq-master01 rocketmq]# cat startBrokerAM.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_131
+nohup sh ./alibaba-rocketmq/bin/mqbroker -c ./conf/2m-2s-sync/broker-a.properties > ./nohup.out 2>&1 &
+ 
+[root@mq-master02 rocketmq]# cat startBrokerAM.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_131
+nohup sh ./alibaba-rocketmq/bin/mqbroker -c ./conf/2m-2s-sync/broker-b.properties > ./nohup.out 2>&1 &
+ 
+[root@mq-slave01 rocketmq]# cat startBrokerAM.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_131
+nohup sh ./alibaba-rocketmq/bin/mqbroker -c ./conf/2m-2s-sync/broker-a-s.properties > ./nohup.out 2>&1 &
+ 
+[root@mq-slave02 rocketmq]# cat startBrokerAM.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_131
+nohup sh ./alibaba-rocketmq/bin/mqbroker -c ./conf/2m-2s-sync/broker-b-s.properties > ./nohup.out 2>&1 &
+ 
+启动NameServer（四台broker节点机器操作一样）
+[root@mq-master01 ~]# cd /data/rocketmq/         #一定要先切换到该路径下
+[root@mq-master01 rocketmq]# /bin/bash /data/rocketmq/startBrokerAM.sh
+  
+[root@mq-master01 rocketmq]# ps -ef|grep rocketmq                  
+root     16783     1  0 09:13 pts/1    00:00:00 sh ./alibaba-rocketmq/bin/mqbroker -c ./conf/2m-2s-sync/broker-a.properties
+root     16787 16783  0 09:13 pts/1    00:00:00 sh /data/rocketmq/alibaba-rocketmq/bin/runbroker.sh com.alibaba.rocketmq.broker.BrokerStartup -c ./conf/2m-2s-sync/broker-a.properties
+root     16790 16787 48 09:13 pts/1    00:00:01 /usr/java/jdk1.8.0_131/bin/java -Drocketmq.home.dir=/data/rocketmq/alibaba-rocketmq -Duser.home=/data/rocketmq -Xms2048M -Xmx2048M -XX:PermSize=512M -XX:MaxPermSize=512M -XX:NewSize=768M -XX:MaxNewSize=768M -XX:+UseConcMarkSweepGC -XX:+UseCMSCompactAtFullCollection -XX:CMSInitiatingOccupancyFraction=70 -XX:+CMSParallelRemarkEnabled -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+CMSClassUnloadingEnabled -XX:SurvivorRatio=8 -XX:+DisableExplicitGC -verbose:gc -Xloggc:/data/rocketmq/logs/gclog/rmq_bk_gc.16787.log -XX:+PrintGCDetails -XX:-OmitStackTraceInFastThrow -Djava.ext.dirs=/data/rocketmq/alibaba-rocketmq/bin/../lib -cp .:/data/rocketmq/alibaba-rocketmq/bin/../conf: -Drocketmq.namesrv.domain=172.16.50.144 -Drocketmq.namesrv.domain.port=48080 -Drocketmq.namesrv.domain.subgroup=namesrv/getNSAddr.do com.alibaba.rocketmq.broker.BrokerStartup -c ./conf/2m-2s-sync/broker-a.properties
+root     16835 16088  0 09:13 pts/1    00:00:00 grep rocketmq
+  
+[root@mq-master01 rocketmq]# lsof -i:20911
+COMMAND   PID USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+java    29934 root   79u  IPv6 20211949      0t0  TCP *:20911 (LISTEN)
+java    29934 root   96u  IPv6 20212542      0t0  TCP mq-master01:20911->mq-master02:53222 (ESTABLISHED)
+[root@mq-master01 rocketmq]# lsof -i:20901
+COMMAND   PID USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+java    29934 root   88u  IPv6 20212051      0t0  TCP mq-master01:41510->mq-console-nameserver:20901 (ESTABLISHED)
+  
+[root@mq-master01 rocketmq]# jps
+30235 Jps
+29934 BrokerStartup
+  
+查看rockermq的版本:
+[root@mq-master01 rocketmq]# ll /data/rocketmq/alibaba-rocketmq/lib/
+total 11836
+-rw-rw-r--. 1 root root   16088 Nov 28  2016 annotation-indexer-1.4.jar
+-rw-rw-r--. 1 root root    3159 Nov 28  2016 bridge-method-annotation-1.12.jar
+-rw-rw-r--. 1 root root   41123 Nov 28  2016 commons-cli-1.2.jar
+-rw-rw-r--. 1 root root  259600 Nov 28  2016 commons-codec-1.7.jar
+-rw-rw-r--. 1 root root  185140 Nov 28  2016 commons-io-2.4.jar
+-rw-rw-r--. 1 root root  284220 Nov 28  2016 commons-lang-2.6.jar
+-rw-rw-r--. 1 root root 2838580 Nov 28  2016 derby-10.10.2.0.jar
+-rw-rw-r--. 1 root root  409203 Nov 28  2016 fastjson-1.2.3.jar
+-rw-rw-r--. 1 root root  154710 Nov 28  2016 github-api-1.59.jar
+-rw-rw-r--. 1 root root   33483 Nov 28  2016 jackson-annotations-2.2.3.jar
+-rw-rw-r--. 1 root root  192699 Nov 28  2016 jackson-core-2.2.3.jar
+-rw-rw-r--. 1 root root  865838 Nov 28  2016 jackson-databind-2.2.3.jar
+-rw-rw-r--. 1 root root  544021 Nov 28  2016 javassist-3.7.ga.jar
+-rw-rw-r--. 1 root root  264600 Nov 28  2016 logback-classic-1.0.13.jar
+-rw-rw-r--. 1 root root  418870 Nov 28  2016 logback-core-1.0.13.jar
+-rw-rw-r--. 1 root root 1581066 Nov 28  2016 mockito-all-1.9.5.jar
+-rw-rw-r--. 1 root root  964879 Nov 28  2016 mysql-connector-java-5.1.31.jar
+-rw-rw-r--. 1 root root 1887979 Nov 28  2016 netty-all-4.0.25.Final.jar
+-rw-rw-r--. 1 root root  160098 Nov 28  2016 rocketmq-broker-3.4.6-lo-20161026.115524-467.jar
+-rw-rw-r--. 1 root root  241439 Nov 28  2016 rocketmq-client-3.4.6-lo-20160927.070341-319.jar
+-rw-rw-r--. 1 root root  213219 Nov 28  2016 rocketmq-common-3.4.6-lo-20160927.070334-319.jar
+-rw-rw-r--. 1 root root   38123 Nov 28  2016 rocketmq-filtersrv-3.4.6-lo-20160927.070417-318.jar
+-rw-rw-r--. 1 root root   33525 Nov 28  2016 rocketmq-namesrv-3.4.6-lo-20160927.070407-319.jar
+-rw-rw-r--. 1 root root   93612 Nov 28  2016 rocketmq-remoting-3.4.6-lo-20160927.070325-319.jar
+-rw-rw-r--. 1 root root    4088 Nov 28  2016 rocketmq-srvutil-3.4.6-lo-20160927.070351-319.jar
+-rw-rw-r--. 1 root root  157893 Nov 28  2016 rocketmq-store-3.4.6-lo-20160927.070348-319.jar
+-rw-rw-r--. 1 root root  147117 Nov 28  2016 rocketmq-tools-3.4.6-lo-20160927.070403-319.jar
+-rw-rw-r--. 1 root root   26084 Nov 28  2016 slf4j-api-1.7.5.jar
+
+
+3) NameServer和Console部署(mq-console-nameserver节点上操作)
+安装配置NameServer
+[root@mq-console-nameserver src]# cd
+[root@mq-console-nameserver ~]# cd /usr/local/src/
+[root@mq-console-nameserver src]# ll rocketmq_namesrv.zip
+-rw-rw-r-- 1 1000 1000 11802959 May 22 11:03 rocketmq_namesrv.zip
+[root@mq-console-nameserver src]# unzip rocketmq_namesrv.zip
+[root@mq-console-nameserver src]# mv rocketmq_namesrv /data/
+[root@mq-console-nameserver src]# vim /data/rocketmq_namesrv/conf/namesrv.properties
+listenPort=20901
+   
+修改JAVA_HOME
+[root@mq-console-nameserver src]# sed -i 's#/data/software/jdk1.7.0_80#/usr/java/jdk1.8.0_131#g' /data/rocketmq_namesrv/startNameServer.sh
+[root@mq-console-nameserver src]# cat /data/rocketmq_namesrv/startNameServer.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_131
+nohup sh ./alibaba-rocketmq/bin/mqnamesrv -c ./conf/namesrv.properties > ./nohup.out 2>&1 &
+   
+启动NameServer
+[root@mq-console-nameserver src]# cd /data/rocketmq_namesrv/
+[root@mq-console-nameserver rocketmq_namesrv]# sh startNameServer.sh
+   
+[root@mq-console-nameserver rocketmq_namesrv]# ps -ef|grep mqnamesrv
+root     17455     1  0 09:23 pts/1    00:00:00 sh ./alibaba-rocketmq/bin/mqnamesrv -c ./conf/namesrv.properties
+root     17555 24306  0 09:23 pts/1    00:00:00 grep mqnamesrv
+[root@mq-console-nameserver rocketmq_namesrv]# lsof -i:20901
+COMMAND   PID USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+java    17461 root   47u  IPv6 40870224      0t0  TCP *:20901 (LISTEN)
+  
+  
+==================================================
+安装部署Console监控平台
+[root@mq-console-nameserver ~]# cd /usr/local/src/
+[root@mq-console-nameserver src]# ll rocketmq_admin.zip
+-rw-rw-r-- 1 1000 1000 41574127 May 22 11:03 rocketmq_admin.zip
+[root@mq-console-nameserver src]# unzip rocketmq_admin.zip
+   
+服务端口(如下改成48080)
+[root@mq-console-nameserver src]# vim /data/rocketmq_admin/apache-tomcat-8.0.32-rocketmq-console/conf/server.xml
+......
+    <Connector port="48080" protocol="HTTP/1.1"
+               connectionTimeout="20000"
+               redirectPort="28443" />
+   
+[root@mq-console-nameserver src]# mv rocketmq_admin /data/
+[root@mq-console-nameserver src]# cd /data/rocketmq_admin/
+[root@mq-console-nameserver rocketmq_admin]# cd apache-tomcat-8.0.32-rocketmq-console/webapps/rocketmq/WEB-INF/classes/
+[root@mq-console-nameserver classes]# vim config.properties
+rocketmq.namesrv.addr=192.168.10.205:20901
+throwDone=true
+   
+启动console服务
+[root@mq-console-nameserver classes]# /data/rocketmq_admin/apache-tomcat-8.0.32-rocketmq-console/bin/startup.sh
+[root@mq-console-nameserver classes]# lsof -i:48080
+COMMAND   PID USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+java    19338 root   46u  IPv6 40883769      0t0  TCP *:48080 (LISTEN)
+
+
+访问RockerMQ Console监控平台http://192.168.10.205:48080/rocketmq/cluster/list.do,如下截图:
+
+
+
