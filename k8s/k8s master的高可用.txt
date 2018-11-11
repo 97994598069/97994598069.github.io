@@ -1,0 +1,263 @@
+k8s master的高可用
+
+配置两台nginx服务器
+安装nginx 
+配置conf
+
+在和http段同级别的添加
+
+stream {
+	log_format main "$remote_addr $upstream_addr $time_local $status";
+	upstream k8s-apiserver {
+		server 192.168.2.41:6443;  ###指定两台k8s-master
+		server 192.168.2.49:6443; 
+	}
+	server {
+		listen 192.168.2.59:6443;  ##指定nginx-k8s-master的服务器的地址（即本地的ip） 
+		proxy_pass k8s-apiserver;  ##注意，此处是四层的；所以不带http；；如果是7层的需要加上http
+	}
+	
+}
+
+
+
+整体的架构：nginx-k8s-master（2台keepalived高可用）----->反向代理2台k8s-master服务器
+
+
+除了上述办法之外，是不是可以在node上该指定一个master的地方再添加一台master的ip呢，有坑吗
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++
+
+新部署一台master02（192.168.1.25）  和第一台master01步骤一样
+将master01上相关文件拷贝到master02上
+
+在master01上拷贝文件
+scp -rp /opt/kubernetes/ root@192.168.1.25:/opt/ 
+
+scp -p /usr/lib/systemd/system/{kube-apiserver,kube-scheduler,kube-controller-manager}.service root@192.168.1.25:/usr/lib/systemd/system/
+
+scp -rp /ssl/ root@192.168.1.25:/
+
+在master02上修改
+cd /opt/kubernetes/cfg
+vi kube-apiserver 
+--bind-address=192.168.1.25 
+--advertise-address=192.168.1.25
+
+[root@bogon cfg]# systemctl start kube-apiserver 
+[root@bogon cfg]# systemctl status kube-apiserver   ##如果失败请重新start
+
+
+[root@bogon cfg]# systemctl start kube-controller-manager 
+[root@bogon cfg]# systemctl status kube-controller-manager
+
+
+[root@bogon cfg]# systemctl start kube-scheduler 
+[root@bogon cfg]# systemctl status kube-scheduler 
+
+
+[root@bogon cfg]# /opt/kubernetes/bin/kubectl get cs
+NAME                 STATUS    MESSAGE              ERROR
+scheduler            Healthy   ok                   
+controller-manager   Healthy   ok                   
+etcd-0               Healthy   {"health": "true"}   
+etcd-2               Healthy   {"health": "true"}   
+etcd-3               Healthy   {"health": "true"}   
+etcd-1               Healthy   {"health": "true"}
+
+
+[root@bogon cfg]# /opt/kubernetes/bin/kubectl get node
+NAME           STATUS    ROLES     AGE       VERSION
+192.168.1.21   Ready     <none>    14d       v1.9.0
+192.168.1.22   Ready     <none>    14d       v1.9.0
+192.168.1.23   Ready     <none>    14d       v1.9.0
+192.168.1.24   Ready     <none>    14d       v1.9.0
+
+vi /etc/profile
+增加：
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin:/opt/kubernetes/bin
+source /etc/profile 
+此时master02运行成功
+
+配置LB（nginx lvs haproxy F5等）来使用vip来调度两台master节点  （配置高可用）
+
+nginx-master   nginx-node
+
+nginx-master 安装略  注意需要启用4ceng 负载均衡
+
+这里yum安装做演示
+cd /etc/yum.repos.d/
+[root@bogon yum.repos.d]# cat nginx.repo 
+[nginx]
+name=nginx repo
+baseurl=http://nginx.org/packages/centos/7/$basearch/
+gpgcheck=0
+enabled=1
+
+yum -y install nginx 
+
+[root@bogon yum.repos.d]# nginx -V
+nginx version: nginx/1.14.1
+built by gcc 4.8.5 20150623 (Red Hat 4.8.5-28) (GCC) 
+built with OpenSSL 1.0.2k-fips  26 Jan 2017
+TLS SNI support enabled
+configure arguments: --prefix=/etc/nginx --sbin-path=/usr/sbin/nginx --modules-path=/usr/lib64/nginx/modules --conf-path=/etc/nginx/nginx.conf --error-log-path=/var/log/nginx/error.log --http-log-path=/var/log/nginx/access.log --pid-path=/var/run/nginx.pid --lock-path=/var/run/nginx.lock --http-client-body-temp-path=/var/cache/nginx/client_temp --http-proxy-temp-path=/var/cache/nginx/proxy_temp --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp --http-scgi-temp-path=/var/cache/nginx/scgi_temp --user=nginx --group=nginx --with-compat --with-file-aio --with-threads --with-http_addition_module --with-http_auth_request_module --with-http_dav_module --with-http_flv_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_mp4_module --with-http_random_index_module --with-http_realip_module --with-http_secure_link_module --with-http_slice_module --with-http_ssl_module --with-http_stub_status_module --with-http_sub_module --with-http_v2_module --with-mail --with-mail_ssl_module --with-stream --with-stream_realip_module --with-stream_ssl_module --with-stream_ssl_preread_module --with-cc-opt='-O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -m64 -mtune=generic -fPIC' --with-ld-opt='-Wl,-z,relro -Wl,-z,now -pie'
+
+发现4层负载均衡已经启用：--with-stream --with-stream_realip_module 
+cd /etc/nginx 
+vi nginx.conf    ##注意:这里如果是配置七层的，则是在http段里面添加；；如果是4层的则需要和http段统计
+
+[root@bogon nginx]# cat nginx.conf 
+
+user  nginx;
+worker_processes  2;
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+stream {
+	log_format main "$remote_addr $upstream_addr $time_local $status";
+	access_log /var/log/nginx/k8s-access.log main;
+	upstream k8s-apiserver {
+		server 192.168.1.25:6443;  master02
+		server 192.168.1.21:6443;  master01
+	}
+	server {
+		listen 192.168.1.22:6443;  nginx本地的ip
+		proxy_pass k8s-apiserver;  ##不能加http
+	}
+	
+}
+
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+
+
+[root@k8sn1 nginx]# systemctl restart nginx
+[root@k8sn1 nginx]# systemctl status nginx.service
+
+1.先让node节点连接下nginx-master的IP 
+
+修改给个的node节点：(所有node节点均需执行)
+cd /opt/kubernetes/cfg
+
+[root@k8sn2 cfg]# vi bootstrap.kubeconfig
+    server: https://192.168.1.22:6443   ##修改此横；将ip换成nginx-master的IP
+	
+[root@k8sn2 cfg]# vi kubelet.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此横；将ip换成nginx-master的IP
+[root@k8sn2 cfg]# systemctl restart kubelet
+[root@k8sn2 cfg]# systemctl status kubelet
+	
+[root@k8sn2 cfg]# vi kube-proxy.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此横；将ip换成nginx-master的IP
+[root@k8sn2 cfg]# systemctl restart kube-proxy
+[root@k8sn2 cfg]# systemctl status kube-proxy
+
+
+
+在nginx-master上 查看日志验证
+1.[root@k8sn1 cfg]# tail -f /var/log/nginx/k8s-access.log 
+2.重启node2和node3的kubelet systemctl restart kubelet 
+3.查看1的log可以查看是轮询的分配到两台k8s-master上
+	
+因为咱们要nginx也要配置keepalived高可用
+配置nginx-backup
+安装同上  略
+
+
+配置keepalived 将两台nginx做vip高可用  {{ 指定VIP 192.168.1.26 }}
+{{ vip在工作的时候是在master节点上的；让master挂了之后backup来接管vip；来实现高可用 }}
+
+在两台nginx上执行安装
+[root@k8sn1 yum.repos.d]# yum -y install keepalived
+
+配置方法略
+
+脚本使用nginx的进程数是否为0来做判断
+ps -ef |grep nginx |egrep -cv "grep|$$"  ##$$表示脚本本身  -c表示统计
+
+count=$(ps -ef |grep nginx |egrep -cv "grep|$$" )
+if [ "$count" -eq 0 ]; then
+	systemctl stop keepalived
+fi 
+mail -s  ##最好有邮件提醒
+
+chmod +x ./sh
+
+
+##将各个node上的
+修改给个的node节点：(所有node节点均需执行)
+cd /opt/kubernetes/cfg
+
+[root@k8sn2 cfg]# vi bootstrap.kubeconfig
+    server: https://192.168.1.22:6443   ##修改此行；将ip换成nginx 的VIP
+	
+[root@k8sn2 cfg]# vi kubelet.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此行；将ip换成nginx 的VIP
+[root@k8sn2 cfg]# systemctl restart kubelet
+[root@k8sn2 cfg]# systemctl status kubelet
+	
+[root@k8sn2 cfg]# vi kube-proxy.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此行；将ip换成nginx 的VIP
+[root@k8sn2 cfg]# systemctl restart kube-proxy
+[root@k8sn2 cfg]# systemctl status kube-proxy
+
+
+##修改两台nginx的配置文件将：
+
+stream {
+	log_format main "$remote_addr $upstream_addr $time_local $status";
+	access_log /var/log/nginx/k8s-access.log main;
+	upstream k8s-apiserver {
+		server 192.168.1.25:6443;  master02
+		server 192.168.1.21:6443;  master01
+	}
+	server {
+		#listen 192.168.1.22:6443;  nginx本地的ip
+		listen 0.0.0.0:6443;   ##将监听地址改为0.0.0.0
+		proxy_pass k8s-apiserver;  ##不能加http
+	}
+	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
