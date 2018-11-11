@@ -1,0 +1,296 @@
+在测试环境下(192.168.1.28)部署一套公司某业务环境，其中：
+该业务前台访问地址： http://testhehe.wangshibo.com
+该业务后台访问地址： http://testhehe.wangshibo.com/admin/
+
+涉及到视频读写需求，要求视频在测试机上写入，然后在另一台图片服务器(192.168.1.6)上读，这就需要做nfs共享。需要给开发同事提供视频写入和读取的url地址：
+视频写地址：http://testhehe.wangshibo/static/video
+视频读地址：http://static.wangshibo.com/video
+
+部署记录：
+一、测试机上的操作
+（1）nginx的配置
+[root@dev-test ~]# cat testhehe.wangshibo.com.conf 
+server {
+         listen 80;
+
+         server_name testhehe.wangshibo.com;
+
+         access_log /var/log/testhehe.log main;
+
+         location / {
+             proxy_pass http://127.0.0.1:8383;                            #前台访问
+             proxy_connect_timeout 30;
+             proxy_send_timeout 60;
+             proxy_read_timeout 60;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header REMOTE-HOST $remote_addr;
+             proxy_set_header Host $host;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         }
+
+         location /admin {
+             proxy_pass http://127.0.0.1:8484/;   #后台访问跳转（注意这里8484后面的斜杠/要加上，不然访问跳转会有问题，8484端口的tomcat目录下不需要有admin实际目录存在）
+             proxy_connect_timeout 30;
+             proxy_send_timeout 60;
+             proxy_read_timeout 60;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header REMOTE-HOST $remote_addr;
+             proxy_set_header Host $host;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         }
+
+         location /static/video {                     #视频写地址，这里不需要另启tomcat进程进行nginx跳转设置(没有war包数据),直接nginx设置访问地址即可
+             root /Data/app/tomcat-7-hehe/static/video;
+         }
+
+         } ##end server
+
+启动nginx
+[root@dev-test ~]# /Data/app/nginx/sbin/nginx -t
+[root@dev-test ~]# /Data/app/nginx/sbin/nginx -s reload
+
+以上nginx的配置说明：
+1）该业务前台http://testhehe.wangshibo.com访问转向8383端口的tomcat，代码放到/Data/app/tomcat-7-hehe/webapp目录下
+2) 该业务后台http://testhehe.wangshibo.com/admin/访问转向8484端口的tomcat，代码放到/Data/app/tomcat-7-admin-hehe/webapp目录下
+3）视频写入的地址是：http://testhehe.wangshibo.com/static/video，根目录为/Data/app/tomcat-7-hehe/static/video，由于tomcat和nginx进程权限不一样，最好将此目录设置成777权限。
+
+[root@dev-test ~]# chmod -R 777 /Data/app/tomcat-7-hehe/static/video
+
+
+（2）tomcat设置
+
+1）前台访问跳转的tomcat设置(8383端口)
+[root@dev-test ~]# cd /Data/app/tomcat-7-hehe/conf/
+[root@dev-test conf]# cat server.xml
+.......
+<Server port="8785" shutdown="SHUTDOWN">
+......
+<Connector port="8383" protocol="HTTP/1.1"
+connectionTimeout="20000"
+redirectPort="8443" />
+.....
+<Connector port="8789" protocol="AJP/1.3" redirectPort="8443" />
+.....
+<Host name="localhost" appBase="webapps"
+unpackWARs="true" autoDeploy="true">
+</Host>
+.....
+</Server>
+
+注意：tomcat默认的根目录是webapps/ROOT,所以现将webapps目录下默认的文件都删除
+
+[root@dev-test webapps]# pwd
+/Data/app/tomcat-7-hehe/webapps
+[root@dev-test webapps]# rm -rf ./*
+
+将前台代码的war包拷贝到webapps下，war包名称最好是ROOT.war，如果不是这个名称，可以手动将war包改成这个ROOT.war名称.这样访问的时候就直接使用tomcat的默认目录了，比如 http://127.0.0.1:8383;（当然如果不改成ROOT.war也无妨，比如war包名叫hehe.war，需要提前将webapps目录清空，那么tomcat启动后，访问就是http://127.0.0.1:8383/hehe,这样在nginx反向代理里的proxy_pass配置也要改成proxy_pass http://127.0.0.1:8383/hehe; ）
+例如开发提供的业务代码war包名称是hehe.war，将其上传到webapp下，并更名为ROOT.war
+
+
+[root@dev-test webapp]# ll hehe.war
+-rw-r--r-- 1 root root 52673678 11月 21 17:40 hehe.war
+[root@dev-test webapp]# mv hehe.war ROOT.war                                     
+[root@dev-test webapp]# ll 
+-rw-r--r-- 1 root root 124491469 11月 22 17:59 ROOT.war      
+
+----------------------------------------------------------------------------------------------------------------------------------
+这里注意一下：
+tomcat默认的根目录是webapp/ROOT，为了方便tomcat访问时采用默认目录（并且前端nginx反向代理里直接是转到tomcat默认的端口访问上），所以需要将业务代码war包改成ROOT.war放到webapp下，如果war包名不是ROOT.war，那么重启tomcat后，访问会失败（404页面）。
+----------------------------------------------------------------------------------------------------------------------------------
+
+接着启动8383端口的tomcat进程，这个ROOT.war包就会自动解压
+[root@dev-test webapps]# ../bin/startup.sh
+Using CATALINA_BASE: /Data/app/tomcat-7-hehe
+Using CATALINA_HOME: /Data/app/tomcat-7-hehe
+Using CATALINA_TMPDIR: /Data/app/tomcat-7-hehe
+Using JRE_HOME: /usr/java/jdk1.7.0_79
+Using CLASSPATH: /Data/app/tomcat-7-hehe/bin/bootstrap.jar:/Data/app/tomcat-7-hehe/bin/tomcat-juli.jar
+Tomcat started.
+
+[root@dev-test webapps]# ll
+总用量 121580
+drwxr-xr-x 10 root root 4096 11月 22 17:57 ROOT
+-rw-r--r-- 1 root root 124491469 11月 22 17:59 ROOT.war
+
+[root@dev-test webapps]# lsof -i:8383
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+java 26155 root 43u IPv6 214715915 0t0 TCP *:m2mservices (LISTEN)
+
+由于业务代码每次发版都需要重启tomcat，而tomcat没有自带的重启脚本，重启需要先kill，然后start启动，这样很不方面。
+这里分享一个简单的发版后的tomcat重启脚本：
+[root@dev-test tomcat-7-hehe]# pwd
+/Data/app/tomcat-7-hehe
+[root@dev-test tomcat-7-hehe]# cat start.sh 
+#!/bin/bash
+
+cd /Data/app/tomcat-7-hehe/
+#pkill -9 java
+kill -9 `ps -ef|grep java|grep -v grep|grep tomcat-7-hehe |awk -F" " '{print $2}'`
+rm -rf temp/*
+rm -rf work/*
+rm -rf webapps/ROOT
+
+sh bin/startup.sh
+
+
+2）同理，设置后台访问跳转的tomcat设置(8484端口)
+[root@dev-test ~]# cd /Data/app/tomcat-7-admin-hehe/conf
+[root@dev-test conf]# cat server.xml
+.......
+<Server port="8886" shutdown="SHUTDOWN">
+......
+<Connector port="8484" protocol="HTTP/1.1"
+connectionTimeout="20000"
+redirectPort="8443" />
+.....
+<Connector port="8889" protocol="AJP/1.3" redirectPort="8443" />
+.....
+<Host name="localhost" appBase="webapps"
+unpackWARs="true" autoDeploy="true">
+</Host>
+.....
+</Server>
+
+注意：tomcat默认的根目录是webapps/ROOT,所以现将webapps目录下默认的文件都删除
+[root@dev-test webapps]# pwd
+/Data/app/tomcat-7-admin-hehe/webapps
+[root@dev-test webapps]# rm -rf ./*
+
+
+然后将前台代码的war包拷贝到webapps下，war包名称最好是ROOT.war，如果不是这个名称，就手动改成这个ROOT.war名称.
+[root@dev-test webapps]# ll
+总用量 121580
+-rw-r--r-- 1 root root 124491469 11月 22 17:59 ROOT.war
+
+接着启动8383端口的tomcat进程，这个ROOT.war包就会自动解压
+[root@dev-test webapps]# ../bin/startup.sh
+Using CATALINA_BASE: /Data/app/tomcat-7-admin-hehe
+Using CATALINA_HOME: /Data/app/tomcat-7-admin-hehe
+Using CATALINA_TMPDIR: /Data/app/tomcat-7-admin-hehe
+Using JRE_HOME: /usr/java/jdk1.7.0_79
+Using CLASSPATH: /Data/app/tomcat-7-admin-hehe/bin/bootstrap.jar:/Data/app/tomcat-7-admin-hehe/bin/tomcat-juli.jar
+Tomcat started.
+
+[root@dev-test webapps]# ll
+总用量 121580
+drwxr-xr-x 10 root root 4096 11月 22 17:57 ROOT
+-rw-r--r-- 1 root root 124491469 11月 22 17:59 ROOT.war
+
+[root@dev-test webapps]# lsof -i:8383
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+java 26155 root 43u IPv6 214715915 0t0 TCP *:m2mservices (LISTEN)
+
+由于业务代码每次发版都需要重启tomcat，而tomcat没有自带的重启脚本，重启需要先kill，然后start启动，这样很不方面。
+这里分享一个简单的发版后的tomcat重启脚本：
+[root@dev-test tomcat-7-admin-hehe]# pwd
+/Data/app/tomcat-7-admin-hehe
+[root@dev-test tomcat-7-admin-hehe]# cat start.sh 
+#!/bin/bash
+
+cd /Data/app/tomcat-7-admin-hehe/
+#pkill -9 java
+kill -9 `ps -ef|grep java|grep -v grep|grep tomcat-7-admin-hehe |awk -F" " '{print $2}'`
+rm -rf temp/*
+rm -rf work/*
+rm -rf webapps/ROOT
+
+sh bin/startup.sh
+
+
+接着说下挂载nfs共享：
+即将视频写入到本机的/Data/app/tomcat-7-hehe/static/video目录下(写地址是http://testhehe.wangshibo/static/video)，然后共享给图片服务器192.168.1.6的/usr/local/nginx/html/hehe/video
+[root@dev-test webapp]# /bin/mount -t nfs 192.168.1.6:/usr/local/nginx/html/hehe/video /Data/app/tomcat-7-hehe/static/video
+[root@dev-test webapp]# df -h
+Filesystem Size Used Avail Use% Mounted on
+/dev/mapper/VolGroup-lv_root 50G 12G 36G 26% /
+tmpfs 32G 72K 32G 1% /dev/shm
+/dev/sda1 485M 39M 421M 9% /boot
+/dev/mapper/VolGroup-lv_home 844G 69G 732G 9% /home
+192.168.1.6:/usr/local/nginx/html/hehe/video 97G 64G 28G 70% /home/Data/app/tomcat-7-hehe/static/video
+
+设置开机挂载
+[root@dev-test webapp]# cat /etc/rc.local
+......
+/bin/mount -t nfs 192.168.1.6:/usr/local/nginx/html/hehe/video /Data/app/tomcat-7-hehe/static/video
+
+
+
+
+二、图片服务器上的操作
+（1）nginx的配置
+
+[root@static ~]# cat /usr/loca/nginx/conf/vhost/static.conf
+server {
+      listen  80;
+        server_name  static.wangshibo.com;
+        root   /usr/local/nginx/html/hehe;
+ 
+  error_page 403 /403.html;
+         
+  location = /403.html {
+           root   html;
+           allow all;
+        }
+ 
+        location ~ \.mp4(.*)$  {                   #针对mp4格式的视频读取限制
+            mp4;
+            mp4_buffer_size 4M;
+            mp4_max_buffer_size 10M;
+        }
+}
+
+[root@static ~]# /usr/loca/nginx/sbin/nginx -t
+[root@static ~]# /usr/loca/nginx/sbin/nginx
+ 
+[root@static ~]# mkdir /usr/local/nginx/html/hehe/video
+
+
+下面随便说下该业务前后台代码发版脚本：
+
+脚本在svn机器上：
+[root@svn-server ~]# pwd
+/Data/webroot_svncode/wangshibo
+
+前台代码发版脚本
+[root@svn-server ~]# cat up_pub_test_wangshibo.sh 
+#!/bin/bash
+REMOTE_SERVER_IP="192.168.1.28"                           #测试服务器，ssh端口是25791
+DEST_DIR="/Data/app/tomcat-7-hehe/webapps"
+cd /Data/webroot_svncode/wangshibo/test/front            #在svn本机下载前台代码的存放路径，第一次svn下载需要用户名和密码，后面就只需要update更新代码即可
+
+/usr/bin/svn update
+
+/usr/bin/ssh -p25791 ${REMOTE_SERVER_IP} "rm -rf /Data/app/tomcat-7-hehe/webapps/ROOT*";                       #svn里面的war包名次是ROOT.war，具体理由上面已说明 
+/usr/bin/rsync -av -e "/usr/bin/ssh -p25791" --rsync-path="/usr/bin/rsync" --progress /Data/webroot_svncode/wangshibo/test/front/ROOT.war ${REMOTE_SERVER_IP}:${DEST_DIR};
+sleep 10
+
+/usr/bin/ssh -p25791 ${REMOTE_SERVER_IP} "/bin/sh /Data/app/tomcat-7-hehe/start.sh"; 
+
+后台代码发版脚本
+[root@svn-server ~]# cat up_pub_testadmin_wangshibo.sh 
+#!/bin/bash
+REMOTE_SERVER_IP="192.168.1.28"
+DEST_DIR="/Data/app/tomcat-7-admin-hehe/webapps"
+cd /Data/webroot_svncode/wangshibo/test/bg
+
+/usr/bin/svn update
+
+/usr/bin/ssh -p25791 ${REMOTE_SERVER_IP} "rm -rf /Data/app/tomcat-7-admin-hehe/webapps/ROOT*";
+/usr/bin/rsync -av -e "/usr/bin/ssh -p25791" --rsync-path="/usr/bin/rsync" --progress /Data/webroot_svncode/wangshibo/test/bg/ROOT.war ${REMOTE_SERVER_IP}:${DEST_DIR};
+sleep 10
+
+/usr/bin/ssh -p25791 ${REMOTE_SERVER_IP} "/bin/sh /Data/app/tomcat-7-admin-hehe/start.sh";
+
+
+
+
+
+
+
+
+
+
+
+
+
+

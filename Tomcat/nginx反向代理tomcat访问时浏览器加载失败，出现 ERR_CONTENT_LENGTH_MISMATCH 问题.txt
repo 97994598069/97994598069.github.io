@@ -1,0 +1,60 @@
+问题说明：
+测试机上部署了一套业务环境，nginx反向代理tomcat，在访问时长时间处于加载中，十分缓慢！
+
+通过浏览器调试（F12键->Console），发现有错误ERR_CONTENT_LENGTH_MISMATCH 出现：
+
+查看nginx日志（当出现故障时，要记得第一时间查看相关日志）
+.......open() "/Data/app/nginx/proxy_temp/3/00/0000000003" failed (13: Permission denied) while reading upstream, client:...... server: localhost, request: "GET
+
+原因：
+nginx在做代理时，其工作进程对大文件做了缓存，这个缓存在 %nginx%/proxy_temp 目录下，主进程在读取缓存的时候由于权限问题而无法访问。
+
+[root@dev-new-test proxy_temp]# pwd
+/Data/app/nginx/proxy_temp
+[root@dev-new-test proxy_temp]# ll
+总用量 40
+drwx------ 33 www www 4096 11月 22 17:07 0
+drwx------ 34 www www 4096 11月 22 17:07 1
+drwx------ 34 www www 4096 11月 22 17:07 2
+drwx------ 35 www www 4096 11月 22 17:07 3
+drwx------ 35 www www 4096 11月 22 17:16 4
+drwx------ 35 www www 4096 11月 22 17:16 5
+drwx------ 34 www www 4096 11月 22 16:46 6
+drwx------ 33 www www 4096 11月 22 16:46 7
+drwx------ 33 www www 4096 11月 22 16:47 8
+drwx------ 33 www www 4096 11月 22 17:07 9
+
+发现nginx的缓存目录都是www权限，而nginx进程的启动用户是nobody，因为需要将缓存的目录权限修改成nobody！
+
+[root@dev-new-test proxy_temp]# ps -ef|grep nginx
+nobody 28072 46482 0 18:09 ? 00:00:00 nginx: worker process 
+......
+
+[root@dev-new-test proxy_temp]# pwd
+/Data/app/nginx/proxy_temp
+[root@dev-new-test proxy_temp]# chown -R nobody.nobody ./*
+[root@dev-new-test proxy_temp]# ll
+总用量 40
+drwx------ 33 nobody nobody 4096 11月 22 17:07 0
+drwx------ 34 nobody nobody 4096 11月 22 17:07 1
+drwx------ 34 nobody nobody 4096 11月 22 17:07 2
+drwx------ 35 nobody nobody 4096 11月 22 17:07 3
+drwx------ 35 nobody nobody 4096 11月 22 17:16 4
+drwx------ 35 nobody nobody 4096 11月 22 17:16 5
+drwx------ 34 nobody nobody 4096 11月 22 16:46 6
+drwx------ 33 nobody nobody 4096 11月 22 16:46 7
+drwx------ 33 nobody nobody 4096 11月 22 16:47 8
+drwx------ 33 nobody nobody 4096 11月 22 17:07 9
+
+这样，就解决了上面出现的错误问题：
+
+另外：
+nginx代理tomcat，访问缓慢问题，还有一种可能原因就是tomcat默认的根目录是webapps/ROOT，如果不是ROOT，可能也会导致访问问题。
+因为，在部署环境时，首先将webapps下的文件全部删除，然后将war包上传到webapps下改名为ROOT.war，最好说服开发同事在打包时就
+打包成ROOT.war名称，不然后续上传后就手动修改，这样tomcat重启后，就会自动解压ROOT.war包，自然根目录就会是webapps/ROOT
+
+还有在部署多个tomcat实例时，尽量不要拷贝已用的tomcat并修改端口后投入使用，最好是拷贝源码解压后的纯净的tomcat，然后修改端口投入使用。
+
+当然，访问页面没有反应时，也可能是因为服务器磁盘爆满导致！多方面考虑吧~
+
+

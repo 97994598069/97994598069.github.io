@@ -1,0 +1,72 @@
+问题说明：
+公司内网环境中部署的jenkins代码发版平台突然不能访问了，查看tomcat的catalina.out日志发现报错如下：
+
+[root@redmine logs]# tail -f /srv/apache-tomcat-7.0.67/logs/catalina.out
+......
+Exception in thread "http-bio-8080-exec-5" java.lang.OutOfMemoryError: PermGen space
+Exception in thread "http-bio-8080-exec-5" java.lang.OutOfMemoryError: PermGen space
+Exception in thread "http-bio-8080-exec-5" java.lang.OutOfMemoryError: PermGen space
+......
+
+上面报错是由于tomcat内存溢出引起的：
+[root@redmine logs]# ps -ef|grep tomcat
+root     23615     1 14 15:15 ?        00:04:45 /usr/java/jdk1.7.0_79/bin/java -Djava.util.logging.config.file=/srv/apache-tomcat-7.0.67/conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager -Djava.endorsed.dirs=/srv/apache-tomcat-7.0.67/endorsed -classpath /srv/apache-tomcat-7.0.67/bin/bootstrap.jar:/srv/apache-tomcat-7.0.67/bin/tomcat-juli.jar -Dcatalina.base=/srv/apache-tomcat-7.0.67 -Dcatalina.home=/srv/apache-tomcat-7.0.67 -Djava.io.tmpdir=/srv/apache-tomcat-7.0.67/temp org.apache.catalina.startup.Bootstrap start
+root     24191 24013  0 15:49 pts/6    00:00:00 grep tomcat
+
+
+
+
+Tomcat默认可以使用的内存为128MB，在较大型的应用项目中，这点内存显然是不够的，从而有可能导致系统无法运行！
+其中常见的内存问题是报Tomcat内存溢出错误，Out of Memory(系统内存不足)的异常，从而导致客户端显示500错误。
+在生产环境中，tomcat内存设置不好很容易出现JVM内存溢，解决方法就是：修改Tomcat中的catalina.sh文件（windows系统下修改的文件时catalina.bat）。在catalina.sh文件中，找到cygwin=false，在这一行的前面加入参数，具体如下：
+
+[root@redmine bin]# pwd
+/srv/apache-tomcat-7.0.67/bin
+[root@redmine bin]# vim catalina.sh     //在cygwin=false这一行的上面添加下面内容
+......
+JAVA_OPTS='-Xms1024m -Xmx1024m -XX:PermSize=256M -XX:MaxNewSize=512m -XX:MaxPermSize=512m'
+cygwin=false
+......
+
+其中，-Xms设置初始化内存大小，-Xmx设置可以使用的最大内存。一般把-Xms和-Xmx设为一样大
+
+
+最后重启tomcat即可，重启后查看tomcat服务进程，就能看到内存信息了：
+[root@redmine bin]# ps -ef|grep tomcat|grep -v grep|awk -F" " '{print $2}'|xargs kill -9
+[root@redmine bin]# /srv/apache-tomcat-7.0.67/bin/startup.sh
+
+[root@redmine bin]# ps -ef|grep tomcat
+root     24547     1  3 15:53 pts/6    00:01:02 /usr/java/jdk1.7.0_79/bin/java -Djava.util.logging.config.file=/srv/apache-tomcat-7.0.67/conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager -Xms1024m -Xmx1024m -XX:PermSize=256M -XX:MaxNewSize=512m -XX:MaxPermSize=512m -Djava.endorsed.dirs=/srv/apache-tomcat-7.0.67/endorsed -classpath /srv/apache-tomcat-7.0.67/bin/bootstrap.jar:/srv/apache-tomcat-7.0.67/bin/tomcat-juli.jar -Dcatalina.base=/srv/apache-tomcat-7.0.67 -Dcatalina.home=/srv/apache-tomcat-7.0.67 -Djava.io.tmpdir=/srv/apache-tomcat-7.0.67/temp org.apache.catalina.startup.Bootstrap start
+root     24982 24013  0 16:22 pts/6    00:00:00 grep tomcat
+
+
+--------------------------------------------------------------------------------------------------
+tomcat常见的内存溢出问题有以下三种情况：
+1）OutOfMemoryError： Java heap space 
+2）OutOfMemoryError： PermGen space 
+3）OutOfMemoryError： unable to create new native thread. 
+--------------------------------------------------------------------------------------------------
+
+顺便说下Tomcat连接数设置：
+在tomcat配置文件server.xml中的<Connector ... />配置中，和连接数相关的参数有：
+minProcessors：         最小空闲连接线程数，用于提高系统处理性能，默认值为10
+maxProcessors：        最大连接线程数，即：并发处理的最大请求数，默认值为75
+maxThreads               最大并发线程数，即同时处理的任务个数，默认值是200
+acceptCount：            允许的最大连接数，应大于等于maxProcessors，默认值为100
+enableLookups：         是否反查域名，取值为：true或false。为了提高处理能力，应设置为false
+connectionTimeout：    网络连接超时，单位：毫秒。设置为0表示永不超时，这样设置有隐患的。通常可设置为30000毫秒。
+
+其中和最大连接数相关的参数为maxProcessors和acceptCount。如果要加大并发连接数，应同时加大这两个参数。
+web server允许的最大连接数还受制于操作系统的内核参数设置，通常Windows是2000个左右，Linux是1000个左右。Unix中如何设置这些参数，请参阅Unix常用监控和管理命令
+
+例如
+<Connector port="8888" protocol="HTTP/1.1"
+maxThreads="500" minSpareThreads="50" maxSpareThreads="100" enableLookups="false" acceptCount="2000"
+connectionTimeout="20000"
+redirectPort="8443" />
+
+
+
+
+
+
