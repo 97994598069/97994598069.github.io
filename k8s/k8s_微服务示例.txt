@@ -1,5 +1,5 @@
 我们的微服务：
-消息服务: message-service
+消息服务: message-service    
 课程dubbo服务: courese-dubbo-service 
 课程web服务: courese-web-service
 用户thrift服务: user-thrift-service 
@@ -12,6 +12,11 @@ API网关: api-gateway
 3.单独的pod如何对外提供服务
 4.哪个服务作为整个服务的入口，入口服务如何对外提供服务
 
+
+###message-service消息服务和其他服务都不搭嘎所有的服务都有可能去调用；需要单独放到一个pod中
+###courese-dubbo-service和courese-web-service课程的dubbo服务和课程的web有相关；因为课程的dubbo服务的大部分接口都是由课程的web服务来调用的；；这两个服务可以放到一个pod中
+###同上user-thrift-service和user-edge-service需要放到一个pod中
+###api-gateway会调用很多的服务；需要单独的放到一个pod中
 
 搞定配置:
 cd ~/kubernetes-starrter/service-config/
