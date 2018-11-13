@@ -12,11 +12,22 @@ API网关: api-gateway
 3.单独的pod如何对外提供服务
 4.哪个服务作为整个服务的入口，入口服务如何对外提供服务
 
-
+{{
 ###message-service消息服务和其他服务都不搭嘎所有的服务都有可能去调用；需要单独放到一个pod中
 ###courese-dubbo-service和courese-web-service课程的dubbo服务和课程的web有相关；因为课程的dubbo服务的大部分接口都是由课程的web服务来调用的；；这两个服务可以放到一个pod中
 ###同上user-thrift-service和user-edge-service需要放到一个pod中
 ###api-gateway会调用很多的服务；需要单独的放到一个pod中
+
+在一个pod中是怎么访问彼此的?
+可以通过127.0.0.1:8055或者localhost:8055来访问彼此
+
+但是这个pod怎么对外提供服务呢:
+我们之前学过service；知道我们的服务可以通过cluster-ip或者kube-dns来实现内部访问；而且可以对外提供多个端口；也就是说可以对外提供多个服务
+
+这个服务的入口；入口怎么对外提供服务
+需要定义type为nodePort
+
+}}
 
 搞定配置:
 cd ~/kubernetes-starrter/service-config/
