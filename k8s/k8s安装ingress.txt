@@ -489,7 +489,7 @@ foo.bar.com    OK
 2.nodePort 的方式
 原理：利用svc的nodePort不会改变（可以直接在yaml里指定）和在随意的node节点上均可以访问即使pod不在该node上运行也可以的特性；在k8s集群外配置upstream 负载均衡（随意找2个node:port或者多个）；此时将域名解析到负载均衡器上就可以同归域名解析到后端的pod； 除非添加到upstream里的node全部挂掉否则应用正常
 upstream ingress_test {
-	server 192.168.2.41:38732;
+	server 192.168.2.41:38732;   ##nodeIp+nodePort
 	server 192.168.2.42:38732;
 	server 192.168.2.43:38732;
 	server 192.168.2.44:38732;
@@ -512,10 +512,10 @@ server{
 示例： 如果是测试需配置hosts 127.0.0.1 foo.bar.com
 [root@harbor02 vhost]# cat k8s-ingress-test.conf 
 upstream ingress_test {
-	server 192.168.2.41;
-	server 192.168.2.42;
-	server 192.168.2.43;
-	server 192.168.2.44;
+	server 192.168.2.41:80;  ##nodeIp+servicePort
+	server 192.168.2.42:80;
+	server 192.168.2.43:80;
+	server 192.168.2.44:80;
 
 }
 
