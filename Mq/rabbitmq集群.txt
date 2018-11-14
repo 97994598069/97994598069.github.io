@@ -1,0 +1,196 @@
+http://blog.51cto.com/superleedo/2138640  202.106.195.68
+
+http://www.bubuko.com/infodetail-2229779.html
+
+准备两台机器（均要安装设置）
+cat /etc/hosts   ##集群机器都要添加host解析
+192.168.1.21  gluster01
+192.168.1.22  gluster02
+
+调整两台机器的系统限制（内核参数调整）
+fs.file-max设置
+# vim /etc/sysctl.conf，添加：   
+fs.file-max = 65535
+#sysctl -p
+
+
+每用户限制（ulimit -n）
+# vim /etc/security/limits.conf 
+在最后一行添加如下命令    
+root soft nofile 65535
+root hard nofile 65535    
+* soft nofile 65535
+* hard nofile 65535
+
+
+# vim /etc/rc.local    
+ulimit -SHn 65535
+
+
+一、安装erlang
+
+在安装RabbitMQ之前，我们需要安装Erlang，官方建议使用打包版本，使用官方生成的一个软件包（https://github.com/rabbitmq/erlang-rpm），它只提供运行RabbitMQ所需要的组件,它可能会也可能不适合运行其他基于Erlang的软件或第三方RabbitMQ插件
+vim /etc/yum.repos.d/rabbitmq-erlang.repo
+[rabbitmq-erlang]
+name=rabbitmq-erlang
+baseurl=https://dl.bintray.com/rabbitmq/rpm/erlang/20/el/7
+gpgcheck=1
+gpgkey=https://www.rabbitmq.com/rabbitmq-release-signing-key.asc
+repo_gpgcheck=0
+enabled=1
+
+yum list |grep erlang  ##如果要安装其他版本则需要修改baseurl
+yum install erlang -y
+cd /home/
+安装RabbitMQ服务器
+
+#wget https://dl.bintray.com/rabbitmq/all/rabbitmq-server/3.7.0/rabbitmq-server-3.7.0-1.el7.noarch.rpm
+wget https://dl.bintray.com/rabbitmq/all/rabbitmq-server/3.7.8/rabbitmq-server-3.7.8-1.el7.noarch.rpm
+rpm --import https://dl.bintray.com/rabbitmq/Keys/rabbitmq-release-signing-key.asc
+yum install rabbitmq-server-3.7.8-1.el7.noarch.rpm -y 
+
+
+启动服务器
+systemctl enable rabbitmq-server
+systemctl start rabbitmq-server
+
+
+修改rabbitmq配置
+vi /etc/systemd/system/multi-user.target.wants/rabbitmq-server.service
+在[Service]中，增加LimitNOFILE=30000（具体数值根据需要） {{貌似不需要因为默认的是LimitNOFILE=32768}}
+
+
+重启mq服务：
+systemctl daemon-reload
+systemctl restart rabbitmq-server
+
+rabbitmqctl status  查看到下面内容
+ {disk_free_limit,50000000},
+ {disk_free,13644468224},
+ {file_descriptors,
+     [{total_limit,29900},
+      {total_used,10},
+      {sockets_limit,26908},
+      {sockets_used,0}]},
+ {processes,[{limit,1048576},{used,411}]},
+ {run_queue,0},
+ {uptime,18474},
+ {kernel,{net_ticktime,60}}]
+
+ 
+rabbitmq自带管理后台，安装后需要配置开启
+进入rabbitmq安装目录中的sbin目录执行
+rabbitmq-plugins enable rabbitmq_management
+
+
+重启rabbitmq服务生效:
+systemctl restart rabbitmq-server
+打开http://IP:15672/即可看到管理后台
+用户名密码均为guest
+
+
+如果登陆不上可以通过修改配置文件来实现登陆： {{ 因为guest默认是本地登陆 }}
+[root@k8sm1 etc]# find / -name "rabbit.app" -type f
+/usr/lib/rabbitmq/lib/rabbitmq_server-3.7.8/ebin/rabbit.app
+vi /usr/lib/rabbitmq/lib/rabbitmq_server-3.7.8/ebin/rabbit.app
+将：loopback_users里的<<"guest">>删除， 即修改为:{loopback_users, []},
+
+重启rabbitmq服务:
+systemctl restart rabbitmq-server
+
+
+管理界面插件：
+rabbitmq-plugins enable rabbitmq_management
+添加账号：
+rabbitmqctl add_user admin admin
+添加 权限tag
+rabbitmqctl set_user_tags admin administrator
+
+
+浏览器打开地址查看管理页面
+192.168.1.21:15672
+
+上述操作在两台服务器上执行
+
+
+
+
+设置集群:
+1.hosts文件中必须添加机器解析 /etc/hosts文件
+2.设置界面节点验证 Erlang Cookie   
+
+/var/lib/rabbitmq/.erlang.cookie    修改保证两个节点该文件内容相同方能实现集群 
+{{ 可以将其中一台的删除;然后将另外一台的给远程拷贝过来;并保持属主和属组为相同为rabbitmq }}
+
+RabbitMQ节点和CLI工具（例如rabbitmqctl）使用cookie来确定它们是否被允许相互通信，
+要使两个节点能够通信，它们必须具有相同的共享密钥，称为Erlang Cookie.
+Cookie只是一个字符串，最多可以有255个字符。它通常存储在本地文件中
+该文件必须只能由所有者访问（400权限）。
+每个集群节点必须具有相同的cookie，
+文件位置/var/lib/rabbitmq/.erlang.cookie，
+把rabbit1、rabbit2设置成一样的即可，权限是400
+
+3 重启所有节点
+systemctl restart rabbitmq-server
+
+4 查看集群状态
+rabbitmqctl cluster_status
+
+5 将节点加入集群（将gluster02  加入gluster01）
+[root@gluster02 ~]# 在机器02上
+rabbitmqctl stop_app
+rabbitmqctl join_cluster rabbit@gluster01
+rabbitmqctl start_app
+systemctl restart rabbitmq-server
+或者
+rabbitmqctl stop_app
+rabbitmqctl reset
+rabbitmqctl join_cluster --ram rabbit@gluster01   ##设置问RAM节点机器  必须保证有一台是disc
+rabbitmqctl start_app  
+systemctl restart rabbitmq-server
+
+
+也可以用rabbitmqctl change_cluster_node_type  ram  设置RAM
+
+
+集群成功后
+rabbitmqctl cluster_status
+[root@gluster02 ~]# rabbitmqctl cluster_status
+Cluster status of node rabbit@gluster02 ...
+[{nodes,[{disc,[rabbit@gluster01]},{ram,[rabbit@gluster02]}]},
+ {running_nodes,[rabbit@gluster01,rabbit@gluster02]},
+ {cluster_name,<<"rabbit@gluster01">>},
+ {partitions,[]},
+ {alarms,[{rabbit@gluster01,[]},{rabbit@gluster02,[]}]}]
+ 
+ [root@gluster01 ~]# rabbitmqctl cluster_status
+Cluster status of node rabbit@gluster01 ...
+[{nodes,[{disc,[rabbit@gluster01]},{ram,[rabbit@gluster02]}]},
+ {running_nodes,[rabbit@gluster02,rabbit@gluster01]},
+ {cluster_name,<<"rabbit@gluster01">>},
+ {partitions,[]},
+ {alarms,[{rabbit@gluster02,[]},{rabbit@gluster01,[]}]}]
+
+
+再次浏览器访问：192.168.1.21:15672
+现在机器已经添加了，接下来要进行exchange、queue 高可用策略，进行页面操作
+
+
+1 添加用户
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
