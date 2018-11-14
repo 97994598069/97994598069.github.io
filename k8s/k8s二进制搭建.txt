@@ -234,7 +234,7 @@ ETCD在master和node上都要部署，部署4个节点组成一个etcd集群
 
 以下操作在master上进行   (然后拷贝到其他节点)
 下载etcd
-mkdir /tools;cd /tools
+mkdir /tools && cd /tools
 wget https://github.com/coreos/etcd/releases/download/v3.2.12/etcd-v3.2.12-linux-amd64.tar.gz
 ##网络不通https://pan.baidu.com/s/1yyEvea3DqFxgIDqzNn5Vag
 tar xzvf etcd-v3.2.12-linux-amd64.tar.gz
