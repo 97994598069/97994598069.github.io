@@ -1,0 +1,11 @@
+FROM 192.168.2.45:5000/base/centos:7.4.1708
+RUN mkdir -p /usr/local/src/jdk8
+ADD jdk8 /usr/local/src/jdk8
+ENV JAVA_HOME /usr/local/src/jdk8
+ENV CLASSPATH ./:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+ENV PATH $JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
+
+
+前提:
+tar xf jdk-8u11-linux-x64.tar.gz 
+mv jdk1.8.0_11 jdk8
