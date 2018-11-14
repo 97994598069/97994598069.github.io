@@ -525,7 +525,7 @@ ETCD_SERVERS=https://192.168.1.21:2379,https://192.168.1.22:2379,https://192.168
 
 ####将上述变量替换下面的；有时会报错
 
-生成kube-apiserver配置文件
+生成kube-apiserver配置文件 {\\后不能有空格；否则可能报错}
 cat <<EOF >/opt/kubernetes/cfg/kube-apiserver
 KUBE_APISERVER_OPTS="--logtostderr=true \\
 --v=4 \\
