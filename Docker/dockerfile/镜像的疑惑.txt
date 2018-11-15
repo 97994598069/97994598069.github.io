@@ -1,0 +1,74 @@
+一、直接运行docker；然后出了问题需要进docker里面排查的时候发现没有命令=======尴尬
+制作centos的base镜像
+FROM centos:7.4.1708
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+RUN yum -y install net-tools \
+    && yum -y install openssh-server \
+    && yum -y install openssh-clients \
+    && yum -y install curl \
+ENV container docker
+CMD ["/usr/sbin/init"]
+
+
+
+二、从dockerhub上拉下来的jdk;运行发现与本地时间相差很多=======尴尬
+制作jdk的base镜像
+FROM 192.168.2.45:5000/base/centos:7.4.1708   ##基于上述的centos的基础镜像
+RUN mkdir -p /usr/local/src/jdk8
+ADD jdk8 /usr/local/src/jdk8
+ENV JAVA_HOME /usr/local/src/jdk8
+ENV CLASSPATH ./:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+ENV PATH $JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
+
+
+
+三、由于本地是内网环境；但是微服务的相关service需要调用域名；用nginx反向代理；但是不通；需要将hosts映射添加到docker里面
+{{ 直接RUN echo "fsfs" >>/etc/hosts 不会成功；；个人理解：镜像在被run之前也只是一个文件；不存在centos的系统文件；只有在run之后才会有centos的系统文件；所以如果需要添加则需要在run之后添加或者在run成功的最后一个步骤添加；也就是entrypoint;容器入口 }}
+例如需要将如下追加到docker里的hosts文件里
+192.126.2.46    config.jycloud.com
+192.126.2.46    eureka.jycloud.com
+192.126.2.46    web.jycloud.com
+192.126.2.46    manage.jycloud.com
+
+编写dockerfile
+[root@localhost java]# cat myhosts    ##准备文件
+192.126.2.46    config.jycloud.com
+192.126.2.46    eureka.jycloud.com
+192.126.2.46    web.jycloud.com
+192.126.2.46    manage.jycloud.com
+
+[root@localhost java]# cat /root/java/run.sh    ###准备文件
+#!/bin/bash
+cat /tmp/myhosts >>/etc/hosts
+/bin/bash
+
+[root@localhost java]# cat /root/java/Dockerfile   ##编写dockerfile
+FROM 192.168.2.45:5000/base/centos:7.4.1708  ##基于上述的centos（就是修改上述的jdk8的dockerfile）
+RUN mkdir -p /usr/local/src/jdk8 
+COPY run.sh /tmp/
+COPY myhosts /tmp/
+RUN chmod +x /tmp/run.sh
+ADD jdk8 /usr/local/src/jdk8
+ENV JAVA_HOME /usr/local/src/jdk8
+ENV CLASSPATH ./:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+ENV PATH $JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
+ENTRYPOINT /bin/sh -c /tmp/run.sh
+
+##build成功后；docker run起来进入docker 查看cat /ets/hosts 没问题；
+但是:
+当基于这个镜像做成服务镜像的时候cat /etc/hosts显示没有追加成功；；很异常
+服务dockerfile如下
+FROM 192.168.2.45:5000/base/jdk8:V2.0
+ADD /config-1.0.jar //
+ENTRYPOINT ["java","-jar", "/config-1.0.jar"]
+
+
+解决：
+更改服务的Dockerfile
+[root@k8s01 test-config]# cat Dockerfile 
+FROM 192.168.2.45:5000/base/jdk8:V2.0
+ADD /config-1.0.jar //
+CMD ["java","-jar", "/config-1.0.jar"]
+ENTRYPOINT /bin/sh -c /tmp/run.sh
+
+重新build；docker run进去cat /etc/hosts显示追加成功；正常
