@@ -1,0 +1,58 @@
+dockerfile 修改dockerhosts
+[root@localhost java]# cat /root/java/myhosts 
+192.126.2.46    config.jycloud.com
+192.126.2.46    eureka.jycloud.com
+192.126.2.46    web.jycloud.com
+192.126.2.46    manage.jycloud.com
+
+[root@localhost java]# cat /root/java/run.sh 
+#!/bin/bash
+cat /tmp/myhosts >>/etc/hosts
+/bin/bash
+
+[root@localhost java]# cat /root/java/Dockerfile 
+FROM 192.168.2.45:5000/base/centos:7.4.1708
+RUN mkdir -p /usr/local/src/jdk8 
+COPY run.sh /tmp/
+COPY myhosts /tmp/
+RUN chmod +x /tmp/run.sh
+ADD jdk8 /usr/local/src/jdk8
+ENV JAVA_HOME /usr/local/src/jdk8
+ENV CLASSPATH ./:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+ENV PATH $JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
+ENTRYPOINT /bin/sh -c /tmp/run.sh
+
+
+[root@localhost java]# docker build -t 192.168.2.45:5000/base/jdk8 .
+Sending build context to Docker daemon  484.4MB
+Step 1/10 : FROM 192.168.2.45:5000/base/centos:7.4.1708
+ ---> f7ce422cf65b
+Step 2/10 : RUN mkdir -p /usr/local/src/jdk8
+ ---> Using cache
+ ---> a892efea31d1
+Step 3/10 : COPY run.sh /tmp/
+ ---> Using cache
+ ---> bb6aa0f25bba
+Step 4/10 : COPY myhosts /tmp/
+ ---> Using cache
+ ---> 099e7b02c377
+Step 5/10 : RUN chmod +x /tmp/run.sh
+ ---> Using cache
+ ---> b19de678f7e0
+Step 6/10 : ADD jdk8 /usr/local/src/jdk8
+ ---> Using cache
+ ---> 11e8d0bb1c75
+Step 7/10 : ENV JAVA_HOME /usr/local/src/jdk8
+ ---> Using cache
+ ---> 4ca9559122ca
+Step 8/10 : ENV CLASSPATH ./:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+ ---> Using cache
+ ---> 8798ba63cb49
+Step 9/10 : ENV PATH $JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
+ ---> Using cache
+ ---> db87c98ce1f0
+Step 10/10 : ENTRYPOINT /bin/sh -c /tmp/run.sh
+ ---> Using cache
+ ---> 8801fc917fac
+Successfully built 8801fc917fac
+Successfully tagged 192.168.2.45:5000/base/jdk8:latest
