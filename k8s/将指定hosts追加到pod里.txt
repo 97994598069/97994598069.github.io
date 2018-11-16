@@ -1,0 +1,51 @@
+将指定的hosts追加到pod中
+
+示例由于业务需要；需要将如下追加到pod中：
+192.126.2.46    config.jycloud.com
+192.126.2.46    eureka.jycloud.com
+192.126.2.46    web.jycloud.com
+192.126.2.46    manage.jycloud.com
+
+
+[root@k8s01 jycloud]# cat config-jycloud-rc.yaml 
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jycloud-config
+  template:
+    metadata:
+      labels:
+        app: jycloud-config
+    spec:
+      hostAliases:   ###追加此行
+      - ip: "192.168.2.46"   ##指定ip
+        hostnames:   ##指定其对应的hosts
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-config
+        image: 192.168.2.45:5000/org.jygroup.cloud/config:V1.0
+        ports:
+        - containerPort: 8088
+		
+		
+		
+[root@k8s01 jycloud]# cat config-jycloud-svc.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-config
+spec:
+  type: NodePort
+  ports:
+  - port: 8088
+    nodePort: 8088
+  selector:
+    app: jycloud-config
