@@ -1,0 +1,20 @@
+[root@harbor02 vhost]# cat manage.jycloud.conf 
+upstream manage_jycloud {
+	server 192.168.2.41:8012;
+	server 192.168.2.42:8012;
+	server 192.168.2.43:8012;
+	server 192.168.2.44:8012;
+
+}
+
+server{ 
+    listen 80 default_server;    ###设定default_server用于多个conf；如果不设置则访问ip会默认调度到第一个conf
+    server_name -;   ##不设定域名;也就是说用ip访问会调度到它
+    location / { 
+        proxy_pass         http://manage_jycloud; 
+        proxy_set_header   Host             $host; 
+        proxy_set_header   X-Real-IP        $remote_addr; 
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for; 
+    } 
+}
+
