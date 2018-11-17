@@ -1,0 +1,32 @@
+1.更新nginx的镜像  将nginx镜像改为httpd的
+[root@k8s01 services]# kubectl set image deploy nginx nginx=httpd   ##ngin为服务名
+deployment "nginx" image updated
+
+
+更新yaml镜像
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 4
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: 192.168.101.88:5000/nginx:1.7.9
+        ports:
+        
+ 更新镜像kubectl set image deployment nginx-deployment nginx=192.168.101.88:5000/nginx:1.9.1
+ 
+ 
+ 
