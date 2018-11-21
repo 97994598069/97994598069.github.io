@@ -1,0 +1,98 @@
+背景：
+服务器A：103.110.114.8/192.168.1.8，有外网ip，是IDC的一台服务器
+服务器B：192.168.1.150，没有外网ip，A服务器是它的宿主机，能相互ping通
+服务器C：192.168.9.120，是公司的一台服务器，能上网。
+服务器C可以直接ssh登陆A服务器，但是不能直接登陆服务器B，因为它们处在两个不同的局域网内。
+现在要求能从服务器C上ssh登陆服务器B，并且做ssh无密码信任跳转关系。
+这就需要用到iptables的NAT端口转发功能了~~~~~
+
+思路：
+让服务器C先访问服务器A上的20022端口，然后NAT转发到服务器B的ssh端口（22端口）
+
+
+下面是在宿主机A上（192.168.1.8）的操作：
+1）先开启ip路由转发功能
+[root@linux-node1 ~]# echo 1 > /proc/sys/net/ipv4/ip_forward
+或者
+[root@linux-node1 ~]# cat /etc/sysctl.conf
+..........
+net.ipv4.ip_forward = 1
+[root@linux-node1 ~]# sysctl -p
+2）设置iptables的NAT转发功能
+[root@linux-node1 ~]# iptables -t nat -A PREROUTING -p tcp -m tcp --dport 20022 -j DNAT --to-destination 192.168.1.150:22
+[root@linux-node1 ~]# iptables -t nat -A POSTROUTING -d 192.168.1.150/32 -p tcp -m tcp --sport 22 -j SNAT --to-source 192.168.1.8
+[root@linux-node1 ~]# iptables -t filter -A INPUT -p tcp -m state --state NEW -m tcp --dport 20022 -j ACCEPT
+[root@linux-node1 ~]# service iptables save
+[root@linux-node1 ~]# service iptables restart
+
+nat端口转发设置成功后，/etc/sysconfig/iptables文件里要注释掉下面两行！不然nat转发会有问题！一般如上面在nat转发规则设置好并save和restart防火墙之后就会自动在/etc/sysconfig/iptables文件里删除掉下面两行内容了。
+[root@linux-node1 ~]# vim /etc/sysconfig/iptables
+..........
+#-A INPUT -j REJECT --reject-with icmp-host-prohibited         //这两行最好是注释掉。在一般的白名单设置中，如果这两行不注释，也会造成iptables对端口的设置无效
+#-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+[root@linux-node1 ~]# service iptables restart
+
+
+下面是在服务器B上（192.168.1.150）的操作：
+1)首先关闭防火墙
+[root@dev-new-test1 ~]# service iptables stop
+2）设置网关为宿主机的内网ip（内网网关地址一定要保持和宿主机内网网关地址一致！如果没有内网网关地址，那么就把它的网关设置成宿主机的内网ip地址！）
+[root@dev-new-test1 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0 
+......
+GATEWAY=192.168.1.8
+......
+[root@dev-new-test1 ~]# /etc/init.d/network restart
+[root@dev-new-test1 ~]# route -n
+Kernel IP routing table
+Destination Gateway Genmask Flags Metric Ref Use Iface
+192.168.1.0 0.0.0.0 255.255.255.0 U 0 0 0 eth0
+169.254.0.0 0.0.0.0 255.255.0.0 U 1002 0 0 eth0
+0.0.0.0 192.168.1.8 0.0.0.0 UG 0 0 0 eth0
+
+
+最后在公司服务器C上测试：看看能否登陆到虚拟机上
+[root@redmine ~]# ssh -p20022 103.110.114.8
+The authenticity of host '[103.10.86.8]:20022 ([103.10.86.8]:20022)' can't be established.
+RSA key fingerprint is f8:a9:d1:cb:52:e8:8b:ed:8b:d2:1a:86:06:1a:fd:0f.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '[103.10.86.8]:20022' (RSA) to the list of known hosts.
+root@103.110.114.8's password: 
+[root@dev-new-test1 ~]# ifconfig                          #查看，已经成功登陆进来了！
+eth0 Link encap:Ethernet HWaddr FA:16:3E:9D:F3:17 
+inet addr:192.168.1.150 Bcast:192.168.1.255 Mask:255.255.255.0
+inet6 addr: fe80::f816:3eff:fe9d:f317/64 Scope:Link
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:27047404 errors:0 dropped:0 overruns:0 frame:0
+TX packets:6401069 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:1000 
+RX bytes:67605283704 (62.9 GiB) TX bytes:566935277 (540.6 MiB)
+
+lo Link encap:Local Loopback 
+inet addr:127.0.0.1 Mask:255.0.0.0
+inet6 addr: ::1/128 Scope:Host
+UP LOOPBACK RUNNING MTU:65536 Metric:1
+RX packets:87025 errors:0 dropped:0 overruns:0 frame:0
+TX packets:87025 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:0 
+RX bytes:65978795 (62.9 MiB) TX bytes:65978795 (62.9 MiB)
+
+可以把服务器C的公钥id_rsa.pub内容拷贝到虚拟机上的authorized_keys文件内，这样从C机器就能ssh无密码登陆到虚拟机B上了。
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+下面贴出几个其他转口的转发规则（本机开启ip路由转发，目标机器注意防火墙和网关设置）：
+本机（192.168.1.7）的19200转发到192.168.1.160的9200
+[root@kvm-server conf]# iptables -t nat -A PREROUTING -p tcp -m tcp --dport 19200 -j DNAT --to-destination 192.168.1.160:9200
+[root@kvm-server conf]# iptables -t nat -A POSTROUTING -d 192.168.1.160/32 -p tcp -m tcp --sport 9200 -j SNAT --to-source 192.168.1.7
+[root@kvm-server conf]# iptables -t filter -A INPUT -p tcp -m state --state NEW -m tcp --dport 19200 -j ACCEPT
+
+本机（192.168.1.7）的33066转发到192.168.1.160的3306
+[root@kvm-server conf]# iptables -t nat -A PREROUTING -p tcp -m tcp --dport 33066 -j DNAT --to-destination 192.168.1.160:3306
+[root@kvm-server conf]# iptables -t nat -A POSTROUTING -d 192.168.1.160/32 -p tcp -m tcp --sport 3306 -j SNAT --to-source 192.168.1.7
+[root@kvm-server conf]# iptables -t filter -A INPUT -p tcp -m state --state NEW -m tcp --dport 33066 -j ACCEPT
+
+本机（192.168.1.7）的8880转发到192.168.1.1的8080
+[root@kvm-server conf]# iptables -t nat -A PREROUTING -p tcp -m tcp --dport 8880 -j DNAT --to-destination 192.168.1.160:8080
+[root@kvm-server conf]# iptables -t nat -A POSTROUTING -d 192.168.1.160/32 -p tcp -m tcp --sport 8080 -j SNAT --to-source 192.168.1.7
+[root@kvm-server conf]# iptables -t filter -A INPUT -p tcp -m state --state NEW -m tcp --dport 8880 -j ACCEPT
+
