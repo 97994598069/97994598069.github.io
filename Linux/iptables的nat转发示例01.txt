@@ -17,17 +17,23 @@
 
 步骤一:
 在108的机子上
-1.开启防火墙
+1.开启服务器路由转发的功能
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+2.开启防火墙
 systemctl restart firewalld  (之前是关闭的;只用了ecs的安全组)
 
-2.为了不使防火墙拦截端口影响其他业务；让防火墙放开所有的端口
+3.为了不使防火墙拦截端口影响其他业务；让防火墙放开所有的端口
 firewall-cmd --permanent --zone=public --add-port=1-65535/tcp
 firewall-cmd --permanent --zone=public --add-port=1-65535/udp
 firewall-cmd --reload
 
-3.配置iptables的nat转发
+4.配置iptables的nat转发
 iptables -I FORWARD -s 192.168.1.0/24 -j ACCEPT
 iptables -t nat -I POSTROUTING -s 192.168.1.0/24 -j SNAT --to-source 192.168.1.108  ##（192.168.1.0/24也可以换成具体的ip）
+
+
+5.登陆阿里云控制台专有网络VPC--->路由表---->管理---->添加路由条目--->(目标网络)0.0.0.0/32--->(下一跳类型选择)ECS(选择108的机子)--->确定
 
 此时在104 105 106 107等没有公网的机子上测试发现能通
 [root@iZ2zegvetp7u0ic3puzpsuZ docker]# curl -I www.baidu.com
