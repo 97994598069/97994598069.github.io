@@ -1,0 +1,68 @@
+示例：
+背景：
+5台阿里ecs：内网ip分别为：192.168.1.104 105 106 107 108  其中只有108有公网ip：39.105.193.197   均为VPC专有网络
+此时：
+1.需要在这5台虚机上搭建k8s 略 104为master 其余为node  步骤略
+2.需要在有公网ip的108上搭建harbor镜像仓库
+3.开发人员需要使用公网将镜像推到harbor上; 然后没有公网的ecs需要通过私网ip拉取（公网也可以但是比较慢）
+
+问题：
+1.没有公网的ecs不能访问外网；
+2.若harbor指定为108的私网ip则开发人员不能够将镜像推送到harbor上
+3.若harbor指定为108的公网ip则104 105 106等没有公网的ecs不能通过108的私网ip拉取镜像
+
+解决思路：
+在108的机子上做nat转发；使没有公网的ecs都能够访问外网；；然后配置harbor为公网ip；这样开发人员可以通过外网来推送镜像；没有公网的ecs通过私网ip拉取镜像
+
+
+步骤一:
+在108的机子上
+1.开启防火墙
+systemctl restart firewalld  (之前是关闭的;只用了ecs的安全组)
+
+2.为了不使防火墙拦截端口影响其他业务；让防火墙放开所有的端口
+firewall-cmd --permanent --zone=public --add-port=1-65535/tcp
+firewall-cmd --permanent --zone=public --add-port=1-65535/udp
+firewall-cmd --reload
+
+3.配置iptables的nat转发
+iptables -I FORWARD -s 192.168.1.0/24 -j ACCEPT
+iptables -t nat -I POSTROUTING -s 192.168.1.0/24 -j SNAT --to-source 192.168.1.108  ##（192.168.1.0/24也可以换成具体的ip）
+
+此时在104 105 106 107等没有公网的机子上测试发现能通
+[root@iZ2zegvetp7u0ic3puzpsuZ docker]# curl -I www.baidu.com
+HTTP/1.1 200 OK
+Server: bfe/1.0.8.18
+Date: Wed, 21 Nov 2018 02:43:06 GMT
+Content-Type: text/html
+Content-Length: 277
+Last-Modified: Mon, 13 Jun 2016 02:50:08 GMT
+Connection: Keep-Alive
+ETag: "575e1f60-115"
+Cache-Control: private, no-cache, no-store, proxy-revalidate, no-transform
+Pragma: no-cache
+Accept-Ranges: bytes
+
+
+至此网络的问题解决
+
+1. 108的机子上安装harbor
+但是报错 忘了是啥了 貌似是（Unable to enable SKIP DNAT rule   然后（iptables -t nat xxxxxxx ））
+
+2.重启docker systemctl restart docker 再次重新安装harbor成功
+
+测试:
+1.开发人员走108的公网将镜像推送到harbor上（当然做的主从）   成功  （daemon.json 配置的108的公网ip）
+2.没有公网的ecs走108的私网将镜像从harbor上拉取    成功   （daemon.json配置的108的私网）
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+其实iptables的ip转发还可以配置ssh  （上述的几台机子我是用xshell连的108的公网然后打通108和其余的ecs的免密登陆来管理的）
+
+
+
+
+
+
+
