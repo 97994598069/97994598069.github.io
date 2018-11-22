@@ -40,7 +40,14 @@ OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=
 
 9、启动并加入开机启动
 systemctl start docker
+systemctl status docker
 systemctl enable docker
+备注：如果报错：error="exec: \"docker-runc\": executable file not found in $PATH: \"\""
+docker测试：
+docker run -ti -d --name "test" docker.io/tomcat 若报错：shim error: docker-runc not installed on system.
+上述两种报错均：ln -s /usr/libexec/docker/docker-runc-current /usr/local/bin/docker-runc
+
+
 
 10.更改docker目录 默认的是/var/lib/docker  为了防止将根分区给打满。需要更改
 mv /var/lib/docker /data/
