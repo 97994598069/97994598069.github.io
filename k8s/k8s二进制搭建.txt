@@ -68,6 +68,10 @@ EOF
 systemctl restart docker
 systemctl status docker
 systemctl enable docker
+备注：如果报错：error="exec: \"docker-runc\": executable file not found in $PATH: \"\""
+docker测试：
+docker run -ti -d --name "test" docker.io/tomcat 若报错：shim error: docker-runc not installed on system.
+上述两种报错均：ln -s /usr/libexec/docker/docker-runc-current /usr/local/bin/docker-runc
 
 
 三、 生成自签发TLS证书  (master上操作然后拷贝到其他节点)
