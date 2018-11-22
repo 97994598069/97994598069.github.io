@@ -1,0 +1,132 @@
+nodejs安装：
+[root@etcd1 logs]# cat /etc/redhat-release 
+CentOS Linux release 7.5.1804 (Core) 
+
+备注：centos6和centos7均可
+
+
+
+一、安装包：
+[root@etcd1 src]# ll /usr/local/src/
+总用量 11088
+-rw-r--r--. 1 root root 11351232 11月 22 22:48 node-v8.11.4-linux-x64.tar.xz
+
+前端项目(vue):
+[root@etcd1 src]# ll /mnt/
+总用量 45528
+-rw-r--r--. 1 root root  3670498 11月 22 22:47 jinyoujia-nuxt.zip
+
+
+二、安装nodejs
+[root@etcd1 src]# cd /usr/local/src/
+[root@etcd1 src]# ll
+总用量 11088
+-rw-r--r--. 1 root root 11351232 11月 22 22:48 node-v8.11.4-linux-x64.tar.xz
+
+[root@etcd1 src]# tar xf node-v8.11.4-linux-x64.tar.xz 
+[root@etcd1 src]# ll
+总用量 11088
+drwxrwxr-x. 6  500  500      108 8月  15 22:11 node-v8.11.4-linux-x64
+-rw-r--r--. 1 root root 11351232 11月 22 22:48 node-v8.11.4-linux-x64.tar.xz
+[root@etcd1 src]# 
+
+
+[root@etcd1 src]# mv node-v8.11.4-linux-x64 /opt/node 
+[root@etcd1 src]# ll /opt/
+总用量 0
+drwxrwxr-x. 6  500  500 108 8月  15 22:11 node
+
+
+[root@etcd1 bin]# pwd
+/opt/node/bin
+[root@etcd1 bin]# ll
+总用量 33988
+-rwxrwxr-x. 1 500 500 34800729 8月  15 22:10 node
+lrwxrwxrwx. 1 500 500       38 8月  15 22:11 npm -> ../lib/node_modules/npm/bin/npm-cli.js
+lrwxrwxrwx. 1 500 500       38 8月  15 22:11 npx -> ../lib/node_modules/npm/bin/npx-cli.js
+
+
+[root@etcd1 bin]# pwd
+/opt/node/bin
+[root@etcd1 bin]# ln -s /opt/node/bin/node /usr/local/bin/
+[root@etcd1 bin]# ln -s /opt/node/bin/npm /usr/local/bin/
+[root@etcd1 bin]# ll /usr/local/bin/ |grep -E "node|npm"
+lrwxrwxrwx. 1 root root       18 11月 22 22:53 node -> /opt/node/bin/node
+lrwxrwxrwx. 1 root root       17 11月 22 22:53 npm -> /opt/node/bin/npm
+
+[root@etcd1 bin]# node -v
+v8.11.4
+[root@etcd1 bin]# npm -v
+5.6.0
+
+
+三、安装项目
+[root@etcd1 mnt]# unzip /mnt/jinyoujia-nuxt.zip 
+[root@etcd1 mnt]# ll
+总用量 45528
+drwxr-xr-x. 4 root root       75 11月 22 16:12 jinyoujia-nuxt
+-rw-r--r--. 1 root root  3670498 11月 22 22:47 jinyoujia-nuxt.zip
+
+[root@etcd1 mnt]# cd jinyoujia-nuxt
+[root@etcd1 jinyoujia-nuxt]# ll
+总用量 8
+-rw-r--r--. 1 root root 1326 10月 18 13:56 nuxt.config.js
+-rw-r--r--. 1 root root  749 11月  7 16:36 package.json
+drwxr-xr-x. 5 root root   57 11月 22 16:12 static
+
+安装pm2工具
+[root@etcd1 jinyoujia-nuxt]# npm install -g pm2
+[root@etcd1 jinyoujia-nuxt]# ln -s /opt/node/bin/pm2 /usr/local/bin/
+
+
+安装cnpm工具（比npm性能好）
+[root@etcd1 jinyoujia-nuxt]# npm install -g cnpm --registry=http://registry.npm.taobao.org
+[root@etcd1 jinyoujia-nuxt]# ln -s /opt/node/bin/cnpm /usr/local/bin/
+
+
+配置项目
+[root@etcd1 jinyoujia-nuxt]# cnpm install
+完成后会在前端项目下生成一个node_modules目录
+
+
+启动项目：
+[root@etcd1 jinyoujia-nuxt]# pm2 start ./node_modules/nuxt/bin/nuxt -i 2 --name jinyoujia -- start
+[PM2] Starting /mnt/jinyoujia-nuxt/node_modules/nuxt/bin/nuxt in cluster_mode (2 instances)
+[PM2] Done.
+┌───────────┬────┬─────────┬─────────┬───────┬────────┬─────────┬────────┬─────┬───────────┬──────┬──────────┐
+│ App name  │ id │ version │ mode    │ pid   │ status │ restart │ uptime │ cpu │ mem       │ user │ watching │
+├───────────┼────┼─────────┼─────────┼───────┼────────┼─────────┼────────┼─────┼───────────┼──────┼──────────┤
+│ jinyoujia │ 0  │ 1.4.4   │ cluster │ 22726 │ online │ 0       │ 0s     │ 0%  │ 24.5 MB   │ root │ disabled │
+│ jinyoujia │ 1  │ 1.4.4   │ cluster │ 22732 │ online │ 0       │ 0s     │ 0%  │ 17.6 MB   │ root │ disabled │
+└───────────┴────┴─────────┴─────────┴───────┴────────┴─────────┴────────┴─────┴───────────┴──────┴────────
+
+
+确定3000端口正常：
+[root@etcd1 jinyoujia-nuxt]# netstat -unptl |grep 3000
+tcp        0      0 127.0.0.1:3000          0.0.0.0:*               LISTEN      22697/PM2 v3.2.2: G 
+
+[root@etcd1 logs]# curl -I http://localhost:3000
+HTTP/1.1 200 OK
+Set-Cookie: code=;max-age=0;path=/;HttpOnly
+Set-Cookie: x-x-user=;max-age=0;path=/;HttpOnly
+ETag: "41b4f-rEyZ+vqAMaVf958fKPYFvOV+Blw"
+Content-Type: text/html; charset=utf-8
+Content-Length: 269135
+Vary: Accept-Encoding
+Date: Thu, 22 Nov 2018 15:11:39 GMT
+Connection: keep-alive
+
+
+
+备注：
+pm2常用命令：
+重启命令：
+pm2 --help
+pm2 list  
+pm2 stop all
+pm2 delete bim   bim为项目名即输出中的App name  （一般不用做，若出问题则需要做）
+pm2 start ./node_modules/nuxt/bin/nuxt -i 2 --name bim -- start  启动即可
+
+相关日志：
+[root@etcd1 logs]# pwd
+/root/.pm2/logs
