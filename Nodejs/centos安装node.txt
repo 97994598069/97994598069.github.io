@@ -116,8 +116,6 @@ Vary: Accept-Encoding
 Date: Thu, 22 Nov 2018 15:11:39 GMT
 Connection: keep-alive
 
-
-
 备注：
 pm2常用命令：
 重启命令：
@@ -130,3 +128,72 @@ pm2 start ./node_modules/nuxt/bin/nuxt -i 2 --name bim -- start  启动即可
 相关日志：
 [root@etcd1 logs]# pwd
 /root/.pm2/logs
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+解决上述不能用ip访问的问题
+
+但是此时发现将localhost换成具体的ip（内网和外网）均访问异常（127.0.0.1和localhost正常）
+
+
+此时需要用nginx做反向代理来使显示正常
+
+如下：因为应用还没有审批所以用ip和具体的端口来代替：
+
+[root@gezhenwang vhost]# cat vhosts_jinyoujia.conf 
+upstream node_app {
+        server 127.0.0.1:3000;   ###代理3000端口此地只能使用127.0.0.1或者localhost
+    }
+
+
+server {
+        listen       8111;
+        server_name  $公网ip;
+
+
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
+	
+
+若是有接口（一般前后端分离都会有接口）则需要：
+upstream node_app {
+        server 127.0.0.1:3000;   ##同样代理3000端口
+    }
+
+upstream baike {
+        server 127.0.0.1:8080;   ##代理后端
+        }
+server {
+        listen       80;
+        server_name  beike.qianyi.com;
+
+
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
+	
+server {
+	listen       80;
+        server_name  api.beike.qainyi.com;
+location / {
+
+        proxy_pass http://baike;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
