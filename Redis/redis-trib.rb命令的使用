@@ -1,0 +1,135 @@
+1、create：创建集群
+2、check：检查集群
+3、info：查看集群信息
+4、fix：修复集群
+5、reshard：在线迁移slot
+6、rebalance：平衡集群节点slot数量
+7、add-node：将新节点加入集群
+8、del-node：从集群中删除节点
+9、set-timeout：设置集群节点间心跳连接的超时时间
+10、call：在集群全部节点上执行命令
+11、import：将外部redis数据导入集群
+
+
+创建集群
+用户无需指定哪台节点为master，哪台节点为slave，因为redis内部算法帮我们实现了
+create命令：
+--replicas # 可选参数，replicas表示每个master需要有几个slave。
+
+# 只有master节点的创建方式
+./redis-trib.rb create  192.168.66.2:7000 192.168.66.2:7001 192.168.66.2:7002 192.168.66.3:7003 192.168.66.3:7004 192.168.66.3:7005
+
+使用 --replicas 1 创建 每个master带一个 slave 指令
+./redis-trib.rb create --replicas 1  192.168.66.2:7000 192.168.66.2:7001 192.168.66.2:7002 192.168.66.3:7003 192.168.66.3:7004 192.168.66.3:7005
+
+
+
+检查集群情况
+check命令：
+./redis-trib.rb check 192.168.66.2:7000    #后面的IP与端口,随便指定集群中的一个就行了。
+
+查看集群信息
+info命令
+./redis-trib.rb info 192.168.66.2:7000
+输出：
+[OK] 1 keys in 4 masters.
+0.00 keys per slot on average.
+
+
+
+
+在线迁移slot
+reshard命令
+host:port：这个是必传参数，用来从一个节点获取整个集群信息，相当于获取集群信息的入口。
+--from <arg>：需要从哪些源节点上迁移slot，可从多个源节点完成迁移，以逗号隔开，传递的是节点的node id，还可以直接传递--from all，这样源节点就是集群的所有节点，不传递该参数的话，则会在迁移过程中提示用户输入。
+--to <arg>：slot需要迁移的目的节点的node id，目的节点只能填写一个，不传递该参数的话，则会在迁移过程中提示用户输入。
+--slots <arg>：需要迁移的slot数量，不传递该参数的话，则会在迁移过程中提示用户输入。
+--yes：设置该参数，可以在打印执行reshard计划的时候，提示用户输入yes确认后再执行reshard。
+--timeout <arg>：设置migrate命令的超时时间。
+--pipeline <arg>：定义cluster getkeysinslot命令一次取出的key数量，不传的话使用默认值为10。
+
+./redis-trib.rb reshard --from all --to 80b661ecca260c89e3d8ea9b98f77edaeef43dcd --slots 11 
+
+
+
+
+平衡集群节点slot数量
+rebalance命令
+host:port：这个是必传参数，用来从一个节点获取整个集群信息，相当于获取集群信息的入口。
+--weight <arg>：节点的权重，格式为node_id=weight，如果需要为多个节点分配权重的话，需要添加多个--weight <arg>参数，即--weight b31e3a2e=5 --weight 60b8e3a1=5，node_id可为节点名称的前缀，只要保证前缀位数能唯一区分该节点即可。没有传递–weight的节点的权重默认为1。
+--auto-weights：这个参数在rebalance流程中并未用到。
+--threshold <arg>：只有节点需要迁移的slot阈值超过threshold，才会执行rebalance操作。具体计算方法可以参考下面的rebalance命令流程的第四步。
+--use-empty-masters：rebalance是否考虑没有节点的master，默认没有分配slot节点的master是不参与rebalance的，设置--use-empty-masters可以让没有分配slot的节点参与rebalance。
+--timeout <arg>：设置migrate命令的超时时间。
+--simulate：设置该参数，可以模拟rebalance操作，提示用户会迁移哪些slots，而不会真正执行迁移操作。
+--pipeline <arg>：与reshar的pipeline参数一样，定义cluster getkeysinslot命令一次取出的key数量，不传的话使用默认值为10。
+
+
+
+增加一个主节点
+./redis-trib.rb add-node 192.168.66.3:7006 192.168.66.2:7000
+
+# 添加成功，但是并没有指定 slot ,所以必须 迁移slot节点
+./redis-trib.rb reshard 192.168.66.2:7000
+
+# 提示一 ：How many slots do you want to move (from 1 to 16384)?
+为了平衡每个master管理的slot的个数，所以输入 16384/master  的数量。如这里为4 那么就是 16384/4 = 4096个。
+输入 4096
+
+# 提示二：What is the receiving node ID?(接受的node ID是多少)
+            890d2c8d989cce50e5fa48e37cd35738887f3f7d # 7006的ID
+
+# 提示三： Please enter all the source node IDs.
+           Type 'all' to use all the nodes as source nodes for the hash slots.
+           Type 'done' once you entered all the source nodes IDs.
+                  （要从哪个节点中获取lost ？）
+不打算从特定的节点上取出指定数量的哈希槽， 那么可以输入 all
+否则输入某个节点的 node ID 
+# 检查是否成功
+./redis-trib.rb check 192.168.66.2:7000
+
+
+
+增加一个从节点
+# 这样创建从节点会自动匹配主节点
+./redis-trib.rb add-node --slave 127.0.0.1:7007 127.0.0.1:7000
+        
+# 增加从节点的时候指定主节点。
+./redis-trib.rb add-node --slave --master-id 890d2c8d989cce50e5fa48e37cd35738887f3f7d 192.168.66.3:7008 192.168.66.2:7000
+
+
+
+
+从集群中删除节点
+del-node
+host:port：从该节点获取集群信息。
+node_id：需要删除的节点id。
+./redis-trib.rb del-node 192.168.66.2:7000 d5f6d1d17426bd564a6e309f32d0f5b96962fe53
+
+
+宕机情况
+当某个从节点挂掉之后，对于redis集群来说几乎没有什么影响，相当于这个从节点对应的 主节点少了一个备份而已。
+当某一个主节点挂掉之后，redis 会从这个主节点的多个从节点中推选一个出来，担当master的工作，并且把之前依附在
+主节点的从节点调整依附到新的master上。如果新任的master也挂掉并且他没有从节点了，那么这个集群也真正的挂掉了。
+
+
+
+集群创建时 replicas 参数 指定情况。
+使用 --replicas 1 参数时，如果节点数量少于六个。
+报错
+*** ERROR: Invalid configuration for cluster creation.
+*** Redis Cluster requires at least 3 master nodes.
+*** This is not possible with 5 nodes and 1 replicas per node.
+*** At least 6 nodes are required.
+使用 --replicas 1 参数时，如果节点数量 大于六个，且为单数时。
+这样会造成某个master拥有两个salve
+
+
+
+
+
+
+
+
+
+
