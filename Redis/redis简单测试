@@ -1,0 +1,34 @@
+[root@iZ2ze5j87h6jpkqqm51uwuZ redis-3.0.6]# redis-cli -h 123.57.6.22 -c -p 7001
+
+[root@harbor02 src]# redis-cli -h 123.57.6.22 -c -p 7003 CLIENT LIST |wc -l
+
+127.0.0.1:7002> set hello world
+
+
+123.57.6.22:7000> get hello
+"world"
+
+
+http://www.cnblogs.com/fengzheng/p/5913024.html
+
+
+测试集群：
+[root@iZ2ze5j87h6jpkqqm51uwuZ redis-3.0.6]# redis-cli -h 123.57.6.22 -c -p 7001  登陆上7001
+127.0.0.1:7002> set hello world  添加一条
+
+[root@iZ2ze5j87h6jpkqqm51uwuZ redis-3.0.6]# redis-cli -h 123.57.6.22 -c -p 7002  登陆上7002
+
+127.0.0.1:7002> get hello     查看是否有结果；如果有则正常；；依次类推其他节点
+
+
+
+redsi客户端测试：
+有时候redis需要临时测试需要安装个客户端；此时简单安装个即可
+redis客户端安装：
+wget http://download.redis.io/releases/redis-3.2.4.tar.gz
+tar -zxvf redis-3.2.4.tar.gz　
+cd redis-3.2.4
+make && make install
+[root@harbor02 src]# ln -s /root/redis-3.2.4/src/bin/redis-cli /usr/local/bin/ 
+
+redis-cli -h 123.57.6.22 -c -p 7001
