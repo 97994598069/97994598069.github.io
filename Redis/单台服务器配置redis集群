@@ -1,0 +1,89 @@
+-- 下载ruby ---
+cd /soft/tools
+wget https://cache.ruby-lang.org/pub/ruby/2.3/ruby-2.3.4.tar.gz
+
+-- 安装ruby ---
+tar zxf ruby-2.3.4.tar.gz
+cd ruby-2.3.4
+./configure --prefix=/soft/ruby-2.3.4
+make
+make install
+ln -s /soft/ruby-2.3.4 /soft/ruby
+cd /soft/ruby
+cp bin/ruby /usr/local/bin/
+cp bin/gem /usr/local/bin/
+[root@lbl ruby]# ll /usr/local/bin/{ruby,gem}
+-rwxr-xr-x. 1 root root      548 Apr 21 00:42 /usr/local/bin/gem
+-rwxr-xr-x. 1 root root 22306743 Apr 21 00:42 /usr/local/bin/ruby
+
+-- 安装rubygem redis依赖 ---
+wget http://rubygems.org/downloads/redis-3.3.0.gem
+gem install -l redis-3.3.0.gem
+gem list --check redis gem
+
+-- 安装redis-rb管理工具 ---
+[root@test ruby]# cp /soft/tools/redis-3.2.0/src/redis-trib.rb /usr/local/bin/
+[root@test ruby]# ll /usr/local/bin/{ruby,gem,*.rb}
+-rwxr-xr-x. 1 root root      548 Apr 16 10:05 /usr/local/bin/gem
+-rwxr-xr-x. 1 root root    60578 Apr 16 10:07 /usr/local/bin/redis-trib.rb
+-rwxr-xr-x. 1 root root 22306727 Apr 16 10:05 /usr/local/bin/ruby
+
+
+-- 主节点
+redis-server /soft/redis/cluster/7000/redis.conf &
+redis-server /soft/redis/cluster/7100/redis.conf &
+redis-server /soft/redis/cluster/7200/redis.conf &
+-- 从节点
+redis-server /soft/redis/cluster/7001/redis.conf &
+redis-server /soft/redis/cluster/7101/redis.conf &
+redis-server /soft/redis/cluster/7201/redis.conf &
+
+
+3、创建集群
+启动好6个节点之后，使用redis-trib.rb create命令完成节点握手和槽分配过程：
+注意：指定 主从节点时，前三个为主节点；后三个为对应从节点
+[root@test cluster]# redis-trib.rb create --replicas 1 127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7100 127.0.0.1:7101 127.0.0.1:7200 127.0.0.1:7300
+>>> Creating cluster
+>>> Performing hash slots allocation on 6 nodes...
+Using 3 masters:
+127.0.0.1:7000
+127.0.0.1:7001
+127.0.0.1:7100
+Adding replica 127.0.0.1:7101 to 127.0.0.1:7000
+Adding replica 127.0.0.1:7200 to 127.0.0.1:7001
+Adding replica 127.0.0.1:7300 to 127.0.0.1:7100
+
+
+4、集群完整性检查
+集群完整性是指所有的槽都分配到了存活的主节点上，只要16384个槽中有一个没有分配给节点则表示集群不完整；
+可以使用redis-trib.rb check命令检测之前创建的两个集群是否成功，check命令只需要给出集群中任意一个节点地址就可以完成整个集群的检查工作；
+redis-trib.rb check 127.0.0.1:7000
+redis-trib.rb check 127.0.0.1:7100
+
+-- 输出如下信息，提示集群所有的槽都已分配到节点 --
+[root@test cluster]# redis-trib.rb check 127.0.0.1:7000
+>>> Performing Cluster Check (using node 127.0.0.1:7000)
+M: b70ce6df43039cd8ef2004a031851668dfe51982 127.0.0.1:7000
+   slots:0-5460 (5461 slots) master
+   1 additional replica(s)
+S: e2fae64bbac1fc28d66c4cb21c5be95be4ba8953 127.0.0.1:7200
+   slots: (0 slots) slave
+   replicates 3300b8f899d7f369d7095025954f2069857801c0
+S: 97cf943c9fac35520fdd9426e344f7b7cc390fb8 127.0.0.1:7101
+   slots: (0 slots) slave
+   replicates b70ce6df43039cd8ef2004a031851668dfe51982
+M: 085d2851ef195428786f7df14a2c00fedb6ccec9 127.0.0.1:7100
+
+
+1.    建立集群主要步骤如下：
+              ①  准备节点
+              ②  节点握手【meet命令，是一个异步命令】
+              ③  分配槽    【cluster addslots {number_start..number_end}】
+2.    redis cluster 需要至少6个节点，3个主节点 +3个从节点
+3.    主从节点必须为复制关系【cluster replicate 主节点ID 命令，建立复制关系】
+4.    节点握手协议采用Gossip协议进行通信，通过meet命令建立握手关系，通过ping/pong命令保持正常通信
+5.    加入到集群中的节点，在没有分配槽时，无法进行任何读写操作；
+
+
+
+
