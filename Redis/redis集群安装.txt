@@ -138,7 +138,16 @@ redis-trib.rb  create  --replicas  1  172.10.10.24:7000 172.10.10.24:7001  172.1
 
 输入 yes 即可，然后出现如下内容，说明安装成功。
 
-备注：使用 --replicas 1 创建 每个master带一个 slave 指令
+{{ 备注：使用 --replicas 1 创建 每个master带一个 slave 指令
+使用 --replicas 1 参数时，如果节点数量少于六个。
+报错
+*** ERROR: Invalid configuration for cluster creation.
+*** Redis Cluster requires at least 3 master nodes.
+*** This is not possible with 5 nodes and 1 replicas per node.
+*** At least 6 nodes are required.
+使用 --replicas 1 参数时，如果节点数量 大于六个，且为单数时。
+这样会造成某个master拥有两个salve }}
+
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 验证集群
