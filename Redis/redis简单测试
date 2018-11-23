@@ -32,3 +32,17 @@ make && make install
 [root@harbor02 src]# ln -s /root/redis-3.2.4/src/bin/redis-cli /usr/local/bin/ 
 
 redis-cli -h 123.57.6.22 -c -p 7001
+
+
+
+集群测试：
+redis-trib.rb check 172.10.10.24:7000
+redis-trib.rb check 172.10.10.24:7001
+redis-trib.rb check 172.10.10.24:7002
+
+redis-trib.rb check 172.10.10.25:7003
+redis-trib.rb check 172.10.10.25:7004
+redis-trib.rb check 172.10.10.25:7005
+
+上述均返回OK正常
+
