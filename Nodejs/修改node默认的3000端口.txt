@@ -1,0 +1,33 @@
+背景：
+由于公司资源原因；使得一个服务器上必须跑多个前端项目；但是nodejs的端口都是3000；这使得用nginx负载均衡3000端口后只能跑一个前端服务-----有点尴尬
+
+由于上述原因；此时应该修改第二个前端的端口区别于3000（例如3001）；这样用nginx做代理就可以跑多个项目
+
+怎么修改？ 如下：
+项目安装完成后（cnpm install）；会生成目录node_modules
+
+vi ./node_modules/nuxt/lib/core/nuxt.js  
+将    139   listen(port = 3000, host = 'localhost') ### 将其中的3000改为3001
+
+启动项目：
+pm2 start ./node_modules/nuxt/bin/nuxt -i 2 --name bim -- start
+
+pm2 list 查看项目启动是否正常
+[root@etcd1 jinyoujia-nuxt]# pm2 list
+┌───────────┬────┬─────────┬─────────┬───────┬────────┬─────────┬────────┬──────┬───────────┬──────┬──────────┐
+│ App name  │ id │ version │ mode    │ pid   │ status │ restart │ uptime │ cpu  │ mem       │ user │ watching │
+├───────────┼────┼─────────┼─────────┼───────┼────────┼─────────┼────────┼──────┼───────────┼──────┼──────────┤
+│ baike     │ 2  │ 1.4.4   │ cluster │ 38474 │ online │ 0       │ 75m    │ 0.1% │ 65.2 MB   │ root │ disabled │
+│ baike     │ 3  │ 1.4.4   │ cluster │ 38480 │ online │ 0       │ 75m    │ 0%   │ 61.5 MB   │ root │ disabled │
+│ jinyoujia │ 6  │ 1.4.4   │ cluster │ 48100 │ online │ 0       │ 7m     │ 0.1% │ 65.4 MB   │ root │ disabled │
+│ jinyoujia │ 7  │ 1.4.4   │ cluster │ 48108 │ online │ 0       │ 7m     │ 0.1% │ 65.4 MB   │ root │ disabled │
+└───────────┴────┴─────────┴─────────┴───────┴────────┴─────────┴────────┴──────┴───────────┴──────┴───────
+
+
+查看端口
+netstat -unptl |grep PM2
+[root@etcd1 jinyoujia-nuxt]# netstat -unptl |grep PM2
+tcp        0      0 127.0.0.1:3000          0.0.0.0:*               LISTEN      37744/PM2 v3.2.2: G 
+tcp        0      0 127.0.0.1:3001          0.0.0.0:*               LISTEN      37744/PM2 v3.2.2: G 
+
+综上可以看到端口有两个3000和3001；然后用nginx分别做反向代理即可
