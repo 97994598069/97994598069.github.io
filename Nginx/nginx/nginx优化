@@ -1,0 +1,258 @@
+1.1 Nginx优化分类
+安全优化（提升网站安全性配置）
+性能优化（提升用户访问网站效率）
+
+Nginx安全优化
+1.隐藏nginx版本信息优化
+server段添加server_tokens off;
+
+2.修改worker进程的用户
+第一种方法：利用编译安装配置参数，设定nginx默认worker进程用户
+编译的时候：
+useradd -s /sbin/nologin -M www
+./configure --user=www --group=www
+
+第二种方式：编写nginx服务配置文件，设定nginx默认worker进程用户
+[root@web02 conf]# cat nginx.conf
+user www www; # 主区块添加user参数
+worker_processes 1;
+events {
+worker_connections 1024;
+}
+
+
+
+
+上传文件大小的限制（动态应用）
+举例配置：
+http {
+sendfile on;
+keepalive_timeout 65;
+client_max_body_size 1m; # 设置上传文件最大值1M，还受博客程序限制
+}
+
+
+
+站点 Nginx站点目录及文件URL访问控制
+01.根据目录或扩展名，禁止用户访问指定数据信息
+避免用户上传一些脚本，恶意破会网站程序
+location ~ ^/images/.*\.（php|php5|sh|pl|py|html）$
+{
+deny all;
+}
+location ~ ^/static/.*\.（php|php5|sh|pl|py）$
+{
+deny all;
+}
+location ~* ^/data/（attachment|avatar）/.*\.（php|php5）$
+{
+deny all;
+}
+
+02. 当访问禁止的数据信息时，进行页面跳转
+Nginx下配置禁止访问*.txt和*.doc文件。
+location ~* \.（txt|doc）$ {
+if （-f $request_filename）{
+root /data/www/www;
+#rewrite …..可以重定向到某个URL
+break;
+}
+}
+location ~* \.（txt|doc）${
+root /data/www/www;
+denyall;
+}
+
+
+03. 根据IP地址或网络进行访问策略控制
+location / {
+deny 192.168.1.1;
+allow 192.168.1.0/24;
+allow 10.1.1.0/16;
+deny all;
+}
+
+
+04. 采用if判断方式，进行访问控制
+if （$remote_addr = 10.0.0.7 ）{
+return 403;
+}
+
+
+
+1.2.6 配置Nginx，禁止非法域名解析访问企业网站
+作用：避免恶意用户使用自己的域名也能解析到blog.george.com对应的IP上。
+思路：只能通过域名访问网站，IP不可以访问。
+第一种方式：配置一个server虚拟主机区块，放置在所有server区块最前面
+server {
+listen 80;
+server_name - ;
+return 501;
+}
+原理：首先域名解析为IP，接下来是根据7层模型，经过2层MAC，在根据IP访问到ngin服务器，IP如果符合了在根据4层端口匹配对应的server区块，IP和端口都满足了在根据5层域名匹配对应的server区块，都不满足，默认返回给第一个server区块处理。
+
+
+第二种方式：将计就计，通过你的域名访问时候，自动跳转到我的域名上
+server {
+listen 80 default_server;
+server_name _;
+rewrite ^（.*） http://www.nmtui.com/$1 permanent;
+}
+
+
+第三种方式：发现某域名恶意解析到公司的服务器IP，在server标签里添加以下代码即可，若有多个server则要多处添加。
+if （$host !~ ^www\.nmtui\.com$）
+{
+rewrite ^（.*） http://www.nmtui.com/$1 permanent;
+}
+
+
+
+1.2.7 Nginx图片及目录防盗链解决方案
+简单地说，就是某些不法网站未经许可，通过在其自身网站程序里非法调用其他网站的资源，然后在自己的网站上显示这些调用的资源，达到填充自身网站的效果。
+01. 真正的合法网站（盗链的目标）  web01   www.nmtui.com www站点目录有一个oldboy.jpg图片
+# 在站点目录下，生成要被盗链的图片信息
+ls blog/oldboy.jpg
+# 配置静态虚拟主机 
+server {
+listen 80;
+server_name blog.george.com;
+location / {
+root html/blog;
+index index.html index.htm;
+}
+# 确认生成盗链文件
+
+
+02. 不合法的网站（真正盗链网站）  www.daolian.com
+# 编写盗链网站配置文件
+listen 80;
+server_name blog.daolian.com;
+location / {
+root html/blog;
+index index.html index.htm;
+}
+# 编写一个html盗链文件
+<html>
+<head>
+<title>george</title>
+</head>
+<body bgcolor=green>
+george的博客！
+<br>我的博客是
+<a
+href="http://blog.daolian.com" target="_blank">博客地址
+</a>
+<img src="http://blog.george.com/oldboy.jpg">        #盗取的图片
+</body>
+</html>
+    编写盗链虚拟主机
+server {
+listen 80;
+server_name blog.daolian.com;
+location / {
+root html;
+index index.html index.htm;
+}
+}
+#至此就实现了盗链。
+
+
+03 常见防盗链解决方案的基本原理
+1)     根据HTTP referer实现防盗链
+    利用referer，并且针对扩展名rewrite重定向，下面的代码为利用referer且针对扩展名rewrite重定向，即实写防盗链的Nginx配置。
+# 在站点目录下，生成要被盗链后要跳转的图片
+ls blog/nolink.jpg         
+
+
+         ~ .*\.
+location ~* /\.(jpg|gif|swf|flv|wma|wmv|asf|mp3|mmf|zip|rar)$ {  
+root html/blog;
+valid_referers none blocked *.george.com george.com;
+if （$invalid_referer）{
+rewrite ^/ http://blog.george.com/nolink.png;
+}
+}
+注：盗链网站盗取的是你的jpg图片，上面被盗网站的location中匹配了jpg,但属于valid_referers，所以会跳转为http://blog.george.com/nolink.png，也就实现了防盗链。
+如果rewrite跳转的后的图片也是jpg的图片，那么就造成无线循环.
+
+
+但是这样网站资源是实现了防盗，但是流量还是盗取的你的，所以使用下面的方法来实现将用户提示的图片到用户本地缓存：
+设置expires的方法如下：在localtion加了缓存期限
+[root@clsn www]# cat /application/nginx/conf/extra/www.conf server {
+listen 80;
+server_name www.nmtui.com;
+root html/www;
+index index.html index.htm;
+access_log logs/www_access.log main;
+#Preventing hot linking of images and other file types
+location ~* ^.+\.（gif|jpg|swf|flv|rar|zip）$ {
+valid_referers none blocked server_names *.nmtui.comnmtui.com;
+if （$invalid_referer）{
+rewrite ^/ http：//www.nmtui.com/img/nolink.png;
+}
+access_log off;                                    #在localtion加了缓存期限
+root html/www;
+expires 1d;
+break;
+}
+}
+注：none:正常的访问 blocked：锁定这些访问
+
+
+1.2.8 NGINX错误页面优雅显示
+范例1：对错误代码403实行本地页面跳转，命令如下：
+###www server {
+listen 80;
+server_name www.nmtui.com;
+location / {
+root html/www;
+index index.html index.htm;
+}
+error_page 403 /403.html; #<==当出现403错误时，会跳转到403.html页面
+}
+# 上面的/403.html是相对于站点根目录html/www的。
+
+
+范例2：50x页面放到本地单独目录下，进行优雅显示。
+# redirect server error pages to the static page /50x.html
+error_page 500 502 503 504 /50x.html;
+location = /50x.html {
+root /data0/www/html;
+}
+注：多个状态码可以在一行用空格分割
+
+
+范例3：改变状态码为新的状态码，并显示指定的文件内容，命令如下：
+error_page 404 =200 /empty.gif;
+
+server {
+listen 80;
+server_name www.nmtui.com;
+location / {
+root /data0/www/bbs;
+index index.html index.htm;
+fastcgi_intercept_errors on;
+error_page 404 =200 /ta.jpg;
+access_log /app/logs/bbs_access.log commonlog;
+}
+}
+
+
+范例4：错误状态码URL重定向，命令如下：
+server {
+listen 80;
+server_name www.nmtui.com;
+location / {
+root html/www;
+index index.html index.htm;
+error_page 404 https://clsn.cnblogs.com;
+#<==当出现404错误时，会跳转到指定的URL https://clsn.cnblogs.com页面显示给用户，这个URL一般是企业另外的可用地址
+access_log /app/logs/bbs_access.log commonlog;
+}
+}
+
+
+
+1.2.9 Nginx站点目录文件及目录权限优化
+动态Web集群：
