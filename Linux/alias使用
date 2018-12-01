@@ -1,0 +1,15 @@
+vi ~/.bashrc
+#增加如下
+alias kg='kubectl get pods'
+alias kc='kubectl create'
+alias kl='kubectl logs'
+
+[root@k8sm1 ~]# source ~/.bashrc 
+
+
+验证：
+[root@k8sm1 ~]# kg
+NAME                     READY     STATUS    RESTARTS   AGE
+mysql-6dd6f69f84-x2282   1/1       Running   2          24d
+myweb-546c89b47-5dnpx    1/1       Running   2          24d
+myweb-546c89b47-rlfps    1/1       Running   2          24d
