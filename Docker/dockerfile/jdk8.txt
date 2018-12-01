@@ -1,9 +1,26 @@
-FROM 192.168.2.45:5000/base/centos:7.4.1708
+docker时间与本地时间一致；但是JVM读取的时间却相差大概8个小时
+
+[root@iZ2zeb5yqs7wxoc01dxb7jZ base]# ll
+total 460400
+-rw-r--r-- 1 root root       355 Nov 29 15:39 Dockerfile
+drwxr-xr-x 8   10  143      4096 Jun 17  2014 jdk8
+-rw-r--r-- 1 root root 312407928 Nov 29 15:50 jdk8_5.tar.gz
+-rw-r--r-- 1 root root 159019376 Nov 29 15:01 jdk-8u11-linux-x64.tar.gz
+-rw-r--r-- 1 root root        14 Nov 29 15:37 timezone
+
+[root@iZ2zeb5yqs7wxoc01dxb7jZ base]# cat Dockerfile 
+FROM 192.168.1.108:5000/base/centos:7.4.1708
 RUN mkdir -p /usr/local/src/jdk8
+ADD timezone /etc/timezone
 ADD jdk8 /usr/local/src/jdk8
+ENV TIME_ZONE Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/${TIME_ZONE} /etc/localtime
 ENV JAVA_HOME /usr/local/src/jdk8
 ENV CLASSPATH ./:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
 ENV PATH $JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
+[root@iZ2zeb5yqs7wxoc01dxb7jZ base]# cat timezone 
+Asia/Shanghai
+
 
 
 前提:
