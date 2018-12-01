@@ -3,7 +3,7 @@ vi ~/.bashrc
 alias kg='kubectl get pods'
 alias kc='kubectl create'
 alias kl='kubectl logs'
-
+alias ka'kubectl apply'
 [root@k8sm1 ~]# source ~/.bashrc 
 
 
