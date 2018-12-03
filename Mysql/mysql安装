@@ -19,7 +19,7 @@ mysql -uroot -p
 
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'MyNewPass4!';
 
-
+GRANT all privileges ON xiaoyaoji.* TO 'gaoyanrong'@'%' identified by 'gaoyanrong' WITH GRANT OPTION;
 
 
 ###yum --disablerepo=\* --enablerepo='mysql*-community*' list available
@@ -28,3 +28,4 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY 'MyNewPass4!';
 mysql5.1安装
 1.配置epel和阿里yum源
 yum -y install mysql mysql-devel 
+
