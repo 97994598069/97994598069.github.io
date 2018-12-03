@@ -1,0 +1,357 @@
+192.168.1.104 master01+node1
+192.168.2.42  node2
+192.168.1.107  node3
+192.168.2.44  node4  
+
+
+现在需要将node3阔成master02
+
+在192.168.1.107  node3上执行：
+[root@k8s03 opt]# mkdir master
+
+然后将master上的k8s配置信息拷贝到3上cfg bin ssl
+cd /opt/kubernetes/
+[root@k8s01 kubernetes]# scp -rp ./bin/ 192.168.1.107:/opt/master
+    
+[root@k8s01 kubernetes]# scp -rp ./cfg/ 192.168.1.107:/opt/master
+  
+
+node3上执行：
+[root@k8s03 bin]# mv /opt/master/bin/kube-apiserver /opt/kubernetes/bin
+[root@k8s03 bin]# mv /opt/master/bin/kube-controller-manager /opt/kubernetes/bin/
+[root@k8s03 bin]# mv /opt/master/bin/kube-scheduler /opt/kubernetes/bin/
+[root@k8s03 bin]# mv /opt/master/bin/kubectl /opt/kubernetes/bin/
+
+
+
+[root@k8s03 cfg]# mv /opt/master/cfg/kube-apiserver /opt/kubernetes/cfg/
+[root@k8s03 cfg]# mv /opt/master/cfg/kube-controller-manager /opt/kubernetes/cfg/
+[root@k8s03 cfg]# mv /opt/master/cfg/kube-scheduler /opt/kubernetes/cfg/
+[root@k8s03 cfg]# mv /opt/master/cfg/token.csv /opt/kubernetes/cfg/
+
+
+从master01上拷贝服务启动文件
+scp -p /usr/lib/systemd/system/{kube-apiserver,kube-scheduler,kube-controller-manager}.service root@192.168.1.107:/usr/lib/systemd/system/
+
+从master01上拷贝认证文件
+cd /ssl 
+[root@k8s01 ssl]# scp -rp /ssl/ root@192.168.1.107:/                          ##scp -rp /ssl/ root@192.168.1.107:/ssl_master
+[root@k8s01 ssl]# scp basic_auth_file root@192.168.1.107:/ssl/                ##scp basic_auth_file root@192.168.1.107:/ssl_master/ssl
+[root@k8s01 ssl]# scp token.csv root@192.168.1.107:/ssl/                      ##scp token.csv root@192.168.1.107:/ssl_master/ssl
+
+
+
+在master02上修改
+cd /opt/kubernetes/cfg
+vi kube-apiserver 
+--bind-address=192.168.1.107 
+--advertise-address=192.168.1.107
+
+systemctl start kube-apiserver
+systemctl status kube-apiserver
+
+systemctl start kube-scheduler
+systemctl status kube-scheduler
+
+systemctl start kube-controller-manager
+systemctl status kube-controller-manager
+
+
+
+测试：
+1. 在master02上（node3）上执行：
+[root@k8s03 cfg]# kubectl get cs
+NAME                 STATUS    MESSAGE              ERROR
+controller-manager   Healthy   ok                   
+scheduler            Healthy   ok                   
+etcd-2               Healthy   {"health": "true"}   
+etcd-1               Healthy   {"health": "true"}   
+etcd-0               Healthy   {"health": "true"}   
+etcd-3               Healthy   {"health": "true"}   
+[root@k8s03 cfg]# kubectl get node
+NAME           STATUS    ROLES     AGE       VERSION
+192.168.1.104   Ready     <none>    28d      v1.9.0
+192.168.2.42   Ready     <none>    28d       v1.9.0
+192.168.1.107   Ready     <none>    28d      v1.9.0
+192.168.2.44   Ready     <none>    28d       v1.9.0
+
+
+2. 修改各个node的配置 （将原先链接master01的链接master02）
+
+修改给个的node节点：(所有node节点均需执行)
+cd /opt/kubernetes/cfg
+
+[root@k8sn2 cfg]# vi bootstrap.kubeconfig
+    server: https://192.168.1.22:6443   ##修改此横；将ip换成nginx-master的IP
+	
+[root@k8sn2 cfg]# vi kubelet.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此横；将ip换成nginx-master的IP
+[root@k8sn2 cfg]# systemctl restart kubelet
+[root@k8sn2 cfg]# systemctl status kubelet
+	
+[root@k8sn2 cfg]# vi kube-proxy.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此横；将ip换成nginx-master的IP
+[root@k8sn2 cfg]# systemctl restart kube-proxy
+[root@k8sn2 cfg]# systemctl status kube-proxy
+
+
+3.在master02上（node03）执行
+[root@k8s03 cfg]# kubectl get cs
+NAME                 STATUS    MESSAGE              ERROR
+scheduler            Healthy   ok                   
+controller-manager   Healthy   ok                   
+etcd-2               Healthy   {"health": "true"}   
+etcd-3               Healthy   {"health": "true"}   
+etcd-0               Healthy   {"health": "true"}   
+etcd-1               Healthy   {"health": "true"}   
+[root@k8s03 cfg]# kubectl get node
+NAME           STATUS    ROLES     AGE       VERSION
+192.168.1.104   Ready     <none>    28d       v1.9.0
+192.168.2.42   Ready     <none>    28d       v1.9.0
+192.168.1.107   Ready     <none>    28d       v1.9.0
+192.168.2.44   Ready     <none>    28d       v1.9.0
+
+[root@k8s03 cfg]# kubectl run nginx --image=nginx
+deployment "nginx" created
+
+[root@k8s03 cfg]# kubectl expose deployment nginx --port=8999
+service "nginx" exposed
+
+[root@k8s03 cfg]# kubectl get pods
+NAME                   READY     STATUS    RESTARTS   AGE
+nginx-8586cf59-fw5sp   1/1       Running   0          42s
+
+上述说明调度正常：
+配置nginx的负载调度
+
+nginx一般安装都不会配置4层的负载均衡；但是master01和master02的调度需要使用4层的负载均衡；需要重新安装配置nginix
+
+[root@localhost nginx]# nginx -V
+nginx version: nginx/1.14.0
+built by gcc 4.4.7 20120313 (Red Hat 4.4.7-23) (GCC) 
+configure arguments: --prefix=/usr/local/nginx/ --with-pcre=/usr/local/pcre/ --with-zlib=/usr/local/zlib/
+
+重新编译安装并增加四层负载均衡:
+[root@localhost nginx]# cd /usr/local/nginx/
+[root@localhost nginx]# ./configure --prefix=/usr/local/nginx/ --with-pcre=/usr/local/pcre/ --with-zlib=/usr/local/zlib/ --with-stream --with-stream_realip_module --with-stream_ssl_module --with-stream_ssl_preread_module
+
+
+
+[root@localhost nginx]# make   ##注意不要make install
+
+[root@localhost nginx]# cp /usr/local/nginx/sbin/nginx /usr/local/nginx/sbin/nginx.bak
+
+[root@localhost nginx]# nginx -s stop
+[root@localhost nginx]# cp objs/nginx /usr/local/nginx/sbin/
+cp：是否覆盖"/usr/local/nginx/sbin/nginx"？ yes
+
+[root@localhost ~]# rm -f /usr/local/bin/nginx 
+[root@localhost ~]# ln -s /usr/local/nginx/sbin/nginx /usr/local/bin/
+
+[root@localhost logs]# nginx
+
+
+配置nginx的4层负载均衡：
+[root@localhost conf]# vi nginx.conf 
+在http段同级别增加如下：
+stream {
+	log_format main "$remote_addr $upstream_addr $time_local $status";
+	access_log /var/log/nginx/k8s-access.log main;
+	upstream k8s-apiserver {
+		server 192.168.1.104:6443;
+		server 192.168.1.107:6443;
+	}
+	server {
+		listen 0.0.0.0:6443;
+		proxy_pass k8s-apiserver;
+	}
+	
+}
+
+[root@localhost conf]# mkdir -p /var/log/nginx
+[root@localhost conf]# nginx -t
+nginx: the configuration file /usr/local/nginx//conf/nginx.conf syntax is ok
+nginx: configuration file /usr/local/nginx//conf/nginx.conf test is successful
+[root@localhost conf]# nginx -s reload
+
+
+测试：
+##将各个node上的
+修改给个的node节点：(所有node节点均需执行)
+[root@k8sn2 cfg]# vi bootstrap.kubeconfig
+    server: https://192.168.1.22:6443   ##修改此行；将ip换成nginx的ip
+	
+[root@k8sn2 cfg]# vi kubelet.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此行；将ip换成nginx的ip
+[root@k8sn2 cfg]# systemctl restart kubelet
+[root@k8sn2 cfg]# systemctl status kubelet
+	
+[root@k8sn2 cfg]# vi kube-proxy.kubeconfig 
+    server: https://192.168.1.22:6443   ##修改此行；将ip换成nginx的ip
+[root@k8sn2 cfg]# systemctl restart kube-proxy
+[root@k8sn2 cfg]# systemctl status kube-proxy
+
+
+2.在node3上
+
+[root@k8s03 cfg]# kubectl run nginx02 --image=nginx
+deployment "nginx" created
+
+[root@k8s03 cfg]# kubectl expose deployment nginx02 --port=8991
+service "nginx" exposed
+
+但是失败
+查看messages日志报认证错误：
+Nov 28 12:24:00 k8s03 kube-apiserver: I1128 12:24:00.851463  104856 logs.go:41] http: TLS handshake error from 192.168.2.190:58410: remote error: tls: bad certificate
+Nov 28 12:24:01 k8s03 kube-apiserver: I1128 12:24:01.075522  104856 logs.go:41] http: TLS handshake error from 192.168.2.190:58412: remote error: tls: bad certificate
+Nov 28 12:24:01 k8s03 kube-apiserver: I1128 12:24:01.239262  104856 logs.go:41] http: TLS handshake error from 192.168.2.190:58414: remote error: tls: bad certificate
+Nov 28 12:24:01 k8s03 kube-apiserver: I1128 12:24:01.730438  104856 logs.go:41] http: TLS handshake error from 192.168.2.190:58416: remote error: tls: bad certificate
+Nov 28 12:24:01 k8s03 kubelet: I1128 12:24:01.731567  118008 reflector.go:240] Listing and watching *v1.Service from k8s.io/kubernetes/pkg/kubelet/kubelet.go:465
+Nov 28 12:24:01 k8s03 kube-apiserver: I1128 12:24:01.731973  104856 logs.go:41] http: TLS handshake error from 192.168.2.190:58418: remote error: tls: bad certificate
+Nov 28 12:24:01 k8s03 kube-apiserver: I1128 12:24:01.732285  104856 logs.go:41] http: TLS handshake error from 192.168.2.190:58420: remote error: tls: bad certificate
+Nov 28 12:24:01 k8s03 kube-apiserver: I1128 12:24:01.734734  104856 logs.go:41] http: TLS handshake error from 192.168.2.190:58422: remote error: tls: bad certificate
+
+
+需要重新生成证书：
+在master01上：
+cd /ssl/config
+[root@k8s01 config]# cat server-csr.json 
+{
+    "CN": "kubernetes",
+    "hosts": [
+      "127.0.0.1",
+      "10.1.7.1",
+      "192.168.1.104",
+      "192.168.2.42",
+      "192.168.1.107",
+      "192.168.2.44",
+      "192.168.2.190",  ##增加集群外nginx的ip 如果使用了keepalived则同时增加VIP
+      "kubernetes",
+      "kubernetes.default",
+      "kubernetes.default.svc",
+      "kubernetes.default.svc.cluster",
+      "kubernetes.default.svc.cluster.local"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "Shenzhen",
+            "ST": "Guangzhou",
+            "O": "k8s",
+            "OU": "System"
+        }
+    ]
+}
+
+执行命令：
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes server-csr.json | cfssljson -bare server
+
+[root@k8s01 config]# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes server-csr.json | cfssljson -bare server
+2018/11/28 12:54:01 [INFO] generate received request
+2018/11/28 12:54:01 [INFO] received CSR
+2018/11/28 12:54:01 [INFO] generating key: rsa-2048
+2018/11/28 12:54:01 [INFO] encoded CSR
+open ca.pem: no such file or directory
+Failed to parse input: unexpected end of JSON input
+
+[root@k8s01 config]# cd ..
+[root@k8s01 ssl]# cp ca.pem ./config
+
+再次执行：
+[root@k8s01 ssl]# cd config
+[root@k8s01 config]# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes server-csr.json | cfssljson -bare server
+2018/11/28 12:55:56 [INFO] generate received request
+2018/11/28 12:55:56 [INFO] received CSR
+2018/11/28 12:55:56 [INFO] generating key: rsa-2048
+2018/11/28 12:55:56 [INFO] encoded CSR
+{"code":1001,"message":"open ca-key.pem: no such file or directory"}
+Failed to parse input: unexpected end of JSON input
+
+同样道理：
+[root@k8s01 config]# cd ..
+[root@k8s01 ssl]# cp ca-key.pem ./config
+
+再次执行：
+[root@k8s01 ssl]# cd config
+[root@k8s01 config]# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes server-csr.json | cfssljson -bare server
+2018/11/28 12:56:59 [INFO] generate received request
+2018/11/28 12:56:59 [INFO] received CSR
+2018/11/28 12:56:59 [INFO] generating key: rsa-2048
+2018/11/28 12:56:59 [INFO] encoded CSR
+2018/11/28 12:56:59 [INFO] signed certificate with serial number 416552191925173580170717692146038099476630333319
+2018/11/28 12:56:59 [WARNING] This certificate lacks a "hosts" field. This makes it unsuitable for
+websites. For more information see the Baseline Requirements for the Issuance and Management
+of Publicly-Trusted Certificates, v.1.1.6, from the CA/Browser Forum (https://cabforum.org);
+specifically, section 10.2.3 ("Information Requirements").
+
+成功：生成了两个文件server-key.pem 和server.pem
+替换集群内所有的
+[root@k8s01 config]# find / -name "server-key.pem" -o -name "server.pem"
+
+[root@k8s01 config]# cp server-key.pem ..
+cp：是否覆盖"../server-key.pem"？ yes
+[root@k8s01 config]# cp server.pem ..
+cp：是否覆盖"../server.pem"？ yes
+
+
+[root@k8s01 config]# cp server-key.pem /opt/kubernetes/https/
+cp：是否覆盖"/opt/kubernetes/https/server-key.pem"？ yes
+[root@k8s01 config]# cp server.pem /opt/kubernetes/https/
+cp：是否覆盖"/opt/kubernetes/https/server.pem"？ yes
+[root@k8s01 config]# cp server-key.pem /opt/kubernetes/ssl/
+cp：是否覆盖"/opt/kubernetes/ssl/server-key.pem"？ yes
+[root@k8s01 config]# cp server.pem /opt/kubernetes/ssl/
+cp：是否覆盖"/opt/kubernetes/ssl/server.pem"？ yes
+
+
+[root@k8s01 config]# scp server-key.pem root@192.168.2.42:/opt/kubernetes/ssl/
+server-key.pem                                                                                                                                                                                                                              100% 1679     1.6KB/s   00:00    
+[root@k8s01 config]# scp server.pem root@192.168.2.42:/opt/kubernetes/ssl/
+server.pem                                                                                                                                                                                                                                  100% 1651     1.6KB/s   00:00    
+[root@k8s01 config]# scp server-key.pem root@192.168.2.42:/ssl/
+server-key.pem                                                                                                                                                                                                                              100% 1679     1.6KB/s   00:00    
+[root@k8s01 config]# scp server.pem root@192.168.2.42:/ssl/
+server.pem   
+
+
+
+[root@k8s01 config]# scp server-key.pem root@192.168.1.107:/opt/kubernetes/ssl/
+server-key.pem                                                                                                                                                                                                                              100% 1679     1.6KB/s   00:00    
+[root@k8s01 config]# scp server.pem root@192.168.1.107:/opt/kubernetes/ssl/
+server.pem 
+[root@k8s01 config]# scp server-key.pem root@192.168.1.107:/ssl/
+server-key.pem                                                                                                                                                                                                                              100% 1679     1.6KB/s   00:00    
+[root@k8s01 config]# scp server.pem root@192.168.1.107:/ssl/
+server.pem    
+
+
+[root@k8s01 config]# scp server-key.pem root@192.168.2.44:/opt/kubernetes/ssl/
+server-key.pem                                                                                                                                                                                                                              100% 1679     1.6KB/s   00:00    
+[root@k8s01 config]# scp server.pem root@192.168.2.44:/opt/kubernetes/ssl/
+server.pem                                                                                                                                                                                                                                  100% 1651     1.6KB/s   00:00    
+[root@k8s01 config]# scp server-key.pem root@192.168.2.44:/ssl/
+server-key.pem                                                                                                                                                                                                                              100% 1679     1.6KB/s   00:00    
+[root@k8s01 config]# scp server.pem root@192.168.2.44:/ssl/
+server.pem  
+
+
+[root@k8s01 cfg]# systemctl restart kube-apiserver.service 
+[root@k8s01 cfg]# systemctl status kube-apiserver.service 
+
+
+##大概步骤
+1.master上（因为master上有cfssl工具）重新编辑server-csr.json 将需要添加的ip（包含VIP）都添加进去重新生成新的server-key.pem和server.pem
+然后将新的 server-key.pem和server.pem替换集群内所有节点(包含master和node节点)（只有/ssl和/opt/kubernetes/ssl/两个目录下有）；
+
+
+2.重启kube-apiserver
+
+
+
+
+
+
