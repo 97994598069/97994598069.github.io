@@ -24,3 +24,7 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY 'MyNewPass4!';
 
 ###yum --disablerepo=\* --enablerepo='mysql*-community*' list available
 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+mysql5.1安装
+1.配置epel和阿里yum源
+yum -y install mysql mysql-devel 
