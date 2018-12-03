@@ -89,6 +89,11 @@ drwxr-xr-x. 5 root root   57 11月 22 16:12 static
 [root@etcd1 jinyoujia-nuxt]# cnpm install
 完成后会在前端项目下生成一个node_modules目录
 
+查看nuxt的版本：
+npm lis nuxt
+
+安装指定版本的nuxt
+npm install  --save  nuxt@1.4.4
 
 启动项目：
 [root@etcd1 jinyoujia-nuxt]# pm2 start ./node_modules/nuxt/bin/nuxt -i 2 --name jinyoujia -- start
