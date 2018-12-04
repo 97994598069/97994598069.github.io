@@ -7,6 +7,14 @@ make &&  make install
 
 使用命令:nethogs或者nethogs ens32
 
+设置5秒钟刷新一次，通过-d来指定刷新频率
+nethogs -d 5
+
+实例2：监视eth0网络带宽
+nethogs eth0
+
+实例3：同时监视eth0和eth1接口
+nethogs eth0 eth1
 
 2. 硬盘读取性能测试 - IOZone
 IOZone 是一款 Linux 文件系统性能测试工具 可以测试不同的操作系统中文件系统的读写性能
