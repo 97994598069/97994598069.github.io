@@ -1,5 +1,6 @@
 1. 查看进程占用带宽情况 - Nethogs
 yum -y install libpcap-devel ncurses-devel 
+yum -y install nethogs
 tar xf v0.8.1.tar.gz
 cd ./nethogs-0.8.1/
 make &&  make install
@@ -38,6 +39,7 @@ yum -y install iptraf
 5.网络流量监控 - IFTop
 iftop 是类似于 linux 下面 top 的实时流量监控工具。比 iptraf 直观些。
 下载：http://www.ex-parrot.com/~pdw/iftop/
+yum -y install iftop
 tar zxvf iftop-0.17.tar.gz 
 cd iftop-0.17 
 ./configure 
