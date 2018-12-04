@@ -59,7 +59,7 @@ cd iftop-0.17
 make && make install 
 
 执行命令：
-iftop 
+iftop 或者iftop -n   ##n选项可以防止iftop将IP地址解析成主机名，解析本身就会带来额外的网络流量
 iftop -i eth0 # 指定监控网卡接口
 
 输出参数说明：
