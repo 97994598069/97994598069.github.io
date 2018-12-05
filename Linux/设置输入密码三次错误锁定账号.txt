@@ -4,6 +4,8 @@
 #%PAM-1.0  
 auth required pam_tally2.so deny=3 unlock_time=300 even_deny_root root_unlock_time=10
 
+备注：在#%PAM-1.0的下面，即第二行，添加内容，一定要写在前面，如果写在后面，虽然用户被锁定，但是只要用户输入正确的密码，还是可以登录的！
+
 各参数解释:
 even_deny_root 也限制root用户；
 deny 设置普通用户和root用户连续错误登陆的最大次数，超过最大次数，则锁定该用户
@@ -20,7 +22,7 @@ root_unlock_time 设定root用户锁定后，多少时间后解锁，单位是�
 auth required pam_tally2.so deny=3 lock_time=300 even_deny_root root_unlock_time=10
 
 同样是增加在第2行！
-
+在#%PAM-1.0的下面，即第二行，添加内容，一定要写在前面，如果写在后面，虽然用户被锁定，但是只要用户输入正确的密码，还是可以登录的！
 
 3、查看用户登录失败次数
 #cd /etc/pam.d/
