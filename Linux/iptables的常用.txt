@@ -1,0 +1,115 @@
+这个很简单，有两种方法，但是做这个之前要做一件事情，先随便开启一个ssh端口，否则一旦设置错误就麻烦了，如果的服务器在外地IDC机房，你哭的心都有了，呵呵。
+
+目的：只允许192.168.5.231访问22端口
+
+
+1.开启一个ssh端口
+[root@localhost ~]# vi /etc/ssh/sshd_config
+把#Port 22
+修改为
+Port 22
+Port 2222
+[root@tomcat231 ~]# service sshd restart
+
+去测试一下2222端口是否开启，这点很重要
+ssh root@$ip -p2222
+
+
+
+然后可以使用如下三个办法：
+1)
+运行完下面这一行，你已经不能访问了，改用2222去设置下面一行
+#iptables -I INPUT -p tcp --dport 22 -j DROP
+
+用2222端口去运行下面一行，运行完，22端口就可以使用
+#iptables -I INPUT -s 192.168.5.231 -p tcp --dport 22 -j ACCEPT
+
+[root@localhost ~]# service iptables save
+[root@localhost ~]# service iptables restart
+
+然后测试22端口是否正常
+
+然后关闭2222端口：
+修改vi /etc/ssh/sshd_config
+#Port 22
+#Port 2222
+然后重启sshd服务
+
+
+
+2)
+[root@localhost ~]# vi /etc/sysconfig/iptables
+在:RH-Firewall-1-INPUT - [0:0]添加下面两行
+-A INPUT -s 192.168.5.231 -p tcp --dport 22 -j ACCEPT
+-A INPUT -p tcp --dport 22 -j DROP
+
+[root@localhost ~]# service iptables restart
+
+然后关闭2222端口：
+修改vi /etc/ssh/sshd_config
+#Port 22
+#Port 2222
+然后重启sshd服务
+
+
+3)
+1.vi /etc/sysconfig/iptables添加一行
+下面是只允许某个IP访问xx端口
+##-A RH-Firewall-1-INPUT -m state --state NEW -m tcp -p tcp -s 192.168.1.0/24 --dport 389 -j ACCEPT
+-A RH-Firewall-1-INPUT -m state --state NEW -m tcp -p tcp -s 192.168.5.231 --dport 22 -j ACCEPT
+同样需要测试是否正常
+
+重启生效
+service iptables restart
+
+
+封杀IP：
+比如现在要将123.44.55.66这个IP封杀，就输入：
+iptables -I INPUT -s 123.44.55.66 -j DROP
+
+解封：
+要解封则将-I换成-D即可，前提是iptables已经有这条记录。如果要想清空封掉的IP地址，可以输入：
+iptables -D INPUT -s 123.44.55.66 -j REJECT
+
+封杀ip段：
+要添加IP段到封停列表中，使用下面的命令：
+iptables -I INPUT -s 121.0.0.0/8 -j DROP
+
+
+Linux防火墙Iptable如何设置只允许某个ip访问80端口，只允许特定ip访问某端口？参考下面命令，只允许46.166.150.22访问本机的80端口。如果要设置其他ip或端口，改改即可。
+iptables -I INPUT -p TCP –dport 80 -j DROP
+iptables -I INPUT -s 46.166.150.22 -p TCP –dport 80 -j ACCEPT
+
+
+验证一下是否规则都已经生效：
+iptables -L
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

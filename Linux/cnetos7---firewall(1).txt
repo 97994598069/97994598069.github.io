@@ -1,0 +1,88 @@
+centos7版本对防火墙进行 加强,不再使用原来的iptables,启用firewall
+    1.查看已开放的端口(默认不开放任何端口)
+        firewall-cmd --list-ports
+    2.开启80端口
+        firewall-cmd --zone=public(作用域) --add-port=80/tcp(端口和访问类型) --permanent(永久生效)
+    3.重启防火墙
+        firewall-cmd --reload
+    4.停止防火墙
+        systemctl stop firewalld.service
+    5.禁止防火墙开机启动
+        
+		systemctl disable firewalld.service
+		
+    6.删除
+        firewall-cmd --zone=public --remove-port=80/tcp --permanent
+		
+	7.查看运行状态
+		firewall-cmd --state
+	
+	8.将80端口的流量转发至8080
+	firewall-cmd --add-forward-port=port=80:proto=tcp:toport=8080
+		
+
+查看所有打开的端口： firewall-cmd --zone=public --list-ports
+添加
+firewall-cmd --zone=public --add-port=80/tcp --permanent    （--permanent永久生效，没有此参数重启后失效）
+重新载入
+firewall-cmd --reload
+查看
+firewall-cmd --zone= public --query-port=80/tcp
+删除
+firewall-cmd --zone= public --remove-port=80/tcp --permanent
+ 
+批量开放端口
+firewall-cmd --permanent --zone=public --add-port=100-500/tcp
+firewall-cmd --permanent --zone=public --add-port=100-500/udp
+firewall-cmd --reload
+		
+firewall-cmd --state                           ##查看防火墙状态，是否是running
+firewall-cmd --reload                          ##重新载入配置，比如添加规则之后，需要执行此命令
+firewall-cmd --get-zones                       ##列出支持的zone
+firewall-cmd --get-services                    ##列出支持的服务，在列表中的服务是放行的
+firewall-cmd --query-service ftp               ##查看ftp服务是否支持，返回yes或者no
+firewall-cmd --add-service=ftp                 ##临时开放ftp服务
+firewall-cmd --add-service=ftp --permanent     ##永久开放ftp服务
+firewall-cmd --remove-service=ftp --permanent  ##永久移除ftp服务
+firewall-cmd --add-port=80/tcp --permanent     ##永久添加80端口 
+iptables -L -n                                 ##查看规则，这个命令是和iptables的相同的
+man firewall-cmd                               ##查看帮助
+
+centos7以下版本
+1.开放80，22，8080 端口
+    /sbin/iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+    /sbin/iptables -I INPUT -p tcp --dport 22 -j ACCEPT
+    /sbin/iptables -I INPUT -p tcp --dport 8080 -j ACCEPT
+    2.保存
+    /etc/rc.d/init.d/iptables save
+    3.查看打开的端口
+    /etc/init.d/iptables status
+    4.关闭防火墙 
+    1） 永久性生效，重启后不会复原
+    开启： chkconfig iptables on
+    关闭： chkconfig iptables off
+    2） 即时生效，重启后复原
+    开启： service iptables start
+    关闭： service iptables stop
+
+
+七、 IP 封禁 （这个是我们平时用得最多的）
+# firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='222.222.222.222' reject"  单个IP
+# firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='222.222.222.0/24' reject" IP段
+# firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=192.168.1.2 port port=80  protocol=tcp  accept" 单个IP的某个端口
+
+
+firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='149.56.106.215' reject"
+
+
+
+ ./redis-server /usr/redis/redis-3.2.3/redis.conf
+
+
+
+
+
+
+
+	
+	

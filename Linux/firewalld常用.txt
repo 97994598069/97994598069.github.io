@@ -1,0 +1,46 @@
+# IP 封禁
+firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='192.168.1.123' reject"
+
+
+# 通过 ipset 来封禁 ip
+firewall-cmd --permanent --zone=public --new-ipset=blacklist --type=hash:ip
+firewall-cmd --permanent --zone=public --ipset=blacklist --add-entry=192.168.1.123
+
+
+# 封禁网段
+firewall-cmd --permanent --zone=public --new-ipset=blacklist --type=hash:net
+firewall-cmd --permanent --zone=public --ipset=blacklist --add-entry=192.168.1.0/24
+
+
+# 倒入 ipset 规则 blacklist，然后封禁 blacklist
+firewall-cmd --permanent --zone=public --new-ipset-from-file=/path/blacklist.xml
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=blacklist drop'
+
+
+
+# 配置 public zone 的端口转发
+firewall-cmd --zone=public --add-masquerade
+
+# 然后转发 tcp 22 端口至 9527
+firewall-cmd --zone=public --add-forward-port=port=22:proto=tcp:toport=9527
+
+# 转发 22 端口数据至另一个 ip 的相同端口上
+firewall-cmd --zone=public --add-forward-port=port=22:proto=tcp:toaddr=192.168.1.123
+
+# 转发 22 端口数据至另一 ip 的 9527 端口上
+firewall-cmd --zone=public --add-forward-port=port=22:proto=tcp:toport=9527:toaddr=192.168.1.100
+
+
+# 追加一个8181端口，永久有效
+firewall-cmd --add-port=8181/tcp --permanent
+
+# 追加一段端口范围
+firewall-cmd --add-port=6000-6600/tcp
+
+# 开放 ftp 服务
+firewall-cmd --add-service=ftp
+
+# 添加eth0 接口至 public 信任等级，永久有效
+firewall-cmd --zone=public --add-interface=eth0 --permanent
+
+
