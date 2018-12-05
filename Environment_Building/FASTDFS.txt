@@ -1,0 +1,791 @@
+http://www.cnblogs.com/mafly/p/fastdfs.html
+
+FastDFS是一个开源的轻量级分布式文档系统，由跟踪服务器（tracker server）、存储服务器（storage server）和客户端（client）三个部分组成，主要解决了海量数据存储问题，特别适合以中小文档（建议范围：4KB < file_size <500MB）为载体的在线服务。
+
+（1）每次上传文档后都会返回一个地址，用户需要自己保存此地址。
+
+（2）为了支持大容量，存储节点（服务器）采用了分卷（或分组）的组织方式。存储系统由一个或多个卷组成，卷与卷之间的文档是相互独立的，所有卷的文档容量累加就是整个存储系统中的文档容量。一个卷可以由一台或多台存储服务器组成，一个卷下的存储服务器中的文档都是相同的，卷中的多台存储服务器起到了冗余备份和负载均衡的作用。
+
+配置环境：
+CentOS 7.5 x 64
+tracker server: 192.168.5.71（tracker暂时一台，后续再添加一台做nginx+keepalived高可用）
+storage server: 192.168.5.72 192.168.5.73（group1）
+storage server: 192.168.5.74 192.168.5.75（group2）
+
+
+#hosts文档配置
+cat >> /etc/hosts << EOF
+192.168.5.71 storage71.blufly.com storage71
+192.168.5.72 storage72.blufly.com storage72
+192.168.5.73 storage73.blufly.com storage73
+192.168.5.74 storage74.blufly.com storage74
+192.168.5.75 storage75.blufly.com storage75
+EOF
+
+
+###---------------------- 安装配置tracker server ---------------------------###
+yum -y install gcc-c++ libevent
+
+#先安装libfastcommon
+cd /opt
+git clone https://github.com/happyfish100/libfastcommon.git
+cd libfastcommon/
+./make.sh
+./make.sh install
+
+
+#安装fastdfs:
+cd /opt
+git clone https://github.com/happyfish100/fastdfs.git
+cd fastdfs
+./make.sh
+./make.sh install
+
+
+#配置文档解释：
+tracker.conf //负责均衡调度服务器配置文档
+client.conf //客户端上传配置文档
+http.conf //http服务器配置文档
+storage.conf//文档存储服务器配置文档
+mime.types //文档类型配置文档
+
+
+#修改tracker server的配置文档
+cp /etc/fdfs/tracker.conf.sample /etc/fdfs/tracker.conf
+vi /etc/fdfs/tracker.conf
+bind_addr= 改为 bind_addr=192.168.25.204
+base_path=/home/yuqing/fastdfs 改为 base_path=/data/fastdfs
+http.server_port=8080 改为 http.server_port=80
+
+
+
+#启动tracker server
+mkdir -p /data/fastdfs
+/etc/init.d/fdfs_trackerd start
+[root@storage71 fastdfs]# netstat -tnlp|grep fdfs
+tcp        0      0 192.168.5.71:22122      0.0.0.0:*               LISTEN      11631/fdfs_trackerd
+
+
+#开机启动
+/sbin/chkconfig --add fdfs_trackerd
+/sbin/chkconfig --level 2345 fdfs_trackerd on
+
+
+
+
+
+
+
+
+###--------------------------- 安装配置storage server ----------------------###
+yum -y install gcc-c++ libevent
+#先安装libfastcommon
+cd /opt
+git clone https://github.com/happyfish100/libfastcommon.git
+cd libfastcommon/
+./make.sh
+./make.sh install
+
+
+#安装fastdfs:
+cd /opt
+git clone https://github.com/happyfish100/fastdfs.git
+cd fastdfs
+./make.sh
+./make.sh install
+
+
+#配置storage server
+cp /etc/fdfs/storage.conf.sample /etc/fdfs/storage.conf
+
+#修改storage server的配置文档：
+vim /etc/fdfs/storage.conf
+bind_addr= 改为 bind_addr=192.168.5.72
+
+#base_path需要和tracker部分的base_path保持一致，如果有修改过tracker的
+base_path=/home/yuqing/fastdfs 改为 base_path=/data/fastdfs
+
+#修改storage的资源存放路径
+store_path0=/home/yuqing/fastdfs 改为 store_path0=/data/fastdfs
+
+#如果有多个挂载磁盘则定义多个store_path，如下
+#store_path1=......
+#store_path2=......
+
+修改storage的对应的tracker_server的ip地址和端口
+tracker_server=192.168.209.121:22122 改为 tracker_server=192.168.5.71:22122
+
+#如果有多个则配置多个tracker_server
+#tracker_server=......
+#tracker_server=......
+http.server_port=8888 改为 http.server_port=80
+
+
+
+#创建数据目录，并启动storage server
+mkdir -p /data/fastdfs
+/etc/init.d/fdfs_storaged start
+[root@storage72 fastdfs]# netstat -tnlp|grep fdfs
+tcp        0      0 192.168.5.72:23000      0.0.0.0:*               LISTEN      11624/fdfs_storaged
+
+
+#开机启动
+/sbin/chkconfig --add fdfs_storaged
+/sbin/chkconfig --level 2345 fdfs_storaged on
+
+
+#查看tracker和storage的链接情况
+[root@storage71 ~]# netstat -tnlpa|grep 22122
+tcp        0      0 192.168.5.71:22122      0.0.0.0:*               LISTEN      11631/fdfs_trackerd 
+tcp        0      0 192.168.5.71:22122      192.168.5.72:63755      ESTABLISHED 11631/fdfs_trackerd 
+tcp        0      0 192.168.5.71:22122      192.168.5.73:47697      ESTABLISHED 11631/fdfs_trackerd
+
+
+
+#在tracker server上配置客户端上传文档
+[root@storage71 fastdfs]# cp /etc/fdfs/client.conf.sample /etc/fdfs/client.conf
+vim /etc/fdfs/client.conf
+#base_path需要和tracker部分的base_path保持一致
+base_path=/home/yuqing/fastdfs 
+改为 base_path=/data/fastdfs
+tracker_server=192.168.0.197:22122
+改为
+tracker_server=192.168.5.71:22122
+
+
+
+#上传个文档，如果上传成功，会返回一个url，我们记住这个url，后面安装了nginx就可以通URL来访问上传的这个文档
+[root@storage71 fastdfs]# /usr/bin/fdfs_test /etc/fdfs/client.conf upload /root/test.jpg
+group_name=group1, ip_addr=192.168.5.72, port=23000
+storage_upload_by_filename
+group_name=group1, remote_filename=M00/00/00/wKgFSFvAem6AfpJXAAA2FXv_nRs556.jpg
+source ip address: 192.168.5.72
+file timestamp=2018-10-12 18:41:50
+file size=13845
+file crc32=2080349467
+example file url: http://192.168.5.72/group1/M00/00/00/wKgFSFvAem6AfpJXAAA2FXv_nRs556.jpg
+storage_upload_slave_by_filename
+group_name=group1, remote_filename=M00/00/00/wKgFSFvAem6AfpJXAAA2FXv_nRs556_big.jpg
+source ip address: 192.168.5.72
+file timestamp=2018-10-12 18:41:51
+file size=13845
+file crc32=2080349467
+example file url: http://192.168.5.72/group1/M00/00/00/wKgFSFvAem6AfpJXAAA2FXv_nRs556_big.jpg
+
+
+
+
+通过客户端连接并上传文档：
+#上传"/etc/passwd"文档到fastdfs服务器:
+# fdfs_upload_file  /etc/fdfs/client.conf /etc/passwd
+   
+下载刚才上传的文档：
+# fdfs_download_file /etc/fdfs/client.conf group1/M00/00/00/wKgFSFvBpdSAB33ZAAI8IU3BQ48068.jpg
+
+查看文档属性：
+# fdfs_file_info /etc/fdfs/client.conf group1/M00/00/00/wKgFSFvBpdSAB33ZAAI8IU3BQ48068.jpg
+
+删除上传的文档：
+# fdfs_delete_file /etc/fdfs/client.conf group1/M00/00/00/wKgFSFvBpdSAB33ZAAI8IU3BQ48068.jpg
+# fdfs_delete_file /etc/fdfs/client.conf group1/M00/00/00/wKgFSFvBtTuAGz2VAAAJHTkxfCU312.txt
+
+监控fastdfs的状态:
+# fdfs_monitor /etc/fdfs/client.conf
+
+
+
+###------------------- 在storage server上安装nginx -------------------------###
+#安装nginx关于fastdfs集合的扩展模块，注意这个模块nginx默认的编译模块中没有，需手动下载安装
+cd /opt
+wget http://nginx.org/download/nginx-1.15.5.tar.gz
+#jemalloc 优化nginx，内存管理
+wget https://github.com/jemalloc/jemalloc/releases/download/5.1.0/jemalloc-5.1.0.tar.bz2
+wget https://ftp.pcre.org/pub/pcre/pcre-8.42.tar.gz
+#nginx缓存清理模块
+wget http://labs.frickle.com/files/ngx_cache_purge-2.3.tar.gz
+git clone https://github.com/happyfish100/fastdfs-nginx-module.git
+
+
+yum -y install openssl openssl-devel zlib zlib-devel glibc glibc-devel glib2 glib2-devel bzip2 bzip2-devel ncurses ncurses-devel curl curl-devel
+
+
+tar -jxvf jemalloc-5.1.0.tar.bz2
+cd jemalloc-5.1.0
+./configure --prefix=/usr/local/jemalloc --libdir=/usr/local/lib
+make;make install
+echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf
+ldconfig
+cd ../
+/usr/sbin/groupadd www  
+/usr/sbin/useradd -g www www -s /sbin/nologin
+tar -zxvf pcre-8.42.tar.gz
+tar -zxvf ngx_cache_purge-2.3.tar.gz
+tar -zxvf nginx-1.15.5.tar.gz
+cd nginx-1.15.5
+./configure --prefix=/usr/local/nginx \
+--with-pcre=/opt/pcre-8.42 \
+--user=www \
+--group=www \
+--with-http_stub_status_module \
+--with-http_ssl_module \
+--with-http_flv_module \
+--with-http_gzip_static_module \
+--with-ld-opt="-ljemalloc" \
+--with-http_realip_module \
+--add-module=/opt/fastdfs-nginx-module/src \
+--add-module=/opt/ngx_cache_purge-2.3
+make;make install
+
+
+
+#修改mod_fastdfs配置文档
+cp /opt/fastdfs-nginx-module/src/mod_fastdfs.conf /etc/fdfs/
+cd /opt/fastdfs/conf/     #进入fastdfs安装包文档夹
+cp anti-steal.jpg http.conf mime.types /etc/fdfs/
+vi /etc/fdfs/mod_fastdfs.conf
+base_path=/tmp 改为 base_path=/data/fastdfs
+tracker_server=tracker:22122 改为 tracker_server=192.168.5.71:22122
+store_path0=/home/yuqing/fastdfs 改为 store_path0=/data/fastdfs
+url_have_group_name = false 改为 true
+
+
+
+#配置nginx
+server {
+listen 80;
+server_name 192.168.5.72;
+location /group1/M00 {
+ngx_fastdfs_module;
+}
+}
+
+
+
+#添加nginx启动脚本
+cat >> /etc/init.d/nginx <<EOF
+#! /bin/sh
+ulimit -n 65535
+# Description: Startup script for nginx
+# chkconfig: 2345 55 25
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DESC="nginx daemon"
+NAME=nginx
+DAEMON=/usr/local/nginx/sbin/$NAME
+CONFIGFILE=/usr/local/nginx/conf/$NAME.conf
+PIDFILE=/usr/local/nginx/logs/$NAME.pid
+SCRIPTNAME=/etc/init.d/$NAME
+ 
+set -e
+[ -x "$DAEMON" ] || exit 0
+do_start() {
+ $DAEMON -c $CONFIGFILE || echo -n "nginx already running"
+}
+do_stop() {
+ kill -INT `cat $PIDFILE` || echo -n "nginx not running"
+}
+do_reload() {
+ kill -HUP `cat $PIDFILE` || echo -n "nginx can't reload"
+} 
+case "$1" in
+ start)
+ echo -n "Starting $DESC: $NAME"
+ do_start
+ echo "."
+ ;;
+ stop)
+ echo -n "Stopping $DESC: $NAME"
+ do_stop
+ echo "."
+ ;;
+ reload|graceful)
+ echo -n "Reloading $DESC configuration..."
+ do_reload
+ echo "."
+ ;;
+ restart)
+ echo -n "Restarting $DESC: $NAME"
+ do_stop
+ do_start
+ echo "."
+ ;;
+ *)
+ echo "Usage: $SCRIPTNAME {start|stop|reload|restart}" >&2
+ exit 3
+ ;;
+esac
+exit 0
+EOF
+
+
+
+#将nginx添加到启动服务中
+chmod 700 /etc/init.d/nginx
+/sbin/chkconfig --add nginx
+/sbin/chkconfig --level 2345 nginx on
+
+
+#启动nginx
+[root@storage72 opt]# /etc/init.d/nginx start
+Starting nginx daemon: nginxngx_http_fastdfs_set pid=21702
+
+
+#查看jemalloc内存管理
+lsof -n | grep jemalloc
+
+
+
+###------------------ tracker server端做nginx反向代理 ----------------------###
+#nginx.conf配置
+    upstream fdfs_group1 {
+server 192.168.5.72 weight=1 max_fails=2 fail_timeout=30s;
+server 192.168.5.73 weight=1 max_fails=2 fail_timeout=30s;
+    }
+    server {
+listen       80;
+server_name  192.168.5.71;
+location /group1/M00 {
+proxy_pass http://fdfs_group1;
+        }
+    }
+
+	
+	
+###---------------------------- PHP客户端配置 ------------------------------###
+#首先客户端要安装LNMP环境或者LANMP环境
+#因为php的客户端安装也会依赖fastdfs本身的一些库文档，所以要安装fastdfs
+
+cd /opt/fastdfs/php_client
+/usr/local/php/bin/phpize
+./configure --with-php-config=/usr/local/php/bin/php-config
+make;make install
+
+
+cat fastdfs_client.ini >> /usr/local/php/etc/php.ini
+
+
+
+#配置fastDFS的client.conf
+mkdir -p /data/fastdfs
+cp /etc/fdfs/client.conf.sample /etc/fdfs/client.conf
+vi /etc/fdfs/client.conf
+base_path=/data/fastfds
+tracker_server=192.168.5.71:22122  
+http.tracker_server_port=80
+
+
+#重新加载php
+service php-fpm reload
+
+
+#验证模块是否被正常加载
+/usr/local/php/bin/php -m | grep fastdfs_client
+
+
+
+#通过http上传测试
+cat test.php
+<html>
+<body>
+ 
+<form action="upload.php" method="post" enctype="multipart/form-data">
+    <label for="file">Filename:</label>
+    <input type="file" name="upFile" id="upFile" /> 
+    <br />
+    <input type="submit" name="submit" value="Submit" />
+</form>
+ 
+</body>
+</html>
+
+
+
+cat upload.php
+<?php
+header('Content-type:text/html;charset=utf-8'); 
+//上传附件
+function uploadAttach()                                                                            
+{/*{{{*/                                                                                                  
+    $ret = array();
+    $ret['errorcode'] = 0;
+    $ret['errormsg'] = '';
+    if(!$_FILES || false == isset($_FILES["upFile"]))
+    {
+        $ret['errorcode'] = 1;
+        $ret['errormsg'] = "ERROR:upFile is not set";
+        return $ret;
+    }
+ 
+    $file = $_FILES["upFile"];
+    if (false == isset($file['tmp_name']) || false == is_file($file['tmp_name']))
+    {
+        $ret['errorcode'] = 2;
+        $ret['errormsg'] = "tmp_name is not file";
+        return $ret;
+    }
+    if (0 == filesize($file['tmp_name']))
+    {
+        $ret['errorcode'] = 3;
+        $ret['errormsg'] = "tmp_name filesize is 0";
+        return $ret;
+    }
+ 
+    $curlFile = new CurlFile($file['tmp_name'], $file['type'], $file['name']);  
+    $fileSuffix = getSuffix($curlFile->getPostFilename());                                              
+    
+    $ret['file'] = $file;
+    $ret['fileId'] = uploadToFastdfs($curlFile, $fileSuffix);                                                        
+    return $ret;
+}/*}}}*/                                                                                                  
+ 
+//获取后缀
+ function getSuffix($fileName) 
+ {/*{{{*/
+     preg_match('/\.(\w+)?$/', $fileName, $matchs);
+     return isset($matchs[1])?$matchs[1]:'';
+ }/*}}}*/
+ 
+//上传文档到fastdfs
+function uploadToFastdfs(CurlFile $file, $fileSuffix)                                                  
+{/*{{{*/                                                                                                  
+    $fdfs = new FastDFS(); 
+    $tracker = $fdfs->tracker_get_connection();  
+    $fileId = $fdfs->storage_upload_by_filebuff1(file_get_contents($file->getFilename()), $fileSuffix);  
+    $fdfs->tracker_close_all_connections();    
+    return $fileId;
+}/*}}}*/                                                                                                  
+ 
+function start()
+{
+    $ret = uploadAttach();  
+    print_r($ret);
+}
+start();
+?>
+
+
+浏览器测试：
+http://$ip/test.php 
+http://$ip/upload.php 
+
+
+
+
+#通过php脚本上传测试
+echo "php client is here." > /opt/upload.txt
+
+
+
+cat test.php
+<?php
+var_dump(function_exists('fastdfs_storage_upload_by_filename'));
+$ret = fastdfs_storage_upload_by_filename('/opt/upload.txt');
+var_dump($ret);
+?>
+
+
+
+#执行php脚本
+/usr/local/php/bin/php test.php
+
+
+
+
+
+
+###------------------------- storage server宕机测试 ------------------------###
+#先关闭storage73
+略：   思路：先关闭；然后上传图片；然后测试上传的图片是否可以被访问；然后重启storage73看上传的图片有没有同步过来；
+
+
+
+
+
+
+
+###--------------------------- 横向扩容，增加group2 ------------------------###
+#添加一组storage server: 192.168.5.74 192.168.5.75（group2）
+#分别安装fastdfs、nginx、fastdfs-nginx-module
+#修改group2成员的storage.conf（192.168.5.74 192.168.5.75）
+
+cp /etc/fdfs/storage.conf.sample /etc/fdfs/storage.conf
+
+#修改storage server的配置文档：
+vi /etc/fdfs/storage.conf
+group_name=group2
+bind_addr=192.168.5.74
+base_path=/data/fastdfs
+store_path0=/data/fastdfs
+tracker_server=192.168.5.71:22122
+http.server_port=80
+
+
+#创建数据目录，并启动storage server
+mkdir -p /data/fastdfs
+/etc/init.d/fdfs_storaged start
+
+
+#开机启动
+/sbin/chkconfig --add fdfs_storaged
+/sbin/chkconfig --level 2345 fdfs_storaged on
+
+
+#修改所有storage server的mod_fastdfs.conf配置文档
+vi /etc/fdfs/mod_fastdfs.conf
+base_path=/data/fastdfs
+tracker_server=192.168.5.71:22122
+store_path0=/data/fastdfs
+url_have_group_name = true
+group_name=group1/group2  # 所有组名
+group_count = 2  # 组的总数
+
+# 把所有组和目录都添加上
+[group1]
+group_name=group1
+storage_server_port=23000
+store_path_count=1
+store_path0=/data/fastdfs
+
+[group2]
+group_name=group2
+storage_server_port=23000
+store_path_count=1
+store_path0=/data/fastdfs
+
+
+
+#在所有storage机器上，创建所有组的store_path目录
+mkdir -p /data/fastdfs
+
+
+#修改所有storage server的nginx配置文档
+server {
+listen 80;
+server_name localhost;
+location ~/group([0-9])/M00/{
+ngx_fastdfs_module;
+}
+}
+
+
+
+#重启storage server的nginx
+/etc/init.d/nginx restart
+
+
+
+#修改tracker server的反向代理
+user  www www;
+worker_processes  8;
+error_log  /usr/local/nginx/logs/nginx_error.log  crit; 
+pid        /usr/local/nginx/logs/nginx.pid; 
+worker_rlimit_nofile 65535; 
+#工作模式及连接数上限 
+events {
+worker_connections  65535;
+}
+http {
+include       mime.types;
+default_type  application/octet-stream;
+#log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+#                  '$status $body_bytes_sent "$http_referer" '
+#                  '"$http_user_agent" "$http_x_forwarded_for"';
+#access_log  logs/access.log  main;
+sendfile        off;
+tcp_nopush     on;
+keepalive_timeout  300;
+#nginx跟后端服务器连接超时时间(代理连接超时)
+proxy_connect_timeout 300s; 
+#连接成功后，后端服务器响应时间(代理接收超时)
+proxy_read_timeout 300s; 
+proxy_send_timeout 300s; 
+#设置代理服务器（nginx）保存用户头信息的缓冲区大小
+proxy_buffer_size 64k;
+#proxy_buffers缓冲区，网页平均在32k以下的话，这样设置
+proxy_buffers 4 32k;
+#高负荷下缓冲大小（proxy_buffers*2）
+proxy_busy_buffers_size 64k; 
+#设定缓存文档夹大小，大于这个值，将从upstream服务器传递请求，而不缓冲到磁盘
+proxy_temp_file_write_size 64k; 
+#不允许代理端主动关闭连接
+proxy_ignore_client_abort on;
+proxy_cache_path /data/cache1 levels=1:2 keys_zone=fastdfs_cache:200m inactive=1d max_size=20g;
+fastcgi_connect_timeout 300;
+fastcgi_send_timeout 300;
+fastcgi_read_timeout 300;
+fastcgi_buffer_size 128k;
+fastcgi_buffers 4 128k;
+fastcgi_busy_buffers_size 128k;
+fastcgi_temp_file_write_size 128k;
+gzip on;
+gzip_min_length  1k;
+gzip_buffers     4 16k;
+gzip_http_version 1.0;
+gzip_comp_level 2;
+gzip_types       text/plain application/x-javascript text/css application/xml;
+gzip_vary on;
+#nginx cache命中率统计日志
+log_format  cachelog  '$remote_addr - $remote_user [$time_local] "$request" '
+                  '$status "$http_referer" '
+                  '"$http_user_agent" "$http_x_forwarded_for" '
+                  '"$upstream_cache_status" $body_bytes_sent';
+#设置 group1 的服务器
+upstream fdfs_group1 {
+server 192.168.5.72 weight=1 max_fails=2 fail_timeout=30s;
+server 192.168.5.73 weight=1 max_fails=2 fail_timeout=30s;
+}
+#设置 group2 的服务器
+upstream fdfs_group2 {
+server 192.168.5.74 weight=1 max_fails=2 fail_timeout=30s;
+server 192.168.5.75 weight=1 max_fails=2 fail_timeout=30s;
+}
+server {
+listen 80;
+server_name localhost;
+#charset koi8-r;
+#access_log logs/host.access.log main;
+#设置 group 的负载均衡参数
+location /group1/M00 {
+proxy_next_upstream http_502 http_504 error timeout invalid_header;
+proxy_cache fastdfs_cache;
+proxy_cache_valid 200 304 12h;
+proxy_cache_key $uri$is_args$args;
+proxy_pass http://fdfs_group1;
+expires 30d;
+}
+location /group2/M00 {
+proxy_next_upstream http_502 http_504 error timeout invalid_header; 
+proxy_cache fastdfs_cache;
+proxy_cache_valid 200 304 12h;
+proxy_cache_key $uri$is_args$args;
+proxy_pass http://fdfs_group2;
+expires 30d;
+}
+#设置清除缓存的访问权限
+location ~/purge(/.*) {
+allow 127.0.0.1;
+allow 192.168.5.0/24;
+deny all;
+proxy_cache_purge http-cache $1$is_args$args;
+}
+#error_page 404 /404.html;
+# redirect server error pages to the static page /50x.html
+#
+error_page 500 502 503 504 /50x.html;
+location = /50x.html {
+root html;
+}
+}
+}
+
+
+
+
+#fastdfs状态监控
+[root@storage71 /]# fdfs_monitor /etc/fdfs/client.conf
+server_count=1, server_index=0
+tracker server is 192.168.5.71:22122
+group count: 2
+Group 1:
+group name = group1
+        Storage 1:
+                id = 192.168.5.72
+                ip_addr = 192.168.5.72 (storage72.blufly.com)  ACTIV
+        Storage 2:
+                id = 192.168.5.73
+                ip_addr = 192.168.5.73 (storage73.blufly.com)  WAIT_SYNC
+Group 2:
+group name = group2
+        Storage 1:
+                id = 192.168.5.74
+                ip_addr = 192.168.5.74 (storage74.blufly.com) ACTIVE
+        Storage 2:
+                id = 192.168.5.75
+                ip_addr = 192.168.5.75 (storage75.blufly.com)  WAIT_SYNC
+
+				
+				
+#上传图片测试
+略：
+
+
+#fastdfs的storage server的状态查询
+#FDFS_STORAGE_STATUS：INIT:初始化，尚未得到同步已有数据的源服务器
+#FDFS_STORAGE_STATUS：WAIT_SYNC:等待同步，已得到同步已有数据的源服务器
+#FDFS_STORAGE_STATUS：SYNCING:同步中
+#FDFS_STORAGE_STATUS：DELETED:已删除，该服务器从本组中摘除
+#FDFS_STORAGE_STATUS：OFFLINE:离线
+#FDFS_STORAGE_STATUS：ONLINE:在线，尚不能提供服务
+#FDFS_STORAGE_STATUS：ACTIVE:在线，可以提供服务
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
