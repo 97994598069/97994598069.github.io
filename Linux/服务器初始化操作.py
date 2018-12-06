@@ -42,8 +42,12 @@ source /etc/profile
 
 
 6.内核参数调整
-mv /etc/sysctl.conf /etc/sysctl.conf.default
+cp /etc/sysctl.conf /etc/sysctl.conf.default
 略
-
+至少如下4个：
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_tw_recycle = 1
+net.ipv4.tcp_fin_timeout = 30
 
 
