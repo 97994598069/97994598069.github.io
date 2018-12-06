@@ -45,3 +45,97 @@ echo 511 > /proc/sys/net/core/somaxconn
 此参数确定了TCP连接中已完成队列(完成三次握手之后)的长度， 当然此值必须不大于Linux系统定义的/proc/sys/net/core/somaxconn值，redis默认是511，而Linux的默认参数值是128。当系统并发量大并且客户端速度缓慢的时候，可以将这二个参数一起参考设定。
 
 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+redis3.0配置调优
+导读：
+a) 此文针对使用过redis或者正要使用redis的读者
+b) redis单实例部署忽略主从复制和集群部分
+b) 需要注意sentinel的配置不适用此版本
+
+
+################################ GENERAL(常规) #####################################
+
+a) daemonize no
+   建议启用守护模式模式：daemonize yes
+b) pidfile /var/run/redis.pid
+   根据port指定守护进程的pid文件路径：pidfile /var/run/redis-6379.pid
+c) port 6379
+   指定端口：port 6379
+d) bind
+   默认启动ipv4和ipv6，如需禁用ipv6：bind 0.0.0.0
+e) timeout 0
+   N秒后关闭空闲的client连接，建议设置为120秒，不维护不活跃连接：timeout 120
+f) tcp-keepalive 0
+   心跳检测时间，建议60秒：tcp-keepalive 60
+g) logfile ""
+   根据port指定全路径文件名：logfile "/xxx/6379.log" 
+
+
+################################ SNAPSHOTTING(rdb)  ################################
+a) save 900 1
+   save 300 10
+   save 60 10000
+   BGSAVE会占用额外内存，单机多实例的环境建议禁用自动BGSAVE，减少内存无序不可控：save ""
+b) dbfilename dump.rdb
+   根据port指定rdb文件名：dbfilename dump-6379.rdb
+c) dir ./
+   指定工作目录，保存rdb文件和aof文件：dir /xxx/xxx/
+
+
+################################# REPLICATION(主从复制) #################################
+a) # slaveof <masterip> <masterport>
+   默认禁用主从模式
+b) masterauth <master-password>
+   如果master设置了密码，slave也需要配置
+
+c) repl-timeout 60
+
+   复制超时，默认60s，如果内存分配比较多（比如单实例4GB），建议调到3分钟
+
+d) repl-backlog-size 1mb
+   建议调整至128mb，或者根据实际写入压力调整，减少slave掉线全量复制的情况发生。
+
+
+################################## SECURITY(安全) ###################################
+a) # requirepass foobared
+   密码，默认不启动，同时需要注意密码的强壮性
+b) rename-command
+   建议把一些重要的命令rename，防止误操作
+
+
+################################### LIMITS(限制) ####################################
+a) maxclients 10000
+   按需调整，默认最大客户端1w
+b) maxmemory
+   最大内存数，默认无限制，单实例不建议超过4G
+c) maxmemory-policy noeviction
+   建议配置内存回收策略，否则内存写满了将导致写入失败：maxmemory-policy volatile-lru
+
+
+############################## APPEND ONLY MODE(aof) ###############################
+a) appendonly no
+   建议开启aof，数据安全性更高：appendonly yes
+b) appendfsync everysec
+   默认选择everysec同步策略
+c) no-appendfsync-on-rewrite no
+   建议设置为yes，主进程执行BGSAVE或者BGREWRITEAOF时，会暂停调用fsync()，
+   减少磁盘I/O压力：no-appendfsync-on-rewrite yes
+
+
+################################ REDIS CLUSTER(集群)  ###############################
+a) # cluster-enabled yes
+   默认不启动集群功能，如需成为集群的节点：cluster-enabled yes
+   注意主从节点都需要开启
+b) # cluster-config-file nodes-6379.conf
+   根据port指定文件名，不能出现冲突：cluster-config-file nodes-6379.conf
+c) # cluster-node-timeout 15000
+   节点超时时间默认15秒，根据线上环境进行调整，不建议比15秒小
+d) cluster-require-full-coverage yes
+   建议设置为no，部分node挂掉依然支持读写服务：cluster-require-full-coverage no
+
+
+
+
+
+
