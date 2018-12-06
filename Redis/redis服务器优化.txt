@@ -1,0 +1,47 @@
+修改Linux内存分配策略：
+（1）向/etc/sysctl.conf添加vm.overcommit_memory = 1,然后重启服务器
+（2）或者执行sysctl vm.overcommit_memory=1(立即生效)
+
+原因
+（1）redis在运行过程中可能会出现下面问题
+错误日志：WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1'
+（2）原因：
+redis在dump数据的时候，会fork出一个子进程，理论上child进程所占用的内存和parent是一样的，比如parent占用的内存为8G，这个时候也要同样分配8G的内存给child,如果内存无法负担，往往会造成redis服务器的down机或者IO负载过高，效率下降。所以内存分配策略应该设置为 1（表示内核允许分配所有的物理内存，而不管当前的内存状态如何）。
+
+内存分配策略有三种
+可选值：0、1、2。
+0: 表示内核将检查是否有足够的可用内存供应用进程使用；如果有足够的可用内存，内存申请允许；否则，内存申请失败，并把错误返回给应用进程。
+1: 不管需要多少内存，都允许申请。
+2: 只允许分配物理内存和交换内存的大小。(交换内存一般是物理内存的一半)
+
+
+
+
+关闭透明大页
+THP会造成内存锁影响redis性能，建议关闭
+使用root用户执行下面命令
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+把这条命令添加到这个文件中/etc/rc.local
+
+原因：
+（1）一般而言，内存管理的最小块级单位叫做page，一个page是4096bytes，1M的内存会有256个page，1GB的话就会有256,000个page。CPU通过内置的内存管理单元维护着page表记录。
+正常来说，有两种方式来增加内存可以管理的内存大小：
+a.增大硬件内存管理单元的大小(增加内存page的数量)。
+b.增大page的大小。
+（2）现代的硬件内存管理单元最多只支持数百到上千的page表记录，并且，对于数百万page表记录的维护算法必将与目前的数百条记录的维护算法大不相同才能保证性能，目前的解决办法是，如果一个程序所需内存page数量超过了内存管理单元的处理大小，操作系统会采用软件管理的内存管理单元，但这会使程序运行的速度变慢。
+（3）简单来说， Huge Pages就是大小为2M到1GB的内存page（增大一个page的大小），主要用于管理数千兆的内存，比如1GB的page对于1TB的内存来说是相对比较合适的。
+（4）THP（Transparent Huge Pages）是一个使管理Huge Pages自动化的抽象层。由于实现方式问题，THP会造成内存锁影响性能，尤其是在程序不是专门为大内内存页开发的时候，简单介绍如下:
+操作系统后台有一个叫做khugepaged的进程，它会一直扫描所有进程占用的内存，在可能的情况下会把4k的page交换为Huge Pages，在这个过程中，对于操作的内存的各种分配活动都需要各种内存锁，直接影响程序的内存访问性能，并且，这个过程对于应用是透明的，在应用层面不可控制,对于专门为4k page优化的程序来说，可能会造成随机的性能下降现象。
+
+
+
+
+
+修改Linux的tcp连接数量
+做法 ：
+echo 511 > /proc/sys/net/core/somaxconn
+
+原因 ：
+此参数确定了TCP连接中已完成队列(完成三次握手之后)的长度， 当然此值必须不大于Linux系统定义的/proc/sys/net/core/somaxconn值，redis默认是511，而Linux的默认参数值是128。当系统并发量大并且客户端速度缓慢的时候，可以将这二个参数一起参考设定。
+
+
