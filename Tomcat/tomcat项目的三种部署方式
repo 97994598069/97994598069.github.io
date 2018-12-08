@@ -34,7 +34,9 @@
 
 
 2、部署项目的第二种方法（修改 conf/server.xml 文件 ）
-、打开tomcat下conf/server.xml，在 标签之间输入项目配置信息
+、打开tomcat下conf/server.xml，在 标签之间输入项目配置
+在</Host>中添加
+<Context docBase="/usr/local/bim_tomcat/webapps/curriculumFileResources" path="/curriculumResources" reloadable="true"/> 
 path：浏览器访问时的路径名
 docBase：Web项目的WebRoot所在的路径，注意是WebRoot的路径，不是项目的路径。其实也就是编译后的项目
 reloadble：设定项目有改动时，Tomcat 是否重新加载该项目
