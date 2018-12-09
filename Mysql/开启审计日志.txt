@@ -1,0 +1,97 @@
+
+注意：
+安装插件的方式优缺点：
+缺点：日志信息比较大，对性能影响大。
+优点：对每一时刻每一用户的操作都有记录。
+搭建过程：
+下载地址：https://bintray.com/mcafee/mysql-audit-plugin/release/1.1.4-725#files
+1、把文件上传到/opt目录下
+[root@edu-mysql-02 ~]# cd /opt/
+[root@edu-mysql-02 opt]# unzip audit-plugin-mariadb-10.2-1.1.4-725-linux-x86_64.zip
+
+
+2、登录数据库，查看存放路径
+mysql -uroot -pMyNewPass4!
+mysql> install plugin audit soname 'libaudit_plugin.so';
+ERROR 1123 (HY000): Can't initialize function 'audit'; Plugin initialization function failed.
+
+上述报错解决:
+退出mysql执行如下:
+[root@bogon mysql-audit-1.1.6]# which mysqld
+/usr/sbin/mysqld
+
+cd /root/audit-plugin-mysql-5.7-1.1.4-725/utils
+chmod +x offset-extract.sh
+[root@bogon utils]# ./offset-extract.sh /usr/sbin/mysqld
+ERROR: gdb not found. Make sure gdb is installed and on the path.
+
+报错解决：
+yum -y install gdb 
+
+再次执行
+[root@bogon utils]# ./offset-extract.sh /usr/sbin/mysqld
+//offsets for: /usr/sbin/mysqld (5.7.24)
+{"5.7.24","919932c5cb073d1a1bd771346a8adfd8", 7824, 7872, 3632, 4792, 456, 360, 0, 32, 64, 160, 536, 7988, 4360, 3648, 3656, 3660, 6072, 2072, 8, 7056, 7096, 7080},
+
+在配置文件my.cnf的[mysqld]中加入
+plugin-load=AUDIT=libaudit_plugin.so ##两行
+audit_offsets=7824, 7872, 3632, 4792, 456, 360, 0, 32, 64, 160, 536, 7988, 4360, 3648, 3656, 3660, 6072, 2072, 8, 7056, 7096, 7080
+
+重启mysql：
+[root@edu-mysql-02 utils]# systemctl restart mysqld.service
+
+
+登陆mysql执行安装插件：
+mysql> install plugin audit soname 'libaudit_plugin.so';
+
+
+检查：
+mysql> show plugins;
+略
+
+
+检查版本：
+mysql> show global status like 'AUDIT_version';
++---------------+-----------+
+| Variable_name | Value     |
++---------------+-----------+
+| Audit_version | 1.1.4-725 |
++---------------+-----------+
+1 row in set (0.01 sec)
+
+
+开启audit功能：
+mysql> SET GLOBAL audit_json_file=ON;
+
+
+
+可以查看插件有哪些可配置的参数：
+mysql> show variables like '%audit%'\G;
+
+
+
+为了保证重启数据库，配置不丢失，修改my.cnf 配置文件，将下面的配置添加到[mysqld]中，所以在配置文件中my.cnf加入参数：
+总的如下：
+plugin-load=AUDIT=libaudit_plugin.so
+audit_offsets = 7824, 7872, 3632, 4792, 456, 360, 0, 32, 64, 160, 536, 7988, 4360, 3648, 3656, 3660, 6072, 2072, 8, 7056, 7096, 7080
+audit_json_file = on
+audit_record_cmds = 'insert,delete,update,create,drop,alter,grant,truncate'
+
+查看日志：
+[root@edu-mysql-02 log]# find / -name mysql-audit.json
+[root@edu-mysql-02 log]# tail -f /var/lib/mysql/mysql-audit.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
