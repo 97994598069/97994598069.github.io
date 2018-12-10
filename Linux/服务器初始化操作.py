@@ -12,7 +12,7 @@ yum clean all
 yum makecache
 
 2.安装常用工具
-yum install ntpdate lsof net-tools gcc gcc-c++ make sysstat mtr iftop lrzsz vim -y
+yum install ntpdate lsof net-tools gcc gcc-c++ make sysstat mtr iftop lrzsz vim openssh* -y
 
 3.系统时间同步
 ntpdate cn.pool.ntp.org
