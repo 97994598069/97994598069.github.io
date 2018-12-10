@@ -1,0 +1,73 @@
+目前web开发 使用一般前后端分离技术，并且前端负责路由。为了美观，会采用前端会采用h5 history 模式的路由。但刷新页面时，前端真的会按照假路由去后端寻找文件。此时，后端必须返回index（index.html）文件才不至于返回404。
+
+nginx 部署一个单页应用很简单：
+location / {
+root html;
+try_files $uri /index.html index.html;
+}
+
+root是web服务器目录，try_files 为文件匹配，先找真实的地址($uri)，如果找不到，再找index.html文件。
+
+
+
+#此处注意，history模式不可以使用相对位置引入方式（./）
+但如果几个单页应用同时需要部署在同一台电脑上，并且都需要占用80或者443端口，就不太容易了。
+
+介绍2种相同IP端口部署多个单页应用（前端路由）的方法。
+1、使用子域名区分，此种方法最是简单。但是限制也大，必须要买域名，或者修改访问者电脑的hosts文件。
+server {
+	listen 80;
+	server_name aa.gs.com;  ##子域名aa访问时
+	location / {
+		root E:/ee; ##windows路径，E盘下面ee文件为aa.gs.com的服务器目录
+		try_files $uri /index.html index.html 
+	}
+}
+
+server {
+	listen 80;
+	server_name bb.gs.com;   ##访问子域名bb时
+	location / {
+		root /root/bb   ##Linux  /root/bb文件夹作为服务器目录
+		try_files $uri /index.html index.html 
+	}
+}
+
+
+
+2、采用路径的第一个文件夹名字作为区分。例如：https://aa.com/a/xx 与 https://aa.com/b/xx。采用a与b作为区分，分别表示不同的项目。需要设置点：（1）前端打包后的文件引用地址，需要加上'/a/' '/b/'为前缀 。比如 <script scr="/a/test.js"></script>(webpack 为设置publicPath: '/a')；（2）前端的路由路径必须加上/a/前缀：比如真正地址test.com/ss,需改成test.com/a/ss。
+
+server {
+	listen 80;
+	root /root/test;   ##web服务器目录
+	location ^~ /a/ {
+		try_files $uri /a/index.html ##如果找不到文件，就返回/root/test/a/index.html 
+	location ^~ /b/ {
+		try_files $uri /b/index.html ##如果找不到文件，就返回/root/test/b/index.html 
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
