@@ -29,11 +29,11 @@ vi basybox.yaml
 apiVersion: v1
 kind: Pod
 metadata:
-    name: busybox
+    name: busybox   
     namespace: default
 spec:
     containers:
-    - image: busybox
+    - image: busybox   ##最新的镜像有问题可以使用busybox:1.28.4
       command:
         - sleep
         - "3600"
