@@ -36,6 +36,7 @@ named-checkconf
 
 
 4.编辑区域数据配置文件
+/var/named
 cp -p named.localhost hello.com.zone
 cp -p named.localhost hello.com.local
 
