@@ -22,6 +22,41 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY 'MyNewPass4!';
 GRANT all privileges ON xiaoyaoji.* TO 'gaoyanrong'@'%' identified by 'gaoyanrong' WITH GRANT OPTION;
 
 
+数据库密码的安全策略：
+使用如下命令查看现有的密码策略
+mysql> SHOW VARIABLES LIKE 'validate_password%';
+validate_password_number_count参数是密码中至少含有的数字个数，当密码策略是MEDIUM或以上时生效。
+validate_password_special_char_count参数是密码中非英文数字等特殊字符的个数，当密码策略是MEDIUM或以上时生效。
+validate_password_mixed_case_count参数是密码中英文字符大小写的个数，当密码策略是MEDIUM或以上时生效。
+validate_password_length参数是密码的长度，这个参数由下面的公式生成
+validate_password_number_count+ validate_password_special_char_count+ (2 * validate_password_mixed_case_count)
+validate_password_dictionary_file参数是指定密码验证的字典文件路径。
+validate_password_policy这个参数可以设为0、1、2，分别代表从低到高的密码强度，此参数的默认值为1，如果想将密码强度改弱，则更改此参数为0。
+
+
+解决方法：   
+可以按照现有策略设置密码，也可以更改密码策略。
+1. 按照现有密码策略指定密码
+mysql>  CREATE USER 'test'@'localhost' IDENTIFIED BY 'System#2016';
+
+2. 更改密码策略，降低密码的验证标准
+--更改密码策略为LOW   
+mysql> set global validate_password_policy=0;
+
+--更改密码长度   
+mysql> set global validate_password_length=0;
+
+--密码最小长度为4   
+mysql> SHOW VARIABLES LIKE 'validate_password%';
+mysql> drop user 'test'@localhost;
+
+
+
+
+
+
+
+
 ###yum --disablerepo=\* --enablerepo='mysql*-community*' list available
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
