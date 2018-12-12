@@ -20,6 +20,7 @@ mysql -uroot -p
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'MyNewPass4!';
 
 GRANT all privileges ON xiaoyaoji.* TO 'gaoyanrong'@'%' identified by 'gaoyanrong' WITH GRANT OPTION;
+GRANT all privileges ON *.* TO 'xujia'@'%' identified by 'xu123jia123' WITH GRANT OPTION;
 
 查询权限：
 mysql> show grants for xujia;
