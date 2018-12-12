@@ -15,6 +15,14 @@ yum makecache
 yum install ntpdate lsof net-tools gcc gcc-c++ make sysstat mtr iftop lrzsz vim openssh* -y
 
 3.系统时间同步
+EDT：指美国东部夏令时间
+EST：英国时间
+CST：北京时间
+##如果时间为EST；需要先将时区改为CST
+[root@localhost ~]# mv /etc/localtime /etc/localtime.bak
+[root@localhost ~]# ln -s /usr/share/zoneinfo/Asia/Shanghai  /etc/localtime
+[root@localhost ~]# date
+
 ntpdate cn.pool.ntp.org
 echo '*/30 * * * * ntpdate cn.pool.ntp.org && hwclock -w && hwclock --systohc >/dev/null 2>&1' >> /var/spool/cron/root
 systemctl restart crond
