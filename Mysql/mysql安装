@@ -21,6 +21,10 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY 'MyNewPass4!';
 
 GRANT all privileges ON xiaoyaoji.* TO 'gaoyanrong'@'%' identified by 'gaoyanrong' WITH GRANT OPTION;
 
+查询权限：
+mysql> show grants for xujia;
+
+
 
 数据库密码的安全策略：
 使用如下命令查看现有的密码策略
