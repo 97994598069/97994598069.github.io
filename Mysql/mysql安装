@@ -25,6 +25,9 @@ GRANT all privileges ON *.* TO 'xuxu'@'%' identified by '000000' WITH GRANT OPTI
 查询权限：
 mysql> show grants for xujia;
 
+数据库改名字：
+RENAME database olddbname TO newdbname
+
 
 
 数据库密码的安全策略：
