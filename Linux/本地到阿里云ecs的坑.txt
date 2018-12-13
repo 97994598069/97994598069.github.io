@@ -1,0 +1,58 @@
+1.在ecs搭建ftp；然后本地使用报错：
+
+配置文件：
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+dirmessage_enable=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+xferlog_file=/var/log/xferlog
+data_connection_timeout=12000000000000000
+chroot_local_user=YES
+local_root=/mnt/mp4
+chroot_list_enable=NO
+chroot_list_file=/etc/vsftpd/chroot_list
+listen=YES
+
+pam_service_name=vsftpd
+userlist_enable=NO
+tcp_wrappers=YES
+pasv_address=$ecs_ip (公网IP)  ##必须添加否则报错如下：
+vsftpd_log_file=/var/log/vsftpd.log
+
+
+
+
+[root@localhost ~]# ftp $ecs_ip  (公网) ##登录ftp 若ftp配置文件不加pasv_address=$ecs_ip  则会报错如下
+227 Entering Passive Mode (192,168,128,160,137,143).
+ftp: connect: 没有到主机的路由
+ftp> ls
+227 Entering Passive Mode (192,168,128,160,255,103).
+ftp: connect: 没有到主机的路由
+ftp> passive
+Passive mode off.
+ftp> pwd
+257 "/mnt/mp4"
+ftp> ls
+500 Illegal PORT command.
+ftp: bind: 地址已在使用
+ftp> ls
+500 Illegal PORT command.
+ftp> 221 Goodbye.
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+本地搭建zabbix监控阿里云ecs
+报错监控：
+2312:20180920:094355.407 failed to accept an incoming connection: connection from "$公司的出口ip" rejected, allowed hosts: "$本地zabbix-server的外网ip"
+
+
+修改zabbix客户端的配置文件
+[root@iZ25gmzxq5aZ ~]# cat /etc/zabbix/zabbix_agentd.conf |grep "$公司出口ip"
+Server=$zabbix-server的外网ip,$公司出口ip
+ServerActive=$zabbix-server的外网ip,$公司出口ip
+
+
