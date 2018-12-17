@@ -1,0 +1,15 @@
+1 保证linux服务器使用的是utf-8
+local -a查看支持的字体
+vi/etc/sysconfig/i18n 修改为zh_CN.UTF-8
+
+2.客户端软件Xshell、putty、SSH Secure Shell Client 等等客户端编码改为utf-8
+
+3修改server.xml文件编码为utf-8 URIEncoding="UTF-8"
+
+4.修改catalina.sh文件
+if [ -z "$LOGGING_MANAGER" ]; then
+JAVA_OPTS="$JAVA_OPTS-Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager-Dfile.encoding=UTF8 -Dsun.jnu.encoding=UTF8"
+else
+JAVA_OPTS="$JAVA_OPTS $LOGGING_MANAGER-Dfile.encoding=UTF8 -Dsun.jnu.encoding=UTF8"
+fi
+
