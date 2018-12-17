@@ -1,0 +1,10 @@
+yum install -y epel-release
+yum -y install fuse-sshfs
+sshfs root@192.168.4.82:/opt /a
+
+如果没有设置免密则需要收入密码（只这一次）
+df -h  可以看到有挂载成功
+
+服务端/opt下创建文件可自动传输到客户端；同时客户端删除服务端也会自动删除
+umount /a  卸载挂载
+
