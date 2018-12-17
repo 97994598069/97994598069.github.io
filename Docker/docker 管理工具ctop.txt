@@ -1,0 +1,17 @@
+wget https://github.com/bcicen/ctop/releases/download/v0.4.1/ctop-0.4.1-linux-amd64 -O ctop
+ln -s /usr/local/src/ctop /usr/local/bin/
+chmod +x /usr/local/bin/ctop
+
+
+ctop
+
+ ctop - 19:31:57 CST      4 containers                                                                                                                                                                                
+
+   NAME                                      CID                                       CPU                                       MEM                                       NET RX/TX
+
+ ◉  deploy-main                               a500b6bb8ec1                                                  0%                                    8M / 9.09G                2M / 2M
+ ◉  deploy-ui                                 4af47476e7c9                                                  0%                                    11M / 9.09G               2M / 2M
+ ◉  deploy-yumrepo                            ca400dddec69                                                  0%                                    2M / 9.09G                140K / 62K
+
+
+ 然后将光标移动至其中一个容器上；按"enter"可查看到具体的信息
