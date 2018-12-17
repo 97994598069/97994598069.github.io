@@ -1,0 +1,27 @@
+1、生成随机数
+[root@bogon ~]# echo $RANDOM
+25207
+
+
+2、生成随机字符串
+[root@bogon ~]# date +%s%N | md5sum | head -c 10 
+c953426220
+
+[root@bogon ~]# cat /dev/urandom | head -n 10 | md5sum | head -c 15
+e4fbad735f14e2b
+
+ 1、生成随机数字（20位）
+head /dev/urandom | tr -dc 0-9 | head -c 20
+2、包含数字、大小写（20位）
+head /dev/urandom | tr -dc A-Za-z0-9 | head -c 20
+3、使用MD5加密
+cat /dev/urandom | head -c 5 | md5um | head -c 5
+4、也可转换为16进制处理
+cat /dev/urandom | od -x | head -c 10
+
+
+或者
+[root@bogon ~]# yum -y install pwgen
+[root@bogon ~]# pwgen 10 1
+oo3heim8Au
+
