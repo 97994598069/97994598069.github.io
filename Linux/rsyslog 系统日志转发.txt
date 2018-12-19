@@ -1,0 +1,205 @@
+一、rsyslog 介绍
+　　ryslog 是一个快速处理收集系统日志的程序，提供了高性能、安全功能和模块化设计。rsyslog 是syslog 的升级版，它将多种来源输入输出转换结果到目的地，据官网介绍，现在可以处理100万条信息。
+　　特性：1.多线程
+　　　　　2.支持加密协议：ssl，tls，relp
+　　　　　3.mysql、oracle、postgreSQL
+　　　　　4.等等..
+
+背景：
+  server端：192.168.30.55  centos7   hostname:opm
+
+client01端：192.168.30.56  centos7   hostname:node1
+client02端：192.168.30.57  centos7   hostname:ceph1
+
+
+server上部署操作
+安装rsyslog 程序（rsyslog默认已经在各发行版安装，如果系统中没有的话，可以用yum 进行安装，如下：）
+[root@opm ~]# yum install rsyslog -y
+
+编辑rsyslog配置文件，路径 /etc/rsyslog.conf,修改前最好先备份一份，修改后的文件内容如下
+[root@opm log]# grep -v "^#" /etc/rsyslog.conf | grep -v "^$"
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+$ModLoad imjournal # provides access to the systemd journal
+$ModLoad immark  # provides --MARK-- message capability
+$ModLoad imudp
+$UDPServerRun 514
+$ModLoad imtcp
+$InputTCPServerRun 514
+$WorkDirectory /var/lib/rsyslog
+$AllowedSender tcp, 192.168.30.0/24
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$template Remote,"/data/log/%fromhost-ip%/%fromhost-ip%_%$YEAR%-%$MONTH%-%$DAY%.log"
+:fromhost-ip, !isequal, "127.0.0.1" ?Remote
+$IncludeConfig /etc/rsyslog.d/*.conf
+$OmitLocalLogging on
+$IMJournalStateFile imjournal.state
+*.info;mail.none;authpriv.none;cron.none                /data/log/messages
+authpriv.*                                              /var/log/secure
+mail.*                                                  -/var/log/maillog
+cron.*                                                  /var/log/cron
+*.emerg                                                 :omusrmsg:*
+uucp,news.crit                                          /var/log/spooler
+local7.*                                                /var/log/boot.log
+
+备注：
+a.$AllowedSender tcp, 192.168.30.0/24 允许 30.0网段内的主机以tcp协议来传输
+b.$template Remote,"/data/log/%fromhost-ip%/%fromhost-ip%_%$YEAR%-%$MONTH%-%$DAY%.log"  定义模板，接受日志文件路径，区分了不同主机的日志
+c.:fromhost-ip, !isequal, "127.0.0.1" ?Remote 过滤server 本机的日志。
+d.$InputTCPServerRun 514 开启tcp，tcp和udp 可以共存的
+
+
+创建日志目录，尽量选择系统内比较大的区域创建，因为考虑到要存放很多服务器的日志文件。
+[root@opm ~]# mkdir -pv /data/log
+
+修改完成无误后，重启rsyslog服务，并查看监听端口，514 是否是tcp协议
+[root@opm ~]# systemctl restart rsyslog
+[root@opm ~]# netstat -aulntp | grep rsyslog
+tcp        0      0 0.0.0.0:514             0.0.0.0:*               LISTEN      20228/rsyslogd      
+tcp6       0      0 :::514                  :::*                    LISTEN      20228/rsyslogd      
+udp        0      0 0.0.0.0:514             0.0.0.0:*                           20228/rsyslogd      
+udp6       0      0 :::514                  :::*                                20228/rsyslogd      
+
+
+
+
+客户端上操作：
+node1 上进行配置
+打开配置文件，老样子，先备份下在进行修改 /etc/rsyslog.conf，修改完记得要重启程序
+
+[root@node1 ~]# grep -v "^$" /etc/rsyslog.conf | grep -v "^#"
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+$ModLoad imjournal # provides access to the systemd journal
+$WorkDirectory /var/lib/rsyslog
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$template myFormat,"%timestamp% %fromhost-ip% %msg%\n"
+$ActionFileDefaultTemplate myFormat
+$IncludeConfig /etc/rsyslog.d/*.conf
+$OmitLocalLogging on
+$IMJournalStateFile imjournal.state
+*.info;mail.none;authpriv.none;cron.none                @@192.168.30.55
+authpriv.*                                              /var/log/secure
+mail.*                                                  -/var/log/maillog
+cron.*                                                  /var/log/cron
+*.emerg                                                 :omusrmsg:*
+uucp,news.crit                                          /var/log/spooler
+local7.*                                                /var/log/boot.log
+
+ceph1 上进行配置，重启rsyslog程序
+
+
+
+ceph1 上进行配置，重启rsyslog程序
+打开配置文件/etc/rsyslog.conf
+[root@ceph1 ~]# grep -v "^$" /etc/rsyslog.conf | grep -v "^#"
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+$ModLoad imjournal # provides access to the systemd journal
+$WorkDirectory /var/lib/rsyslog
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$IncludeConfig /etc/rsyslog.d/*.conf
+$OmitLocalLogging on
+$IMJournalStateFile imjournal.state
+*.info;mail.none;authpriv.none;cron.none                @@192.168.30.55
+authpriv.*                                              /var/log/secure
+mail.*                                                  -/var/log/maillog
+cron.*                                                  /var/log/cron
+*.emerg                                                 :omusrmsg:*
+uucp,news.crit                                          /var/log/spooler
+local7.*                                                /var/log/boot.log
+$template myFormat,"%timestamp% %fromhost-ip%%msg%\n"
+$ActionFileDefaultTemplate myFormat
+
+
+最后重启客户端上的rsyslog程序
+
+
+
+
+
+验证：
+在server 服务器上进到 /data/log 目录下，进行查看，会发现以下类似的文件结构
+
+[root@opm ~]# tree /data/log/
+/data/log/
+├── 192.168.30.56
+│ └── 192.168.30.56_2016-05-05.log
+├── 192.168.30.57
+│ └── 192.168.30.57_2016-05-05.log
+└── messages
+directories, 3 files
+
+messages：server 端的系统日志
+文件夹192.168.30.56： node1 客户端的日志
+文件夹192.168.30.57： ceph1 客户端的日志
+
+
+
+我们这里只查看node1 的系统日志吧。server 上进行操作
+[root@opm ~]# tail -f /data/log/192.168.30.56/192.168.30.56_2016-05-05.log 
+May  5 20:50:45 node1 rsyslogd: [origin software="rsyslogd" swVersion="7.4.7" x-pid="9296" x-info="http://www.rsyslog.com"] exiting on signal 15.
+May  5 20:50:45 node1 rsyslogd: [origin software="rsyslogd" swVersion="7.4.7" x-pid="9334" x-info="http://www.rsyslog.com"] start
+May  5 20:50:45 node1 systemd: Stopping System Logging Service...
+May  5 20:50:45 node1 systemd: Starting System Logging Service...
+May  5 20:50:45 node1 systemd: Started System Logging Service.
+
+
+这里还可以在node1上在命令行里输入 logger “this is test ” 发送消息，server上进行查看下
+[root@opm ~]# tail -1f /data/log/192.168.30.56/192.168.30.56_2016-05-05.log 
+May  5 20:52:46 node1 root: this is test
+
+
+如果验证失败的话，先检查selinux 是否关闭。后将udp 514 端口和tcp 514端口允许30网段访问即可，或者关闭iptables 服务。另外说明centos7上 默认防火墙是firewalld。该操作在每台机器上进行。
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+应用示例
+收集系统其它服务日志，在客户端node1 上操作，示例以openstack-nova 服务的日志为例：
+
+先修改配置文件 /etc/rsyslog.conf，完整内容如下：
+[root@node1 ~]# egrep -v '^#|^$' /etc/rsyslog.conf
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+$ModLoad imjournal # provides access to the systemd journal
+$ModLoad immark  # provides --MARK-- message capability
+$WorkDirectory /var/lib/rsyslog
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$IncludeConfig /etc/rsyslog.d/*.conf
+$OmitLocalLogging on
+$IMJournalStateFile imjournal.state
+*.info;mail.none;authpriv.none;cron.none                @@192.168.30.67
+authpriv.*                                              /var/log/secure
+mail.*                                                  -/var/log/maillog
+cron.*                                                  /var/log/cron
+*.emerg                                                 :omusrmsg:*
+uucp,news.crit                                          /var/log/spooler
+local7.*                                                /var/log/boot.log
+module(load="imfile" PollingInterval="5")
+$InputFileName /var/log/nova/nova-compute.log
+$InputFileTag nova-info:
+$InputFileStateFile state-nova-info
+$InputRunFileMonitor
+
+备注：
+其实只添加了后5行的内容，对每项简单解释下：
+module(load="imfile" PollingInterval="5")　　　　　　　　加载imfile 模块，并5秒刷新一次
+$InputFileName /var/log/nova/nova-compute.log　　　　 要监控的日志文件路径　
+$InputFileTag nova-info:　　　　　　　　　　　　　　　　  定义文件标签 ，注意最后是冒号：
+$InputFileStateFile state-nova-info　　　　　　　　　　　 定义状态文件
+$InputRunFileMonitor　　　　　　　　　　　　　　　　　　激活读取，可以设置多组日志读取，每组结束时设置本参数　　　　　　　　　　　　　
+
+
+修改完成后，重启客户端的rsyslog服务
+[root@node1 ~]# systemctl restart rsyslog
+
+
+验证，在rsyslog服务器上查看日志
+略
+
+
+
+
+
+
+
+
+
+
