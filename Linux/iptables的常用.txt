@@ -86,7 +86,21 @@ iptables -L
 
 
 
+iptables -I INPUT -p tcp --dport 22 -j DROP
+iptables -I INPUT -s $公网ip -p tcp --dport 22 -j ACCEPT  (一般为公司出口IP)
+iptables -I INPUT -s 192.168.2.0/24 -p tcp --dport 22 -j ACCEPT
+iptables -I INPUT -s 172.10.10.0/24 -p tcp --dport 22 -j ACCEPT
 
+iptables -I INPUT -p tcp --dport 3306 -j DROP
+iptables -I INPUT -s $公网ip -p tcp --dport 3306 -j ACCEPT
+iptables -I INPUT -s 192.168.2.0/24 -p tcp --dport 3306 -j ACCEPT
+iptables -I INPUT -s 172.10.10.0/24 -p tcp --dport 3306 -j ACCEPT
+
+
+iptables -I INPUT -p tcp --dport 21 -j DROP
+iptables -I INPUT -s $公网ip -p tcp --dport 21 -j ACCEPT
+iptables -I INPUT -s 192.168.2.0/24 -p tcp --dport 21 -j ACCEPT
+iptables -I INPUT -s 172.10.10.0/24 -p tcp --dport 21 -j ACCEPT
 
 
 
