@@ -37,3 +37,13 @@ tcp        0      0 127.0.0.1:3001          0.0.0.0:*               LISTEN      
 官方推荐的办法：
 官方推荐的办法：https://zh.nuxtjs.org/api/configuration-dev/
 其实官方文档已经提供了关于自定义端口的使用方法，当然你需要新建一个server.js 文件。并引入对应的模块，指定启动的端口，然后修改package.json文件中的"scripts"启动项即可。 
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+默认只能通过localhost:3000来访问；怎么通过IP来访问？
+同理：
+vi ./node_modules/nuxt/lib/core/nuxt.js  
+将    139   listen(port = 3000, host = 'localhost') ### 将其中的localhost改成具体的ip即可
+
+
+
