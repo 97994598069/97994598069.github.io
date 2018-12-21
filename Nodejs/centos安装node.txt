@@ -7,6 +7,8 @@ CentOS Linux release 7.5.1804 (Core)
 
 
 一、安装包：
+https://nodejs.org/dist/
+
 [root@etcd1 src]# ll /usr/local/src/
 总用量 11088
 -rw-r--r--. 1 root root 11351232 11月 22 22:48 node-v8.11.4-linux-x64.tar.xz
