@@ -45,5 +45,7 @@ tcp        0      0 127.0.0.1:3001          0.0.0.0:*               LISTEN      
 vi ./node_modules/nuxt/lib/core/nuxt.js  
 将    139   listen(port = 3000, host = 'localhost') ### 将其中的localhost改成具体的ip即可
 
+如果将3000改成80是不是就不需要nginx来做反向代理了呢？
+
 
 
