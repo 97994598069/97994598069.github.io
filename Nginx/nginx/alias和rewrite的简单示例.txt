@@ -1,0 +1,71 @@
+
+
+server {
+    listen 80;
+    server_name xz.chinabim.com;
+    location / {
+        root /mnt/test;
+        index index.html;
+    }
+    location /model {
+        alias /home/model;
+#        index index.html;   ##可有可无
+    }
+}
+
+测试：
+[root@localhost conf.d]# curl http://xz.chinabim.com
+test01
+[root@localhost conf.d]# curl http://xz.chinabim.com/model
+<html>
+<head><title>301 Moved Permanently</title></head>
+<body bgcolor="white">
+<center><h1>301 Moved Permanently</h1></center>
+<hr><center>nginx/1.14.2</center>
+</body>
+</html>
+[root@localhost conf.d]# curl http://xz.chinabim.com/model/
+test021
+
+
+浏览器访问：
+http://xz.chinabim.com/model  OK；但是使用curl的时候会报301；必须加行后面的"/"
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\
+
+rewrite 示例：  传说中的伪静态
+
+192.168.1.25上：
+[root@bogon conf.d]# cat test.conf 
+server {
+    listen 80;
+    server_name xz.chinabim.com;
+    location / {
+        root /mnt/test;
+        index index.html;
+    }
+    location /model {
+        alias /home/model;
+        index index.html;
+    }
+}
+
+
+在192.168.1.24上：
+[root@bogon conf.d]# cat test.conf 
+server {
+    listen 80;
+    server_name ez.chinabim.com;
+    location / {
+        root /home/test;
+        index index.html;
+    }
+    location /model {
+       rewrite /(.*) http://xz.chinabim.com/$1 permanent;   ###重定向到http://xz.chinabim.com/model   $1代表model 如不加$1则是重定向到http://xz.chinabim.com
+   }
+
+}
+
+
