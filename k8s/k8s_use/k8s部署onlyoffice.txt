@@ -1,0 +1,65 @@
+
+server端：
+https://www.orgleaf.com/2588.html  纯server端（docker部署）
+https://www.linuxidc.com/Linux/2015-07/119458.htm  server端（未映射端口）+client端（docker部署）
+
+1.由于直接拉下来的镜像和本地的时区不一致，需要调整时间
+
+[root@k8s01 onlyoffice]# pwd
+/mnt/onlyoffice
+
+[root@k8s01 onlyoffice]# ll
+总用量 12
+-rw-r--r--. 1 root root 145 12月 24 14:11 Dockerfile
+-rw-r--r--. 1 root root 522 12月 24 14:20 onlyoffice-install.yaml
+-rw-r--r--. 1 root root  14 12月 24 14:13 timezone
+
+
+
+[root@k8s01 onlyoffice]# cat Dockerfile 
+From onlyoffice/documentserver
+ADD timezone /etc/timezone
+ENV TIME_ZONE Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/${TIME_ZONE} /etc/localtime
+
+
+[root@k8s01 onlyoffice]# cat timezone 
+Asia/Shanghai
+
+
+docker built -t 192.168.2.45:5000/base/onlyoffice-install:V1.1 .
+
+###配置k8s-yaml
+[root@k8s01 onlyoffice]# cat onlyoffice-install.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: onlyoffice
+spec:
+  type: NodePort
+  ports:
+  - port: 80  ###服务端口（即docker里服务端口）
+    nodePort: 8100  ##映射出来的端口
+  selector:
+    app: onlyoffice
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: onlyoffice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: onlyoffice
+  template:
+    metadata:
+      labels:
+        app: onlyoffice
+    spec:
+      containers:
+      - name: onlyoffice
+        image: 192.168.2.45:5000/base/onlyoffice-install:V1.1
+        ports:
+        - containerPort: 80
+		
