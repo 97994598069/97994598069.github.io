@@ -1,0 +1,94 @@
+centos7
+
+nfs server端：
+一、安装 NFS 服务器所需的软件包：
+yum install -y nfs-utils
+
+
+二、编辑exports文件，添加从机    ###可以共享多个目录
+vim /etc/exports
+/home/nfs/ 192.168.248.0/24(rw,sync,fsid=0)
+同192.168.248.0/24一个网络号的主机可以挂载NFS服务器上的/home/nfs/目录到自己的文件系统中
+rw表示可读写；sync表示同步写，fsid=0表示将/data找个目录包装成根目录
+
+修改权限
+chown -R nfsnobody:nfsnobody /home/nfs/
+
+
+
+
+三、启动nfs服务
+
+先为rpcbind和nfs做开机启动：(必须先启动rpcbind服务)
+systemctl enable rpcbind.service
+systemctl enable nfs-server.service
+
+然后分别启动rpcbind和nfs服务：
+systemctl start rpcbind.service
+systemctl start nfs-server.service
+确认NFS服务器启动成功：
+
+rpcinfo -p
+检查 NFS 服务器是否挂载我们想共享的目录 /home/nfs/：
+
+exportfs -r
+#使配置生效
+
+exportfs
+#可以查看到已经ok
+/home/nfs 192.168.248.0/24
+
+
+客户端：
+一、安装 NFS 服务器所需的软件包：
+yum install -y nfs-utils
+
+首先是安裝nfs，同上，然后启动rpcbind服务
+
+先为rpcbind做开机启动：
+
+systemctl enable rpcbind.service
+
+然后启动rpcbind服务：
+
+systemctl start rpcbind.service
+
+注意：客户端不需要启动nfs服务
+
+
+检查 NFS 服务器端是否有目录共享：showmount -e nfs服务器的IP
+
+showmount -e 192.168.248.208
+Export list for 192.168.248.208:
+/home/nfs 192.168.248.0/24
+在从机上使用 mount 挂载服务器端的目录/home/nfs到客户端某个目录下：
+
+
+cd /home && mkdir /nfs
+mount -t nfs 192.168.248.208:/home/nfs /home/nfs                      mount -t nfs 182.92.166.107:/mnt/bim_copy/ /mnt/bim          
+                                                                      mount -t nfs 172.17.13.244:/mnt/bimupload/ /mnt/bimupload
+df -h 查看是否挂载成功。 
+
+
+测试：
+1.在服务端创建文件发现客户端挂载的文件存在
+2.在其中一个客户端上创建文件在服务端和其他客户端均可以读到
+
+
+showmount -e 182.92.166.107
+/etc/init.d/rpcbind start
+/etc/init.d/nfs start
+
+service nfs restart
+service rpcbind restart
+
+
+
+mount -t nfs 192.168.128.160:/service/resources/jyj/upload/ /service/resources/jyj/upload 
+
+showmount -e 192.168.128.160
+
+
+mysqldump -u root jyjcloud jyj_admin_menu_function > /root/t7.sql
+
+
