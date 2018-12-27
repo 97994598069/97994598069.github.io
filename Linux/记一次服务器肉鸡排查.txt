@@ -13,7 +13,11 @@ cd /tmp 删除掉异常文件发现不久后重新生成；异常进程重新生
 2)tail -500 /var/log/cron   ##查看之前的定时任务的日志；若查看到具体的脚本可find查看到然后rm掉
 3)cd /etc/cron.d  下挨个cat 查看是否有异常  ##若有异常可以不删除；直接清空即可（在实在找不到根的情况下使用）
 4)cd /var/spool/cron   下挨个cat 查看是否异常   ##若有异常可以不删除；直接清空即可（在实在找不到根的情况下使用）
-
+其他目录：
+/usr/local/etc
+/usr/etc
+/root/.ssh/known_hosts
+/etc/hosts
 切记：上述一定都要仔细查看一遍
 
 若上述有文件信息
