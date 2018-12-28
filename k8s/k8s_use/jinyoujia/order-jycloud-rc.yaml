@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-order
+spec:
+  type: NodePort
+  ports:
+  - port: 8013
+    nodePort: 8013
+  selector:
+    app: jycloud-order
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-order
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jycloud-order
+  template:
+    metadata:
+      labels:
+        app: jycloud-order
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-order
+        image: 192.168.1.108:5000/com.ciip.cloud.core.jyj/order:V1.1.2
+        ports:
+        - containerPort: 8013
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'prod'
+        volumeMounts:
+        - mountPath: /service/resources/jyj
+          name: jycloud-order
+      volumes:
+      - name: jycloud-order
+        hostPath:
+          path: /service/resources/jyj
+          type: Directory

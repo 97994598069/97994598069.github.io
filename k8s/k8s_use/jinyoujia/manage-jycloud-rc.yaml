@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-manage
+spec:
+  type: NodePort
+  ports:
+  - port: 8012
+    nodePort: 8012
+  selector:
+    app: jycloud-manage
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-manage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jycloud-manage
+  template:
+    metadata:
+      labels:
+        app: jycloud-manage
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-manage
+        image: 192.168.1.108:5000/com.ciip.cloud.core.jyj/manage:V1.1.2
+        ports:
+        - containerPort: 8012
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'prod'
+        volumeMounts:
+        - mountPath: /service/resources/jyj/upload
+          name: service
+      volumes:
+      - name: service
+        hostPath:
+          path: /service/resources/jyj/upload
+          type: Directory

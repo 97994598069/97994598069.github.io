@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-product
+spec:
+  type: NodePort
+  ports:
+  - port: 8014
+    nodePort: 8014
+  selector:
+    app: jycloud-product
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-product
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jycloud-product
+  template:
+    metadata:
+      labels:
+        app: jycloud-product
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-product
+        image: 192.168.1.108:5000/com.ciip.cloud.core.jyj/product:V1.1.2
+        ports:
+        - containerPort: 8014
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'prod'

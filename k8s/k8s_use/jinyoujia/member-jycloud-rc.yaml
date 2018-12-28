@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-member
+spec:
+  type: NodePort
+  ports:
+  - port: 8038
+    nodePort: 8038
+  selector:
+    app: jycloud-member
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-member
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jycloud-member
+  template:
+    metadata:
+      labels:
+        app: jycloud-member
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-member
+        image: 192.168.1.108:5000/com.ciip.cloud.core.jyj/member:V1.1.2
+        ports:
+        - containerPort: 8038
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'prod'

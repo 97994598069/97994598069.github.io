@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: eureka-peer
+spec:
+  type: NodePort
+  ports:
+  - port: 8061
+    nodePort: 8061
+  selector:
+    app: eureka-peer
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: eureka-peer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eureka-peer
+  template:
+    metadata:
+      labels:
+        app: eureka-peer
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: eureka-peer
+        image: 192.168.1.108:5000/org.jygroup.cloud/discovery:V1.0.6
+        ports:
+        - containerPort: 8061
+        env:
+        - name: JYCLOUD-CONFIG_SERVICE_HOST
+          value: 'jycloud-config'
+        - name: JYCLOUD-CONFIG_SERVICE_PORT
+          value: '8088'
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'prod'
+

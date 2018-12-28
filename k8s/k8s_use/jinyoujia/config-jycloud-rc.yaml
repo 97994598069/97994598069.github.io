@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-config
+spec:
+  type: NodePort
+  ports:
+  - port: 8088
+    nodePort: 8088
+  selector:
+    app: jycloud-config
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jycloud-config
+  template:
+    metadata:
+      labels:
+        app: jycloud-config
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-config
+        image: 192.168.1.108:5000/org.jygroup.cloud/config:V1.0.6
+        ports:
+        - containerPort: 8088
