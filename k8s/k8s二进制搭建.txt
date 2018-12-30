@@ -266,11 +266,11 @@ cat > /opt/kubernetes/cfg/etcd <<EOF
 ETCD_NAME="etcd01"    ##其他node改为其他的etcd名称
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
 ETCD_LISTEN_PEER_URLS="https://192.168.1.21:2380"     ##其他node改为其他的ip
-ETCD_LISTEN_CLIENT_URLS="https://192.168.1.21:2379"
+ETCD_LISTEN_CLIENT_URLS="https://192.168.1.21:2379"   ##其他node改为其他的ip
 
 #[Clustering]
-ETCD_INITIAL_ADVERTISE_PEER_URLS="https://192.168.1.21:2380"
-ETCD_ADVERTISE_CLIENT_URLS="https://192.168.1.21:2379"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="https://192.168.1.21:2380"   ##其他node改为其他的ip
+ETCD_ADVERTISE_CLIENT_URLS="https://192.168.1.21:2379"   ##其他node改为其他的ip
 ETCD_INITIAL_CLUSTER="etcd01=https://192.168.1.21:2380,etcd02=https://192.168.1.22:2380,etcd03=https://192.168.1.23:2380,etcd04=https://192.168.1.24:2380"
 ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
 ETCD_INITIAL_CLUSTER_STATE="new"
