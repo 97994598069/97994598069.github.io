@@ -1,0 +1,195 @@
+cpu使用率：
+Linux作为一个多任务操作系统，将每个cpu的时间划分为很短的时间片，再通过调度器轮流分配给各个任务使用，因此造成多任务同时运行的错觉
+
+为了维护cpu时间，Linux通过事先定义的接拍率（内核中表示为HZ），触发时间中断，并使用全局变量Jiffies记录了开机以来的节拍数。每发生一次时间中断，Jiffies的值就加1
+
+接拍率HZ是内核的可配选项，可以设置为100，250，1000等。不同的系统可能设置不同数值，可以通过查询/boot/config内核选项来查看它的可配置值。
+$ grep 'CONFIG_HZ=' /boot/config-$(uname -r)
+CONFIG_HZ=250
+
+同时，正因为接拍率HZ是内核选项，所以用户空间程序并不能直接访问。为了方便用户空间程序，内核还提供了一个用户空间接拍率USER_HZ,它总是固定为100，也就是1/100秒。这样用户空间程序并不需要关心内核中HZ被设置成了多少，因为它看到的总是固定值USER_HZ。
+
+Linux通过/proc虚拟文件系统，向用户空间提供了系统内部状态的信息，而/proc/stat提供的就是系统的cpu和任务统计信息。比如说，如果你只关注cpu的话，可以执行下面的命令
+# 只保留各个 CPU 的数据
+$ cat /proc/stat | grep ^cpu
+cpu  280580 7407 286084 172900810 83602 0 583 0 0 0
+cpu0 144745 4181 176701 86423902 52076 0 301 0 0 0
+cpu1 135834 3226 109383 86476907 31525 0 282 0 0 0
+
+
+
+CPU使用过高怎么办？
+通过top ps pidstat等工具，可以轻松找到cpu使用率过高的进程。但是怎么判断占用cpu的到底是代码里的哪个函数呢？
+
+我猜第一个想到的，应该是GDB（The GUN Project Debugger），这个功能强大的程序调式利器。的确，GDB在调式程序错误方面很大。但是GDB并不适合在性能分析的早期应用
+
+为什么？因为GDB调式程序的过程会中断程序运行，这在线上环境往往是不允许的。所以，GDB只适合用在性能分析的后期，当你找到了出问题的大致函数后，线下再借助它来进一步调式函数内部的问题
+
+什么工具适合再第一时间分析进程的cpu问题呢？  perf
+它不仅可以分析系统的各种事件和内核性能，还可以用来分析指定应用的性能问题
+
+常用：
+一、perf top   类似于top，它能够实时显示占用cpu时钟最多的函数或者指令，因此可以用来查找热点函数
+
+$ perf top
+Samples: 833  of event 'cpu-clock', Event count (approx.): 97742399
+Overhead  Shared Object       Symbol
+   7.28%  perf                [.] 0x00000000001f78a4
+   4.72%  [kernel]            [k] vsnprintf
+   4.32%  [kernel]            [k] module_get_kallsym
+   3.65%  [kernel]            [k] _raw_spin_unlock_irqrestore
+...
+
+输出结果：
+第一行包含三个数据：分别是采样数(Samples)、事件类型(event)和事件总数量(Event count).
+比如上述例子中，perf总共采集了833个cpu时钟事件，而总事件数则为97742399
+
+另外。采样数需要我们特别注意。如果采样数过少（比如只有十几个），那下面的排序和百分比就没有什么参考价值了
+1)第一列Overhead,是该符号的性能事件再所有采样中的比例，用百分比来表示
+
+2)第二列Shared，是该函数或者指令所在的动态共享对象（Dynamic Shared Object），如内核、进程名、动态连接库名、内核模块名等
+
+3)第三列Object，是动态共享对象的类型。比如[.]表示用户空间的可执行程序、或者动态连接库，而[k]则表示内核空间
+
+4)第四列Symbol是符号名，也就是函数名。当函数名未知时，用十六进制的地址来表示
+
+
+二、第二种常见用法，也就是perf record 和 perf report。perf top虽然实时展示了系统的性能信息，但它的缺点是并不保存数据，也就是无法用于离线或者后续分析。而perf record则提供了保存数据的功能，保存后的数据，需要你用perf report解析展示
+
+$ perf record # 按 Ctrl+C 终止采样
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.452 MB perf.data (6093 samples) ]
+
+$ perf report # 展示类似于 perf top 的报告
+
+在实际使用种，我们还经常为perf top 和 perf record加上-g参数，开启调用关系的采样，方便我们根据调用链分析性能问题
+
+
+
+
+案例：
+nginx + PHP
+两台虚拟机：
+1. vm1    nginx+php    
+2. vm2 web客户端   使用ab工具测试vm1的程序性能
+
+首先，在第一个终端执行下面的命令来运行 Nginx 和 PHP应用
+$ docker run --name nginx -p 10000:80 -itd feisky/nginx
+$ docker run --name phpfpm -itd --network container:nginx feisky/php-fpm
+
+然后，在第二个终端使用curl 访问http://[vm1的ip]:10000,确认nginx已正常启动，你应该可以看到it works！的响应
+
+# 192.168.0.10 是第一台虚拟机的 IP 地址
+$ curl http://192.168.0.10:10000/
+It works!
+
+
+接着，我们测试下这个nginx服务的性能，在第二个终端运行下面的ab命令:
+# 并发 10 个请求测试 Nginx 性能，总共测试 100 个请求
+$ ab -c 10 -n 100 http://192.168.0.10:10000/
+This is ApacheBench, Version 2.3 <$Revision: 1706008 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, 
+...
+Requests per second:    11.63 [#/sec] (mean)
+Time per request:       859.942 [ms] (mean)
+...
+
+从ab的输出结果我们可以看到，nginx能承受的每秒请求数只有11.63，性能很差，但是到底哪里出了问题呢可以使用top和pidstat观察
+
+这次，我们在第二个终端，将测试的请求总数增加到10000，这样当你在第一个终端使用性能分析工具时，nginx的压力还是继续。
+
+继续在第二个终端，运行ab命令：
+$ ab -c 10 -n 10000 http://10.240.0.5:10000/
+
+接着使用top查看进程cpu使用率
+$ top
+...
+%Cpu0  : 98.7 us,  1.3 sy,  0.0 ni,  0.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+%Cpu1  : 99.3 us,  0.7 sy,  0.0 ni,  0.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+...
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+21514 daemon    20   0  336696  16384   8712 R  41.9  0.2   0:06.00 php-fpm
+21513 daemon    20   0  336696  13244   5572 R  40.2  0.2   0:06.08 php-fpm
+21515 daemon    20   0  336696  16384   8712 R  40.2  0.2   0:05.67 php-fpm
+21512 daemon    20   0  336696  13244   5572 R  39.9  0.2   0:05.87 php-fpm
+21516 daemon    20   0  336696  16384   8712 R  35.9  0.2   0:05.61 php-fpm
+
+这里可以看到，系统中有几个php-fpm进程的cpu使用率加起来接近200%，而每个cpu的用户使用率(us)也已经超过了98%，接近饱和。这样，我们就可以确认，正是用户空间的php-fpm进程，导致cpu使用率骤升
+
+再往下判断时php-fpm的哪个函数导致cpu使用率升高呢？
+在第一个终端运行下面的perf命令:
+# -g 开启调用关系分析，-p 指定 php-fpm 的进程号 21515
+$ perf top -g -p 21515
+
+然后按方向键切换到php-fpm，再按下回车键展开php-fpm的调用关系，你会发现，调用关系最终到了sqrt和add_function。看来，我们需要从这两个函数入手
+
+然后我们拷贝出nginx应用的源码，看看是不是调用了这两个函数：
+# 从容器 phpfpm 中将 PHP 源码拷贝出来
+$ docker cp phpfpm:/app .
+
+# 使用 grep 查找函数调用
+$ grep sqrt -r app/ # 找到了 sqrt 调用
+app/index.php:  $x += sqrt($x);
+$ grep add_function -r app/ # 没找到 add_function 调用，这其实是 PHP 内置函数
+
+通过源码发现找到了sqrt函数的调用，但是没有找到add_function调用；这其实时个php的内置函数
+
+OK，原来只有sqrt函数在app/index.php 文件中调用了。那最后一步，我们就该看看这个文件的源码了：
+$ cat app/index.php
+<?php
+// test only.
+$x = 0.0001;
+for ($i = 0; $i <= 1000000; $i++) {
+  $x += sqrt($x);
+}
+
+echo "It works!"
+
+发现了问题：
+测试代码没删除就直接发布应用了。为了对比优化后的效果。把修复后的应用也打包成了一个docker镜像；然后运行
+# 停止原来的应用
+$ docker rm -f nginx phpfpm
+# 运行优化后的应用
+$ docker run --name nginx -p 10000:80 -itd feisky/nginx:cpu-fix
+$ docker run --name phpfpm -itd --network container:nginx feisky/php-fpm:cpu-fix
+
+
+接着在第二个终端来验证一下修复后的效果：
+$ ab -c 10 -n 10000 http://10.240.0.5:10000/
+...
+Complete requests:      10000
+Failed requests:        0
+Total transferred:      1720000 bytes
+HTML transferred:       90000 bytes
+Requests per second:    2237.04 [#/sec] (mean)
+Time per request:       4.470 [ms] (mean)
+Time per request:       0.447 [ms] (mean, across all concurrent requests)
+Transfer rate:          375.75 [Kbytes/sec] received
+...
+
+发现：现在每秒的请求数，已经从原来的11变成了2237了
+
+
+
+小结：
+cpu使用率是最直观和最常用的系统性能指标，更是我们在排查性能问题时，通常会关注的第一个指标。所以我们要熟悉它的含义：
+
+1.用户cpu和nice CPU高，说明用户态进程占用了较多的cpu，所以应该着重排查进程的性能问题
+
+2.系统cpu高，说明内核态占用较多的cpu，所以应该着重排查内核线程或者系统调用的性能问题
+
+3.I/O 等待CPU高，说明等待I/O的时间比较长，所以应该着重排查系统储存是不是出现了I/O问题
+
+4.软中断和硬中断高，说明软中断或者硬中断的处理程序占用了较多的cpu，所以应该着重排查内核中的中断服务程序
+
+碰到cpu使用率升高的问题，可以借助top pidstat 等工具，确认引发cpu性能问题的来源；然后再使用perf等工具，排查出引起性能问题的具体函数
+
+
+
+
+
+
+
+
+
+
