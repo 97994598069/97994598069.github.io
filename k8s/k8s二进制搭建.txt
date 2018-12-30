@@ -519,13 +519,16 @@ kubectl config use-context default --kubeconfig=kube-proxy.kubeconfig
 七、 部署master节点组件
 以下操作在master节点上进行
 
-cd  /tools
+{{ cd  /tools
 wget https://dl.k8s.io/v1.9.0/kubernetes-server-linux-amd64.tar.gz
 k8s安装包获取地址：
 https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.9.md
 ###网络可能不通https://pan.baidu.com/s/1WlbCPbHh38dP0r06Je3pcA
 
 解压包并移动可执行文件到/opt/kubernetes/bin/目录下
+}}
+
+cd /tools/kubernetes/server/bin
 mv kube-apiserver kube-controller-manager kube-scheduler /opt/kubernetes/bin/
 chmod +x /opt/kubernetes/bin/{kube-apiserver,kube-controller-manager,kube-scheduler}
 
