@@ -111,11 +111,11 @@ cat > ca-config.json <<EOF
 {
   "signing": {
     "default": {
-      "expiry": "8760000h"
+      "expiry": "87600h"
     },
     "profiles": {
       "kubernetes": {
-         "expiry": "8760000h",
+         "expiry": "87600h",
          "usages": [
             "signing",
             "key encipherment",
