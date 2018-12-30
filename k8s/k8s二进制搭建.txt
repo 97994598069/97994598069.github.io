@@ -192,6 +192,13 @@ EOF
 cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes server-csr.json | cfssljson -bare server
 执行上面的命令，会生成如下两个文件
 server-key.pem 和server.pem
+##如果上述命令报错：
+[root@localhost src]# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=www server-csr.json | cfssljson -bare server
+invalid character 'c' looking for beginning of value
+Failed to parse input: unexpected end of JSON input
+
+则编辑vi server-csr.json
+将里面的ca-c"192.168.1.24"改为"192.168.1.24"  也就是去掉前面的ca-c
 
 
 
