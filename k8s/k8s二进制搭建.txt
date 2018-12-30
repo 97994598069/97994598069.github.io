@@ -683,7 +683,7 @@ kubectl get cs
 scp /ssl/*kubeconfig 192.168.1.22:/opt/kubernetes/cfg/
 scp /ssl/*kubeconfig 192.168.1.23:/opt/kubernetes/cfg/
 scp /ssl/*kubeconfig 192.168.1.24:/opt/kubernetes/cfg/
-cp /ssl/*kubeconfig 192.168.1.21:/opt/kubernetes/cfg/    ##本地的拷贝
+cp /ssl/*kubeconfig /opt/kubernetes/cfg/    ##192.168.1.21本地的拷贝
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++==
