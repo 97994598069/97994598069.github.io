@@ -195,6 +195,8 @@ $ perf report
 execsnoop就是一个专为短时进程设计的工具。它通过ftrace实时监控进程的exec()行为，并输出短时进程的基本信息，包括进程pid、父进程pid、命令行参数以及执行的结果
 
 例如，用execsnoop监控上述案例，就可以直接得到stress进程的父进程pid以及它的命令行参数，并可以发现大量的stress进程在不停的启动：
+
+https://pan.baidu.com/s/1bcfESMY4AYpgpKdqTfRRAQ   ##execsnoop安装
 # 按 Ctrl+C 结束
 $ execsnoop
 PCOMM            PID    PPID   RET ARGS
