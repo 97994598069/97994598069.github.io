@@ -1,0 +1,231 @@
+系统的cpu使用率，不仅包括进程用户态和内核态的运行，还包括中断处理、等待I/O以及内核线程等。所以，当你发现系统的cpu使用率很高的时候，不一定能找到相对应的高cpu使用率的进程
+
+案例分析：
+nginx + php
+
+vm1: 待分析案例  nginx + php
+vm2：web客户端
+
+
+
+1. 首先在第一个终端，执行下面的命令运行nginx和php应用
+$ docker run --name nginx -p 10000:80 -itd feisky/nginx:sp
+$ docker run --name phpfpm -itd --network container:nginx feisky/php-fpm:sp
+
+2.然后在第二个终端，使用curl访问http://[vm1的ip]:10000,确认nginx已正常启动。可以看到it works!
+# 192.168.0.10 是第一台虚拟机的 IP 地址
+$ curl http://192.168.0.10:10000/
+It works!
+
+3. 接着，测试一下nginx服务的性能。在第二个终端运行下面的ab命令
+# 并发 100 个请求测试 Nginx 性能，总共测试 1000 个请求
+$ ab -c 100 -n 1000 http://192.168.0.10:10000/
+This is ApacheBench, Version 2.3 <$Revision: 1706008 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, 
+...
+Requests per second:    87.86 [#/sec] (mean)
+Time per request:       1138.229 [ms] (mean)
+...
+
+从结果的输出结果可以看到，nginx能承受的每秒平均请求数，只有87多一点；表现很差；但是哪里出了问题了呢？可以使用top和pidstat观察一下：
+这次我们在第二个终端，将测试的并发请求数改为5，同时把请求时长设置为10分钟(-t 600)。这样，在第一个终端使用性能分析工具时，nginx的压力还是继续的
+
+$ ab -c 5 -t 600 http://192.168.0.10:10000/
+
+$ top
+...
+%Cpu(s): 80.8 us, 15.1 sy,  0.0 ni,  2.8 id,  0.0 wa,  0.0 hi,  1.3 si,  0.0 st
+...
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+ 6882 root      20   0    8456   5052   3884 S   2.7  0.1   0:04.78 docker-containe
+ 6947 systemd+  20   0   33104   3716   2340 S   2.7  0.0   0:04.92 nginx
+ 7494 daemon    20   0  336696  15012   7332 S   2.0  0.2   0:03.55 php-fpm
+ 7495 daemon    20   0  336696  15160   7480 S   2.0  0.2   0:03.55 php-fpm
+10547 daemon    20   0  336696  16200   8520 S   2.0  0.2   0:03.13 php-fpm
+10155 daemon    20   0  336696  16200   8520 S   1.7  0.2   0:03.12 php-fpm
+10552 daemon    20   0  336696  16200   8520 S   1.7  0.2   0:03.12 php-fpm
+15006 root      20   0 1168608  66264  37536 S   1.0  0.8   9:39.51 dockerd
+ 4323 root      20   0       0      0      0 I   0.3  0.0   0:00.87 kworker/u4:1
+...
+
+
+通过top可以发现，cpu使用率最高的进程也才2.7%；并不高；；但是上面的us则达到了80.8%；很高；；为什么？
+
+此时需要使用pidstat排查分析;;在第一个终端运行pidstat命令查看得：
+# 间隔 1 秒输出一组数据（按 Ctrl+C 结束）
+$ pidstat 1
+...
+04:36:24      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+04:36:25        0      6882    1.00    3.00    0.00    0.00    4.00     0  docker-containe
+04:36:25      101      6947    1.00    2.00    0.00    1.00    3.00     1  nginx
+04:36:25        1     14834    1.00    1.00    0.00    1.00    2.00     0  php-fpm
+04:36:25        1     14835    1.00    1.00    0.00    1.00    2.00     0  php-fpm
+04:36:25        1     14845    0.00    2.00    0.00    2.00    2.00     1  php-fpm
+04:36:25        1     14855    0.00    1.00    0.00    1.00    1.00     1  php-fpm
+04:36:25        1     14857    1.00    2.00    0.00    1.00    3.00     0  php-fpm
+04:36:25        0     15006    0.00    1.00    0.00    0.00    1.00     0  dockerd
+04:36:25        0     15801    0.00    1.00    0.00    0.00    1.00     1  pidstat
+04:36:25        1     17084    1.00    0.00    0.00    2.00    1.00     0  stress
+04:36:25        0     31116    0.00    1.00    0.00    0.00    1.00     0  atopacctd
+...
+
+发现cpu得使用率并不高；所有加起来也只有21%   离80%还差很多
+
+很奇怪：命名cpu得使用率已经达到了80%；；但是进程并没有使用那么高
+再次使用top查看：
+$ top
+top - 04:58:24 up 14 days, 15:47,  1 user,  load average: 3.39, 3.82, 2.74
+Tasks: 149 total,   6 running,  93 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 77.7 us, 19.3 sy,  0.0 ni,  2.0 id,  0.0 wa,  0.0 hi,  1.0 si,  0.0 st
+KiB Mem :  8169348 total,  2543916 free,   457976 used,  5167456 buff/cache
+KiB Swap:        0 total,        0 free,        0 used.  7363908 avail Mem
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+ 6947 systemd+  20   0   33104   3764   2340 S   4.0  0.0   0:32.69 nginx
+ 6882 root      20   0   12108   8360   3884 S   2.0  0.1   0:31.40 docker-containe
+15465 daemon    20   0  336696  15256   7576 S   2.0  0.2   0:00.62 php-fpm
+15466 daemon    20   0  336696  15196   7516 S   2.0  0.2   0:00.62 php-fpm
+15489 daemon    20   0  336696  16200   8520 S   2.0  0.2   0:00.62 php-fpm
+ 6948 systemd+  20   0   33104   3764   2340 S   1.0  0.0   0:00.95 nginx
+15006 root      20   0 1168608  65632  37536 S   1.0  0.8   9:51.09 dockerd
+15476 daemon    20   0  336696  16200   8520 S   1.0  0.2   0:00.61 php-fpm
+15477 daemon    20   0  336696  16200   8520 S   1.0  0.2   0:00.61 php-fpm
+24340 daemon    20   0    8184   1616    536 R   1.0  0.0   0:00.01 stress
+24342 daemon    20   0    8196   1580    492 R   1.0  0.0   0:00.01 stress
+24344 daemon    20   0    8188   1056    492 R   1.0  0.0   0:00.01 stress
+24347 daemon    20   0    8184   1356    540 R   1.0  0.0   0:00.01 stress
+...
+
+
+发现就绪队列中居然有6个Running状态的进程（6 Running），是不是有点多呢？
+
+但是刚才ab打压的并发数是5个；再看进程列表里，php-fpm的数量也是5；再加上nginx；共6个进程也不奇怪；；但是真的是这样吗
+
+再仔细看进程列表，这次主要看Running（R）状态的进程。但是nginx和php-fpm都处于Sleep（S）状态，而真正处于Running（R）状态的，却只有stress进程。这就比较奇怪了
+
+随便找个stress进程的pid；然后使用pidstat查看
+$ pidstat -p 24344
+
+16:14:55      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+
+奇怪没有任何输出；很奇怪使用ps查看
+ps -ef |grep 24344  查看也是没有
+
+
+再次使用top查看stress进程；查看24344这个进程已经不存在了；；说明stress这个进程一直在重启
+重启原因一般有二个：
+1)进程在不停的崩溃重启，比如因为断错误、配置错误等等，这时，进程在退出后可能又被监控系统自动重启了
+
+2)也有可能这些进程都是短时进程，也就是在其他应用内部通过exec调用的外面命令。这些命令一般都运行很短的时间就会结束，很难用top这种间隔时间较长的工具发现
+
+
+
+至于stress;它是一个常用的压力测试工具。它的pid在不断变化中，看起来像是被其他进程调用的短时进程。要想继续分析，需要找到他们的父进程
+$ pstree | grep stress
+        |-docker-containe-+-php-fpm-+-php-fpm---sh---stress
+        |         |-3*[php-fpm---sh---stress---stress]
+
+		
+从这里可以看到，stress是被php-fpm调用的子进程，并且进程数量不止一个（这里是3个）。找到父进程后，就可以进入app的内部分析了
+
+找到源码：
+# 拷贝源码到本地
+$ docker cp phpfpm:/app .
+
+# grep 查找看看是不是有代码在调用 stress 命令
+$ grep stress -r app
+app/index.php:// fake I/O with stress (via write()/unlink()).
+app/index.php:$result = exec("/usr/local/bin/stress -t 1 -d 1 2>&1", $output, $status);
+
+找到了，果然是app/index.php 文件中直接调用了stress命令
+再看app/index.php的源码：
+$ cat app/index.php
+<?php
+// fake I/O with stress (via write()/unlink()).
+$result = exec("/usr/local/bin/stress -t 1 -d 1 2>&1", $output, $status);
+if (isset($_GET["verbose"]) && $_GET["verbose"]==1 && $status != 0) {
+  echo "Server internal error: ";
+  print_r($output);
+} else {
+  echo "It works!";
+}
+?>
+
+可以看到，源码里对每个请求都会调用一个stress命令，模拟I/O压力。从注释上看，stress会通过write()和unlink()对I/O进程进行压测，看来，这应该就是系统cpu使用率升高的根源了
+
+
+不过，stress模拟的是I/O压力，而之前再top得输出中看到得却是用户cpu和系统cpu升高，并没有见到iostat升高。为什么呢？
+
+继续排查：
+从代码中，给请求加入verbose=1参数后，就可以查看stress的输出：
+在第二个终端运行：
+$ curl http://192.168.0.10:10000?verbose=1
+Server internal error: Array
+(
+    [0] => stress: info: [19607] dispatching hogs: 0 cpu, 0 io, 0 vm, 1 hdd
+    [1] => stress: FAIL: [19608] (563) mkstemp failed: Permission denied
+    [2] => stress: FAIL: [19607] (394) <-- worker 19608 returned error 1
+    [3] => stress: WARN: [19607] (396) now reaping child worker processes
+    [4] => stress: FAIL: [19607] (400) kill error: No such process
+    [5] => stress: FAIL: [19607] (451) failed run completed in 0s
+)
+
+
+看到有报错mkstemp failed: Permission denied以及failed run completed in 0s。原来stress命令并没有成功，它因为权限问题失败退出了。看来，我们发现了一个php调用外部stress命令的bug：没有权限创建临时文件
+
+从这里我们可以猜测，正是由于权限报错，大量的stress进程在启动该时初始化失败，进程导致用户cpu使用率的升高
+
+
+确定是不是有大量的stress进程：
+前面已经使用了top、pidstat、pstree等工具，没有发现大量的stress进程，那么还有什么其他工具可以使用？
+# 记录性能事件，等待大约 15 秒后按 Ctrl+C 退出
+$ perf record -g
+
+# 查看报告
+$ perf report
+
+可以看到stress占了所有cpu时钟事件的77%，而stress调用调用栈中比例最高的，是随机数生成函数random()，看来它的确就是cpu使用率升高的元凶了。随后的优化就很简单了，只要修复权限问题，并减少或者删除stress的调用，就可以减轻系统cpu的压力
+
+
+
+
+
+上述案例中；我们使用了top、pidstat、pstree等工具分析了系统cpu使用率高的问题；并发现cpu升高是短时进程stress导致的，但是这个分析过程还是比较复杂的，有没有更好的办法监控呢？
+execsnoop就是一个专为短时进程设计的工具。它通过ftrace实时监控进程的exec()行为，并输出短时进程的基本信息，包括进程pid、父进程pid、命令行参数以及执行的结果
+
+例如，用execsnoop监控上述案例，就可以直接得到stress进程的父进程pid以及它的命令行参数，并可以发现大量的stress进程在不停的启动：
+# 按 Ctrl+C 结束
+$ execsnoop
+PCOMM            PID    PPID   RET ARGS
+sh               30394  30393    0
+stress           30396  30394    0 /usr/local/bin/stress -t 1 -d 1
+sh               30398  30393    0
+stress           30399  30398    0 /usr/local/bin/stress -t 1 -d 1
+sh               30402  30400    0
+stress           30403  30402    0 /usr/local/bin/stress -t 1 -d 1
+sh               30405  30393    0
+stress           30407  30405    0 /usr/local/bin/stress -t 1 -d 1
+...
+
+execsnoop所用的ftrace是一种常用的动态追踪技术，一般用于分析Linux内核的运行时行为
+
+
+小结：
+碰到常规问题无法解释的cpu使用率情况时，首先要想到有可能时短时应用导致的问题；比如有可能是下面这两种情况：
+1) 应用里直接调用了其他二进制程序，这些程序通常运行时间比较短，通过top等工具也不容易发现
+
+2) 应用本身在不停的崩溃重启，而启动过程的资源初始化，很可能会占用相当多的cpu
+
+
+对于这类进程，我们可以用pstree或者execsnoop找到它们的父进程，再从父进程所在的应用入手，排查问题的根源
+
+
+
+
+
+
+
+
+
+
