@@ -1,0 +1,96 @@
+1. pidstat 命令没有%wait这一列
+pidstat 的%wait指标代表进程等待cpu的时间百分比，是sysstat 11.5.5才引入的新指标
+
+
+2.使用stress命令，无法模拟iowait高的场景
+stress -i 1 --timeout 600
+mpstat -P ALL 1 反馈的是%sys负载高；而不是%iowait？
+使用stress无法模拟iowait升高，但是却看到了sys升高。这是因为案例中的stress -i参数，它表示通过系统调用sync()来模拟I/O问题，但这种方法并不可靠；因为sysnc()的本意是刷新内存缓存区的数据到磁盘中，以确保同步。如果缓冲区本来就没有多少数据，那读写到磁盘中的数据也就不多，也就没办法产生I/O压力
+这一点，在使用SSD磁盘的环境中尤为明显，很可能你的iowait总是0，却单纯因为大量的系统调用，导致了系统cpu使用率sys升高
+可以使用stress-ng来替代stress:
+# -i 的含义还是调用 sync，而—hdd 则表示读写临时文件
+$ stress-ng -i 1 --hdd 1 --timeout 600
+
+
+3.无法模拟出RES中断的问题
+cpu上下文切换的案例中已经提到，重调度中断是调度器用来分散任务到不同cpu的机制，也就是可以唤醒空闲状态的cpu，用来调度新任务运行，而这通常借助处理器间中断(Inter-Processor Interrupts, IPI)来实现；；所以这个中断在单核（只有一个逻辑cpu）的机器爱上那个当然就没有意义，因为压根就不会发生重调度的情况
+
+但是上下文切换的问题依然存在，所以你会看到cs从几百增加到十几万，同时sysbench线程的自愿上下文切换和非自愿上下文切换也都会大幅上升，特别是非自愿上下文切换，会上升到十几万。根据非自愿上下文的含义，我们知道，这是过多的线程在争抢cpu；其实也可以从另一个角度来获得：
+$ pidstat -u -t 1
+
+14:24:03      UID      TGID       TID    %usr %system  %guest   %wait    %CPU   CPU  Command
+14:24:04        0         -      2472    0.99    8.91    0.00   77.23    9.90     0  |__sysbench
+14:24:04        0         -      2473    0.99    8.91    0.00   68.32    9.90     0  |__sysbench
+14:24:04        0         -      2474    0.99    7.92    0.00   75.25    8.91     0  |__sysbench
+14:24:04        0         -      2475    2.97    6.93    0.00   70.30    9.90     0  |__sysbench
+14:24:04        0         -      2476    2.97    6.93    0.00   68.32    9.90     0  |__sysbench
+...
+
+从这个pidstat的输出界面。你可以发现，每个stress线程的%wait高达70%，而cpu使用率只有不到10%。换句话说，stress线程大部分时间都消耗在了等待cpu上，这也表明，确实是过多的线程在争抢CPU
+
+这里有个常见的错误：
+有些同学会拿pidstat的%wait跟top中的iowait%对比。其实完全没有意义：
+1). pidstat中，%wait 表示进程等待cpu的时间百分比   等待cpu的进程已经在cpu的就绪队列中，处于运行状态
+2). top中，iowait%则表示等待I/O的CPU时间百分比     等待I/O的进程则处于不可中断状态
+
+不同版本的sysbench运行参数也不是完全一样的：
+Ubuntu 18.04中的格式为：$ sysbench --threads=10 --max-time=300 threads run
+Ubuntu 16.04中的格式为：$ sysbench --num-threads=10 --max-time=300 --test=threads run
+
+
+
+4.使用perf工具时，看到的是16进制地址而不是函数名
+查看调用关系  perf top -g -p $pid 
+最后一行提示：Failed to open /opt/bitnami/php/lib/php/extensions/opcache.so, continuing without symbols
+
+这说明，perf找不到待分析进程依赖的库。当然，实际上这个案例中有很多依赖库都找不到，只不过，perf工具本身只在最后一行显示警告信息，所以你只能看到这一条警告
+
+针对这种问题；有4种办法解决：
+1) 在容器外面构建相同路径的依赖库。这种方法从原理上可行，但是并不推荐，一方面是因为找出这些依赖库比较麻烦，更重要的是，构建这些路径，会污染容器主机的环境
+2) 在容器内运行perf。不过，这需要容器运行在特权模式下，但实际的应用程序往往只以普通容器的方式运行。所以。容器内部一般没有权限执行perf分析
+当然，你可以通过配置/proc/sys/kernel/perf_event_paranoid (比如改成-1)，将允许非特权用户执行perf事件分析
+3) 指定符号路径为容器文件系统的路径；；例如：
+$ mkdir /tmp/foo
+$ PID=$(docker inspect --format {{.State.Pid}} phpfpm)
+$ bindfs /proc/$PID/root /tmp/foo
+$ perf report --symfs /tmp/foo
+
+# 使用完成后不要忘记解除绑定
+$ umount /tmp/foo/
+
+不过需要注意：bindfs这个工具需要额外安装。bindfs的基本功能是实现目录绑定
+
+4) 在容器外面把分析记录保存下来，再去容器里查看结果。这样。库和符号的路径也就都对了
+比如。先执行perf record -g -p $pid  执行一会儿 然后结束
+然后，把生成的perf.data文件拷贝到容器来分析
+$ docker cp perf.data phpfpm:/tmp 
+$ docker exec -i -t phpfpm bash
+
+接下来在容器的bash中继续运行下面的命令。安装perf并使用perf report查看报告：
+$ cd /tmp/ 
+$ apt-get update && apt-get install -y linux-tools linux-perf procps
+$ perf_4.9 report
+
+首先是perf工具的版本问题，在最后一步中，我们运行的工具是容器内部安装的版本perf_4.9,而不是普通的perf命令。这是因为，perf命令实际上是一个软连接，会跟内核的版本进行匹配，但镜像里安装的perf版本跟虚拟机的内核版本有可能并不一致，
+安装：
+$ apt-get install -y linux-tools-common linux-tools-generic linux-tools-$(uname -r)）
+$ apt-get install -y linux-perf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
