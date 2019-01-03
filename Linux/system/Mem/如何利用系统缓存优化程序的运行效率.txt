@@ -1,0 +1,242 @@
+缓存命中率：
+命中率越高，表示使用缓存带来的收益越高，应用程序的性能也就越好
+实际上，缓存是现在高并发必需的核心模块，主要作用是把经常访问的数据(也就是热点数据)，提前读入到内存中。这样，下次访问时就可以直接从内存读取数据，而不需要经过硬盘，从而加快应用程序的响应速度
+
+这些独立的缓存模块通常会提供查询接口，方便我们随时查看缓存的命中情况。不过Linux系统中并没有直接提供这些接口，但是我们可以使用cachestat和cachetop来查看系统缓存命中情况
+1. cachestat提供了整个操作系统缓存的读写命中情况
+2. cachetop提供了每个进程的缓存命中情况
+
+这两个工具都是bcc软件包的一部分。用来跟踪内核中的管理的缓存，并输出缓存的使用和命中情况
+需要安装：
+略：
+
+使用cachestat和cachetop前需要首先安装bcc软件包，比如Ubuntu中：
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 4052245BD4284CDD
+echo "deb https://repo.iovisor.org/apt/xenial xenial main" | sudo tee /etc/apt/sources.list.d/iovisor.list
+sudo apt-get update
+sudo apt-get install -y bcc-tools libbcc-examples linux-headers-$(uname -r)
+
+安装备注：
+bcc-tools需要内核版本为4.1或者更新的版本，如果使用的centos，那需要升级内核版本后再安装：
+安装后，bcc提供的所有工具就安装到的/usr/share/bcc/tools这个目录中，需要设置环境变量
+export PATH=$PATH:/usr/share/bcc/tools
+
+使用：
+$ cachestat 1 3
+   TOTAL   MISSES     HITS  DIRTIES   BUFFERS_MB  CACHED_MB
+       2        0        2        1           17        279
+       2        0        2        1           17        279
+       2        0        2        1           17        279 
+
+从输出可看出:
+cachestat的输出其实是一个表格，每行代表一组数据，而每一列代表不同的缓存统计指标
+TOTAL： 表示总的I/O次数
+MISSES：表示缓存未命中的次数
+HITS：表示缓存命中的次数
+DIRTIES：表示新增到缓存中的脏页数
+BUFFERS_MB: 表示buffers的大小，以MB为单位
+CACHED_MB: 表示cache的大小，以MB为单位
+
+
+$ cachetop
+11:58:50 Buffers MB: 258 / Cached MB: 347 / Sort: HITS / Order: ascending
+PID      UID      CMD              HITS     MISSES   DIRTIES  READ_HIT%  WRITE_HIT%
+   13029 root     python                  1        0        0     100.0%       0.0%
+
+输出和top类似，默认安装缓存的命中次数（HITS）排序，展示了每个进程的缓存命中情况。具体到每一个指标，这里的HITS、MISSES、DIRTIES跟cachestat里的含义一样，分别代表间隔时间内的缓存命中次数，未命中次数以及新增到缓存中的脏页数
+
+而READ_HIT和WRITE_HIT,分别表示读和写的缓存命中率
+
+
+指定文件的缓存大小：
+除了缓存的命中率外，还有一个指标那就是指定文件在内存中的缓存大小
+此时可以使用pcstat工具来查看文件在内存中的缓存大小以及缓存比例
+
+安装:
+略
+
+$ export GOPATH=~/go
+$ export PATH=~/go/bin:$PATH
+$ go get golang.org/x/sys/unix
+$ go get github.com/tobert/pcstat/pcstat
+
+全部安装完成后，你就可以运行pcstato来查看文件的缓存情况了。比如，下面就是一个pcstat运行的实例
+它展示了/bin/ls这个文件的缓存情况
+$ pcstat /bin/ls
++---------+----------------+------------+-----------+---------+
+| Name    | Size (bytes)   | Pages      | Cached    | Percent |
+|---------+----------------+------------+-----------+---------|
+| /bin/ls | 133792         | 33         | 0         | 000.000 |
++---------+----------------+------------+-----------+---------+
+
+输出中，cache就是/bin/ls在缓存中的带下，而percent则是缓存的百分比。看到他们都是0.则说明/bin/ls并不在缓存中
+
+接着，如果再次执行下ls命令，再运行相同的命令来查看的话，就会发现/bin/ls都在缓存中了：
+$ ls
+$ pcstat /bin/ls
++---------+----------------+------------+-----------+---------+
+| Name    | Size (bytes)   | Pages      | Cached    | Percent |
+|---------+----------------+------------+-----------+---------|
+| /bin/ls | 133792         | 33         | 33        | 100.000 |
++---------+----------------+------------+-----------+---------+
+
+
+案例：
+使用dd命令生成一个临时文件，用于后面的文件读取测试：
+# 生成一个 512MB 的临时文件
+$ dd if=/dev/sda1 of=file bs=1M count=512
+# 清理缓存
+$ echo 3 > /proc/sys/vm/drop_caches
+
+继续在第一个终端，运行pcstat命令，确认刚刚生成的文件不在缓存中，如果一切正常，你就会看到cached和percent都是0：
+$ pcstat file
++-------+----------------+------------+-----------+---------+
+| Name  | Size (bytes)   | Pages      | Cached    | Percent |
+|-------+----------------+------------+-----------+---------|
+| file  | 536870912      | 131072     | 0         | 000.000 |
++-------+----------------+------------+-----------+---------+
+
+
+还是在第一个终端中，运行cachetop命令：
+# 每隔 5 秒刷新一次数据
+$ cachetop 5
+
+
+在第二个终端，运行dd命令测试文件读取速度
+$ dd if=file of=/dev/null bs=1M
+512+0 records in
+512+0 records out
+536870912 bytes (537 MB, 512 MiB) copied, 16.0509 s, 33.4 MB/s
+
+从输出结果可以看出，这个文件的读性能是33.4MB/s。由于在dd命令运行前我们已经清理了缓存。所以dd命令读取数据时，肯定要通过文件系统从磁盘中读取。
+
+不过，这是不是意味着，dd所有读请求都能直接发送到磁盘呢？
+回到第一个终端，查看cachetop界面的缓存命中情况：
+PID      UID      CMD              HITS     MISSES   DIRTIES  READ_HIT%  WRITE_HIT%
+\.\.\.
+    3264 root     dd                  37077    37330        0      49.8%      50.2%
+从输出结果可以发现，并不是所有的读都落在了磁盘上，事实上读请求的缓存命中率只有50%。
+
+接下来，继续尝试相同的测试命令，切换到第二个终端，再次执行dd命令：
+$ dd if=file of=/dev/null bs=1M
+512+0 records in
+512+0 records out
+536870912 bytes (537 MB, 512 MiB) copied, 0.118415 s, 4.5 GB/s
+看到这次的结果，磁盘的读性能居然变成了4.5GB/s,比第一次的结果明显高了太多，为什么这次这么好呢？
+
+回到第一个终端，查看cachetop的情况：
+10:45:22 Buffers MB: 4 / Cached MB: 719 / Sort: HITS / Order: ascending
+PID      UID      CMD              HITS     MISSES   DIRTIES  READ_HIT%  WRITE_HIT%
+\.\.\.
+   32642 root     dd                 131637        0        0     100.0%       0.0%
+显然，cachetop也有了不小的变化，你可以发现，这次读的缓存命中率是100%，也就是说这次的dd命令全部命中了缓存，所以才能看到那么高的性能
+
+回到第二个终端，再次执行pcstat查看文件file的缓存情况：
+$ pcstat file
++-------+----------------+------------+-----------+---------+
+| Name  | Size (bytes)   | Pages      | Cached    | Percent |
+|-------+----------------+------------+-----------+---------|
+| file  | 536870912      | 131072     | 131072    | 100.000 |
++-------+----------------+------------+-----------+---------+
+从输出结果可以看出，测试文件file已经被全部缓存起来了，这跟刚才观察到的缓存命中率100%是一致的
+
+
+这两次结果说明，系统缓存对第二次dd操作有明显加速效果，可以大大提高文件读取的性能
+但是需要注意，如果把dd当成测试文件系统性能的工具，由于缓存的存在，就会导致测试结果严重失真
+
+
+
+案例二
+每秒从磁盘分区/dev/sda1中读取32MB的数据，并打印读取数据花费的时间
+
+在第一个终端中：
+# 每隔 5 秒刷新一次数据
+$ cachetop 5 
+
+在第二个终端中：
+$ docker run --privileged --name=app -itd feisky/app:io-direct
+
+回到第一个终端中，先看看cachetop的输出，查看app的缓存情况：
+16:39:18 Buffers MB: 73 / Cached MB: 281 / Sort: HITS / Order: ascending
+PID      UID      CMD              HITS     MISSES   DIRTIES  READ_HIT%  WRITE_HIT%
+   21881 root     app                  1024        0        0     100.0%       0.0% 
+
+从结果中可以看出：1024次缓存全部命中，读的命中率是100%，看起来全部的读请求都进过了系统缓存，但是如果真的全部都是缓存I/O,读取速度不应该这么慢
+这里我们忽略了另一个重要因素，每秒实际读取的数据大小。HITS代表缓存的命中次数，那么每次命中能读取多少数据呢？自然是一页
+因为前面讲过，内存以页为单位进行管理，而每个页的大小是4KB,所以，在5秒的时间间隔里，命中的缓存为1024*4k/1024 = 4MB，再除以5秒，可以得到每秒读的缓存是0.8MB，显然跟案例应用的32MB/s相差太多
+为什么？
+有可能是没有充分利用系统缓存
+
+那么，要判断应用程序是否用了直接I/O，最简单的方法当然是观察它的系统调用，查找应用程序，在调用它们时的选项
+# strace -p $(pgrep app)
+strace: Process 4988 attached
+restart_syscall(<\.\.\. resuming interrupted nanosleep \.\.\.>) = 0
+openat(AT_FDCWD, "/dev/sdb1", O_RDONLY|O_DIRECT) = 4
+mmap(NULL, 33558528, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7f448d240000
+read(4, "8vq\213\314\264u\373\4\336K\224\25@\371\1\252\2\262\252q\221\n0\30\225bD\252\266@J"\.\.\., 33554432) = 33554432
+write(1, "Time used: 0.948897 s to read 33"\.\.\., 45) = 45
+close(4)                                = 0
+
+从strace的结果可以看到，案例应用调用了openat来打开磁盘分区/dev/sdb1,并且传入的参数为O_RDONLY|O_DIRECT（中间的竖线表示或）
+O_RDONLY表示以只读方式打开，而O_DIRECT则表示以直接读取的方式打开，这会绕过系统的缓存
+
+验证了这一点，就很容易理解为什么读32MB的数据就那么久的原因了。直接从磁盘读写的速度自然远慢于缓存的读写。
+
+查看源代码：
+int flags = O_RDONLY | O_LARGEFILE | O_DIRECT; 
+int fd = open(disk, flags, 0755);
+
+上面的代码，很清楚的告诉我们：它果然用光了直接I/O 
+
+优化：修改源码删除D_DIRECT选项，让应用程序使用缓存I/O,而不是直接I/O,就可以加速磁盘读取速度
+
+再次运行：
+# 删除上述案例应用
+$ docker rm -f app
+
+# 运行修复后的应用
+$ docker run --privileged --name=app -itd feisky/app:io-cached
+
+
+查看cachetop的输出：
+16:40:08 Buffers MB: 73 / Cached MB: 281 / Sort: HITS / Order: ascending
+PID      UID      CMD              HITS     MISSES   DIRTIES  READ_HIT%  WRITE_HIT%
+   22106 root     app                 40960        0        0     100.0%       0.0%
+
+果然，读的命中率还是100%，HITS(即命中数)却变成了40960   
+同样的办法计算一下，换算成每秒字节数正好是32MB（40960*4K/5/1024=32M）
+
+这个案例说明，在进行I/O操作时，充分利用系统缓存可以极大地提升性能，但在观察缓存命令中率时，还要注意结合应用程序实际的I/O大小，综合分析缓存的使用情况
+
+
+
+小结：
+buffers和cache可以极大提升系统的I/O性能，通常，我们用缓存命中率，来衡量缓存的使用效率。命中率越高，，表示缓存被利用得越充分，应用程序的性能也就越好
+
+可以使用cachestat和cachetop这两个工具，观察系统和进程的缓存命中情况。其中：
+cachestat提供了整个系统缓存的读写命中情况
+cachetop提供了每个进程的缓存命中情况 
+
+不过需要注意：buffer和cache都是操作系统来管理的，应用程序并不能直接控制这些缓存的内容和生命周期。所以在应用程序开发中，一般要用专门的缓存组件来进一步提升性能
+
+比如，程序内部可以使用堆或者栈明确声明内存空间，来存储需要缓存的数据，再或者，使用redis等外部缓存服务，优化数据的访问效率
+
+
+
+
+
+   
+
+
+	
+
+
+
+
+
+   
+
+
+
+
+
