@@ -1,0 +1,65 @@
+Centos下_MysqL5.7在使用mysqldump命令备份数据库报错：mysqldump: [Warning] Using a password on the command line interface can be insecure. 
+
+网上大部分给出的解决方案都是修改mysql的配置文件，给[client]选项增加三行命令
+vim /etc/my.cnf
+[client]
+port = 3306
+socket = /tmp/mysql.sock
+default-character-set = utf8mb4
+host = localhost　　　　　　　　//地址
+user = root　　　　　　　　　　  //用户
+password = 'myServerPwd'　　　 //密码
+
+
+在增加了三行代码，我习惯性的重启了mysql服务，再同样执行备份命令，发现还是出现错误。
+在搜索各种方案的过程中也无意中发现关于此方法在安全性上的一些官方性不足，mysql的官方给出的说明。
+https://dev.mysql.com/doc/refman/5.6/en/password-security-user.html?spm=5176.7737807.2.3.D6p7hh
+
+
+然后针对高版本Mysql备份数据库的解决方案来了，前方高能~~~
+命令和以前常用的快速导入和导入命令有所不同了，需要加载我们配置的MYSQL配置文件!
+
+/usr/local/mysql/bin/mysqldump --defaults-extra-file=/etc/my.cnf database > /data/mysql_bak/bak_test.sql    //备份导出数据库
+/usr/local/mysql/bin/mysql --defaults-extra-file=/etc/my.cnf database < test_db.sql          //导入数据库
+
+
+
+
+
+但是当mysql5.7导入mysql5.6的备份后，当修改表的时候会报错：
+在创建用户时候，提示以下错误：
+root@localhost Tue Oct 24 09:57:41 2017 09:57:41 [mysql]> create user 'liufofu'@'5.5.5.5' identified by 'liufofu'; 
+ERROR 1805 (HY000): Column count of mysql.user is wrong. Expected 45, found 43. The table is probably corrupted
+
+对数据表进行一次check table操作
+mysql> use mysql;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> check table user;
++------------+-------+----------+----------+
+| Table      | Op    | Msg_type | Msg_text |
++------------+-------+----------+----------+
+| mysql.user | check | status   | OK       |
++------------+-------+----------+----------+
+
+进行了以上操作后，发现还是不行。
+跟使用人员进行沟通后，得出结果是：用户在创建时选择的是MySQL5.7的版本，而导入的备份文件为MySQL5.6的，版本不一致导致MySQL系统表有差异所之后。
+
+解决方案
+知道问题后，处理方案就很容易了，升级系统表即可。
+[root@iZzt2b844uzx7qZ ~]# /usr/bin/mysql_upgrade -S /var/lib/mysql/mysql.sock -uroot -P3008 -p
+Enter password: 
+Checking if update is needed.
+Checking server version.
+Running queries to upgrade MySQL server.
+Checking system database.
+mysql.columns_priv                                 OK
+mysql.db                                           OK
+mysql.engine_cost                                  OK
+mysql.event                                        OK
+mysql.func                                         OK
+。。。。
+
+再次修改表OK
