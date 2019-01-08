@@ -1,0 +1,26 @@
+CentOs 7.2
+
+下面两条命令按照自己意愿
+rpm -Uvh https://mirror.webtatic.com/yum/el7/epel-release.rpm
+rpm -Uvh https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
+
+
+1.如果想删除上面安装的包，重新安装
+rpm -qa | grep webstatic   rpm -e  
+
+2.以及防止出错卸载命令
+yum remove php-common
+
+
+3.运行yum install
+yum install php56w.x86_64 php56w-cli.x86_64 php56w-common.x86_64 php56w-gd.x86_64 php56w-ldap.x86_64 php56w-mbstring.x86_64 php56w-mcrypt.x86_64 php56w-mysql.x86_64 php56w-pdo.x86_64
+
+
+直接安装
+yum install php56w-fpm 
+yum install php70w-fpm
+
+
+之后直接启动就可以了 如果是 Apache /Nginx 的话重启一下服务 如systemctl start httpd  /nginx等、之后查看进程ss -napt | grep php    ss -anpt | grep php-fpm  
+
+
