@@ -43,7 +43,7 @@ tcp        0      0 127.0.0.1:3001          0.0.0.0:*               LISTEN      
 默认只能通过localhost:3000来访问；怎么通过IP来访问？
 同理：
 vi ./node_modules/nuxt/lib/core/nuxt.js  
-将    139   listen(port = 3000, host = 'localhost') ### 将其中的localhost改成具体的ip即可
+将    139   listen(port = 3000, host = 'localhost') ### 将其中的localhost改成具体的ip或者0.0.0.0即可  若不想使用3000端口则可以使用其他端口例如80，则可以通过ip直接访问
 
 如果将3000改成80是不是就不需要nginx来做反向代理了呢？
 
