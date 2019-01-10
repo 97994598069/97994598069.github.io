@@ -205,3 +205,85 @@ location / {
         }
 
 }
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                                            安装多版本的nodejs
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+一，安装nodejs
+cd /data/server/
+wget https://nodejs.org/dist/v6.9.5/node-v6.9.5-linux-x64.tar.xz
+
+tar xf node-v6.9.5-linux-x64.tar.xz 
+ln -s node-v6.9.5-linux-x64 nodejs 
+ 
+cat /etc/profile.d/node.sh 
+export PATH=/data/server/nodejs/bin/:$PATH
+source /etc/profile.d/node.sh
+
+node -v
+v6.9.5
+
+npm -v
+3.10.10
+
+ok，至此二进制nodejs完成
+
+
+二、使用NVM安装多版本
+git clone https://github.com/cnpm/nvm.git ~/.nvm && cd ~/.nvm && git checkout `git describe --abbrev=0 --tags`
+2、激活NVM
+echo ". ~/.nvm/nvm.sh" >> /etc/profile
+source /etc/profile
+
+
+3、列出node.js的所有版本
+nvm list-remote
+        v0.1.14
+        v0.1.15
+        v0.1.16
+        v0.1.17
+        v0.1.18
+        v0.1.19
+        v0.1.20
+        v0.1.21
+        v0.1.22
+
+4、安装多个node.js版本
+nvm install v6.9.5
+######################################################################## 100.0%
+Checksums empty
+Now using node v6.9.5
+
+nvm install v7.4.0
+######################################################################## 100.0%
+Checksums empty
+Now using node v7.4.0
+
+5、查看已安装node.js版本，当前使用的版本为v7.4.0
+nvm ls
+         v6.9.5
+->       v7.4.0
+stable -> 7.4 (-> v7.4.0) (default)
+unstable -> 6.9 (-> v6.9.5) (default)
+
+6、切换node版本为6.9.5
+nvm use v6.9.5    
+Now using node v6.9.5
+
+nvm ls
+->       v6.9.5
+         v7.4.0
+stable -> 7.4 (-> v7.4.0) (default)
+unstable -> 6.9 (-> v6.9.5) (default)
+
+node -v
+v6.9.5
+
+nvm help
+
+
