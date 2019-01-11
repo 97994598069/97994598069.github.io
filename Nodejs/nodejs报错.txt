@@ -1,0 +1,90 @@
+背景:
+项目架构: 前后端分离   前端:nodejs    后端:java
+
+
+根据开发提示需要8.0的node环境：
+但是搭建完启动，app一直重启，支持error 很奇怪
+
+报错一：
+cat /root/.pm2/pm2.log
+
+Error: ENOENT: no such file or directory, uv_cwd
+    at Object.resolve (path.js:1167:25)
+    at Function.Module._resolveLookupPaths (module.js:424:17)
+    at Function.Module._resolveFilename (module.js:541:20)
+    at Function.Module._load (module.js:474:25)
+    at Module.require (module.js:596:17)
+    at require (internal/module.js:11:18)
+    at Object.<anonymous> (/opt/node-v8.11.4/lib/node_modules/pm2/lib/ProcessContainer.js:13:15)
+    at Module._compile (module.js:652:30)
+    at Object.Module._extensions..js (module.js:663:10)
+    at Module.load (module.js:565:32)
+2018-12-21T15:20:51: PM2 log: App name:jinyoujia id:0 disconnected
+2018-12-21T15:20:51: PM2 log: App [jinyoujia:0] exited with code [1] via signal [SIGINT]
+2018-12-21T15:20:51: PM2 log: App [jinyoujia:0] starting in -cluster mode-
+2018-12-21T15:20:51: PM2 log: App [jinyoujia:1] online
+path.js:1167
+          cwd = process.cwd();
+                        ^
+
+安装失败，换个版本重新安装，最好安装大版本的最新版本：例如8.0 下有8.11   8.15则使用8.15来安装
+
+或者按照如下：
+1.ps ax | grep PM2
+找到pm2进程
+
+2. kill pid(进程号)  ##或者pm2 kill ？？？
+3.pm2 list(或是其他的pm2 命令对pm2 进行重启)
+
+
+						
+
+报错二：
+pm2 list 报错
+[root@gezhenwang jinyoujia-0107]# pm2 list
+
+>>>> In-memory PM2 is out-of-date, do:
+>>>> $ pm2 update
+In memory PM2 version: 3.2.2
+Local PM2 version: 3.2.7
+
+┌──────────┬────┬─────────┬──────┬─────┬────────┬─────────┬────────┬─────┬─────┬──────┬──────────┐
+│ App name │ id │ version │ mode │ pid │ status │ restart │ uptime │ cpu │ mem │ user │ watching │
+└──────────┴────┴─────────┴──────┴─────┴────────┴─────────┴────────┴─────┴─────┴──────┴──────────┘
+ Use `pm2 show <id|name>` to get more details about an app
+
+仔细查看报错：
+In memory PM2 version: 3.2.2
+Local PM2 version: 3.2.7
+提示本地的pm2版本是3.2.7 但是需要的pm2版本是3.2.2
+
+查看本地的pm2的版本：
+[root@gezhenwang jinyoujia-0107]# pm2 -v
+3.2.7
+
+更改pm2的版本：
+pm2 kill
+npm remove pm2 -g  ##或者npm uninstall -g pm2 ？？
+which pm2  ##若存在则删除
+
+安装所需版本的pm2 
+npm install pm2@3.2.2 -g   ##需需要安装最新版则需npm install pm2@latest -g
+
+再次查看pm2版本：
+[root@gezhenwang jinyoujia-0107]# pm2 -v
+3.2.2
+
+再次启动： 问题消失
+[root@gezhenwang jinyoujia-0107]# pm2 start ./node_modules/nuxt/bin/nuxt -i 2 --name jinyoujia -- start
+[PM2] Starting /usr/local/src/jinyoujia-0107/node_modules/nuxt/bin/nuxt in cluster_mode (2 instances)
+[PM2] Done.
+┌───────────┬────┬─────────┬─────────┬──────┬────────┬─────────┬────────┬─────┬───────────┬──────┬──────────┐
+│ App name  │ id │ version │ mode    │ pid  │ status │ restart │ uptime │ cpu │ mem       │ user │ watching │
+├───────────┼────┼─────────┼─────────┼──────┼────────┼─────────┼────────┼─────┼───────────┼──────┼──────────┤
+│ jinyoujia │ 0  │ 1.4.5   │ cluster │ 8225 │ online │ 0       │ 0s     │ 0%  │ 28.3 MB   │ root │ disabled │
+│ jinyoujia │ 1  │ 1.4.5   │ cluster │ 8231 │ online │ 0       │ 0s     │ 0%  │ 20.4 MB   │ root │ disabled │
+└───────────┴────┴─────────┴─────────┴──────┴────────┴─────────┴────────┴─────┴───────────┴──────┴──────────┘
+ Use `pm2 show <id|name>` to get more details about an app  
+
+
+
