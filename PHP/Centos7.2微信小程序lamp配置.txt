@@ -213,6 +213,26 @@ systemctl restart php-fpm
 systemctl status php-fpm 
 
 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+php DOM依赖解决  一般情况下，上述配置就能够使用dom
+但是如果不生效的话则需要配置：
+
+在安装drupal8.3的时候，提示PHP(5.6)的DOM依赖被禁用
+解决方法如下(同时安装php-xml和php-dom)：
+yum install php56w-xml  ##上述安装php的时候已经给安装上了
+yum install php56w-dom  ##好像没有，没有影响
+
+如果以上操作不成功，怎在php.ini文件中添加extension=dom.so
+
++++++++++++++示例++++++++++  在php.ini追加
+extension=dom.so
+extension=gd.so
+extension=xmlreader.so
+extension=xmlwriter.so
+
+
+
+
 
 
 
