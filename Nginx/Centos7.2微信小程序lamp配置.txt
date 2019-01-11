@@ -1,0 +1,219 @@
+需求：
+系统：centos
+httpd:2.0以上
+mysql:5.6以上
+php:5.6以上
+可以接受yum安装
+
+++++++++++++++++++++++++++++++++lamp安装++++++++++++++++++++++++++++++++++++++++++
+
+配置安装：
+1.centos7.5
+2.安装apache
+yum remove httpd 
+
+useradd -s /sbin/nologin -M apache
+useradd -s /sbin/nologin -M mysql
+
+yum install httpd
+systemctl start httpd.service
+systemctl stop httpd.service
+systemctl restart httpd.service
+systemctl enable httpd.service
+
+[root@iZzt2b844uzx7qZ yum.repos.d]# httpd -v
+Server version: Apache/2.4.6 (CentOS)
+Server built:   Nov  5 2018 01:47:09
+
+
+3.安装mysql
+vi /etc/yum.repos.d/mysql-5.7.repo
+[mysql57-community]
+name=MySQL 5.7 Community Server
+baseurl=http://repo.mysql.com/yum/mysql-5.7-community/el/7/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql
+
+
+yum repolist enabled | grep mysql
+yum install mysql-community-server
+service mysqld start
+service mysqld status
+
+
+grep 'temporary password' /var/log/mysqld.log
+mysql -uroot -p
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'MyNewPass4!';
+GRANT all privileges ON *.* TO 'xuxu'@'%' identified by '000000' WITH GRANT OPTION; 
+
+
+安装php5.6
+下面两条命令按照自己意愿
+rpm -Uvh https://mirror.webtatic.com/yum/el7/epel-release.rpm
+rpm -Uvh https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
+
+
+1.如果想删除上面安装的包，重新安装
+rpm -qa | grep webstatic     ##rpm -e  
+
+2.以及防止出错卸载命令
+yum remove php-common
+
+
+3.运行yum install
+yum install php56w.x86_64 php56w-cli.x86_64 php56w-common.x86_64 php56w-gd.x86_64 php56w-ldap.x86_64 php56w-mbstring.x86_64 php56w-mcrypt.x86_64 php56w-mysql.x86_64 php56w-pdo.x86_64 php56w-xml-5.6.39-1.w7.x86_64
+
+
+直接安装
+yum install php56w-fpm   ##安装php5.6版本
+yum install php70w-fpm   ##安装php7.0版本
+
+
+之后直接启动就可以了 如果是 Apache /Nginx 的话重启一下服务 如systemctl start httpd  /nginx等、之后查看进程ss -napt | grep php    ss -anpt | grep php-fpm  
+
+systemctl restart httpd
+systemctl status httpd
+
+systemctl restart php-fpm
+systemctl status php-fpm 
+
+systemctl enable httpd
+systemctl enable php-fpm 
+
+
+
+
+++++++++++++++++++++++++++++++++初始化配置++++++++++++++++++++++++++++++++++++++++++
+
+没有问题后完成配置
+1) vi /etc/httpd/conf/httpd.conf
+//添加ServerSignature On (在错误页中显示Apache的版本) 
+ServerSignature On
+
+//允许服务器执行CGI及SSI，禁止列出目录
+Options Indexes FollowSymLinks #修改为：Options Includes ExecCGI FollowSymLinks
+
+//允许.htaccess
+AllowOverride None #修改为：AllowOverride All   ###所有的
+
+//设置不在浏览器上显示树状目录结构
+#Options Indexes FollowSymLinks #修改为 Options FollowSymLinks
+
+//设置默认首页文件，增加index.php
+DirectoryIndex index.html#修改为：DirectoryIndex index.html index.htm index.php
+
+//添加MaxKeepAliveRequests 500 (增加同时连接数)
+MaxKeepAliveRequests 500   ##不一定非要500 可以通过压测实现
+
+rm -f /etc/httpd/conf.d/welcome.conf /var/www/error/noindex.html  ##删除默认测试页
+
+2) 配置php
+vi /etc/php.ini
+//设置时区，把前面的分号去掉
+date.timezone = PRC
+
+//禁止显示php版本的信息
+expose_php = Off
+
+//支持php短标签
+short_open_tag = ON
+
+重启apache和php-fpm
+
+配置php测试页
+cd /var/www/html
+vi index.php
+<?php
+phpinfo();
+?>
+
+浏览器访问：ip  看到php测试页正常
+
+
+3)网站根目录的更改，默认是/var/www
+ServerName www.abcd.com:80   ###配置域名
+#DocumentRoot "/var/www/html"更改为DocumentRoot "/home/web/tp5/public"
+<Directory "/var/www/html"> 也需要更改为<Directory "/home/web/tp5/public"> ???
+
+
+
+配置ssl证书：
+https://common-buy.aliyun.com/?spm=5176.2020520154.cas.1.263fgpbkgpbkwW&commodityCode=cas#/buy    ##阿里云免费证书
+证书的验证的类型，自动dns，手动dns，和文件验证，由于本人的域名没有在这个账号下解析（多个阿里云账号）；使用dns验证的时候报错；所以本人这里使用的是文件验证：
+1) 按照提示 在网站根目录下创建目录/home/web/tp5/public/.well-known/pki-validation
+2) 按照提示，将验证文件上传到该目录，不要打开
+
+申请完毕并下载 并上传到如下目录并解压
+mkdir -p /etc/httpd/cert
+
+vi /etc/httpd/conf.d/ssl.conf   ##在后面追加
+
+################abcd.com#############################################
+
+
+<VirtualHost *:443>
+NameVirtualHost *:443   ##若有这一行，则需要将上面的Listen 443给注释掉，否则apache重启报错
+DocumentRoot "/home/web/tp5/public"
+ServerName www.51jiantan.com:443
+
+ErrorLog logs/ssl_error_log
+TransferLog logs/ssl_access_log
+LogLevel warn
+
+SSLEngine on
+
+SSLProtocol all -SSLv2 -SSLv3
+
+SSLCipherSuite HIGH:!RC4:!MD5:!aNULL:!eNULL:!NULL:!DH:!EDH:!EXP:+MEDIUM
+SSLHonorCipherOrder on
+
+SSLCertificateFile cert/1631993_jintn.com_public.crt 
+
+SSLCertificateKeyFile cert/1631993_jintn.com.key
+
+SSLCertificateChainFile cert/1631993_jintn.com_chain.crt
+
+
+
+
+<Files ~ "\.(cgi|shtml|phtml|php3?)$">
+    SSLOptions +StdEnvVars
+</Files>
+<Directory "/var/www/cgi-bin">
+    SSLOptions +StdEnvVars
+</Directory>
+
+SetEnvIf User-Agent ".*MSIE.*" \
+         nokeepalive ssl-unclean-shutdown \
+         downgrade-1.0 force-response-1.0
+
+CustomLog logs/ssl_request_log \
+          "%t %h %{SSL_PROTOCOL}x %{SSL_CIPHER}x \"%r\" %b"
+
+</VirtualHost>                
+
+重启apache可能会报错；若报错则查看ssl的log  path:/etc/httpd/logs 根据不同的报错来处理
+
+
+
+配置http强制跳转到https；
+vi /etc/httpd/conf/httpd.conf    在最后追加如下：
+RewriteEngine on 
+RewriteCond %{SERVER_PORT} !^443$ 
+RewriteRule ^(.*)?$ https://%{SERVER_NAME}/$1 [R=301,L] 
+
+
+
+分别重启httpd和php-fpm 
+systemctl restart httpd 
+systemctl status httpd 
+
+systemctl restart php-fpm 
+systemctl status php-fpm 
+
+
+
+
+
+
