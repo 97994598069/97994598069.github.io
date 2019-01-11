@@ -21,7 +21,35 @@ Local PM2 version: 3.2.7
  
  
  
-原因未知，查看日志报语法错误
+原因未知，查看日志报错如下：
+[root@localhost jinyoujia-nuxt]# pm2 logs
+[TAILING] Tailing last 15 lines for [all] processes (change the value with --lines option)
+/root/.pm2/pm2.log last 15 lines:
+PM2        |     at Process.ChildProcess._handle.onexit (internal/child_process.js:190:19)
+PM2        |     at onErrorNT (internal/child_process.js:372:16)
+PM2        |     at _combinedTickCallback (internal/process/next_tick.js:138:11)
+PM2        |     at process._tickDomainCallback (internal/process/next_tick.js:218:9)
+PM2        | 2018-12-28T17:51:42: PM2 log: App name:jinyoujia id:0 disconnected
+PM2        | 2019-01-10T16:09:14: PM2 log: Stopping app:jinyoujia id:0
+PM2        | 2019-01-10T16:09:14: PM2 error: app=jinyoujia id=0 does not have a pid
+PM2        | 2019-01-10T16:09:43: PM2 log: App [jinyoujia:0] starting in -cluster mode-
+PM2        | 2019-01-10T16:09:43: PM2 error: Error: spawn /opt/node-v8.11.4/bin/node ENOENT
+PM2        |     at _errnoException (util.js:992:11)
+PM2        |     at Process.ChildProcess._handle.onexit (internal/child_process.js:190:19)
+PM2        |     at onErrorNT (internal/child_process.js:372:16)
+PM2        |     at _combinedTickCallback (internal/process/next_tick.js:138:11)
+PM2        |     at process._tickDomainCallback (internal/process/next_tick.js:218:9)
+PM2        | 2019-01-10T16:09:43: PM2 log: App name:jinyoujia id:0 disconnected
+
+/root/.pm2/logs/jinyoujia-out-0.log last 15 lines:
+0|jinyouji | 
+0|jinyouji |  OPEN  http://localhost:3000
+0|jinyouji | 
+
+/root/.pm2/logs/jinyoujia-error-0.log last 15 lines:
+0|jinyouji | 2018-12-20T09:24:19.236Z nuxt:render Rendering url /
+0|jinyouji | context.isServer has been deprecated, please use process.server instead.
+
 
 
 一开始以为是版本的错误。后来换了几个版本都不行
