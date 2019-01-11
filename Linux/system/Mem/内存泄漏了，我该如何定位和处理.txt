@@ -1,0 +1,119 @@
+1.对于普通进程来说，能看到的其实是内核提供的虚拟内存，这些虚拟内存还需要通过页表，由系统映射为物理内存，此时当进程通过malloc()申请虚拟内存后，系统并不会立即为其分配物理内存，而是在首次访问时，才通过缺页异常陷入内核中分配内存
+
+为了协调CPU与磁盘间的性能差异，Linux还会使用cache和buffer，分别把文件和磁盘读写的数据缓存到内存中
+
+
+对于应用程序来说，动态内存的分配和回收，是既核心又复杂的一个逻辑功能模块。管理内存的过程中，也很容易发生各种各样的"事故"；例如：
+1.没有正确回收分配后的内存，导致了泄漏
+2.访问的是已分配内存边界的地址，导致程序异常退出，等等
+
+
+
+内存的分配和回收
+用户空间内存包括多个不同的内存段，比如只读段、数据段、堆、栈以及文件映射段等。这些内存段正式应用程序使用内存的基本方式
+
+例子：
+在程序中定义了一个局部变量，比如一个整数数组int data[64],就定义了一个可以储存64个整数的内存段。由于这是一个局部变量，它会从内存空间的栈中分配内存
+
+栈内存由系统自动分配和管理，一旦程序运行超出了这个局部变量的作用域，栈内存就会被系统自动回收，所以不会产生内存泄漏的问题
+
+再比如，很多时候，我们事先并不知道数据大小，所以就要用到标准库函数malloc()_,_在程序中动态分配内存。这时候，系统就会从内存空间的堆中分配内存
+
+堆内存由应用程序自己来分配和管理，除非程序退出，这些堆内存并不会被系统自动释放，而是需要应用程序明确调用库函数free()来释放它们。如果应用程序没有正确释放堆内存，就会造成内存泄漏
+
+只读段，包括程序的代码和常量，由于是只读的，不会再去分配新的内存，所以也不会产生内存泄漏
+数据段，包括全局变量和静态变量，这些变量在定义时就已经去确定了大小，所以也不会产生内存泄漏
+内存映射段，包括动态链库和共享内存，其中共享内存由程序分配和管理。所以，如果程序再分配后忘了回收，就会导致跟堆内存类似的泄漏问题
+
+
+
+检测内存泄漏；定位与处理办法：
+
+# 每隔 3 秒输出一组数据
+$ vmstat 3
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+0  0      0 6601824  97620 1098784    0    0     0     0   62  322  0  0 100  0  0
+0  0      0 6601700  97620 1098788    0    0     0     0   57  251  0  0 100  0  0
+0  0      0 6601320  97620 1098788    0    0     0     3   52  306  0  0 100  0  0
+0  0      0 6601452  97628 1098788    0    0     0    27   63  326  0  0 100  0  0
+2  0      0 6601328  97628 1098788    0    0     0    44   52  299  0  0 100  0  0
+0  0      0 6601080  97628 1098792    0    0     0     0   56  285  0  0 100  0  0 
+
+从输出中可以看到内存的free列在不停的变化，并且是下降趋势，而buffer和cache基本保持不变
+
+未使用内存在逐渐减小，而buffer和cache基本不变，这说明，系统中使用的内存一直在升高。但这并不能说明有内存泄漏，因为应用程序运行中需要的内存也可能会增大。比如说，程序中如果用了一个动态增长的数组来缓存计算结果，占用内存自然会增长
+
+那怎么来判定是内存泄漏呢？或者说，有没有办法展出让内存增长的进程，并定位增长内存用在哪儿呢？
+一般来说，使用top或者ps来观察进程的内存使用情况，然后找出内存使用一直增长的进程，最后再通过pmap查看进程内存分部
+
+还有一种办法是使用专门检测内存泄漏的工具，memleak.
+memleak可以跟踪系统或指定进程的内存分配、释放请求，然后定期输出一个未释放内存和响应调用栈的汇总情况（默认5秒）
+
+memleaks是bcc软件包的一个工具
+安装：yum -y install bcc-tools
+
+运行报错处理：
+# -a 表示显示每个内存分配请求的大小以及地址
+# -p 指定案例应用的 PID 号
+[root@k8s-master jinyoujia-0107]# /usr/share/bcc/tools/memleak -a -p 1890
+chdir(/lib/modules/3.10.0-862.14.4.el7.x86_64/build): No such file or directory
+Traceback (most recent call last):
+  File "/usr/share/bcc/tools/memleak", line 401, in <module>
+    bpf = BPF(text=bpf_source)
+  File "/usr/lib/python2.7/site-packages/bcc/__init__.py", line 318, in __init__
+    raise Exception("Failed to compile BPF text")
+Exception: Failed to compile BPF text
+
+
+
+# -a 表示显示每个内存分配请求的大小以及地址
+# -p 指定案例应用的 PID 号
+
+$ /usr/share/bcc/tools/memleak -p $(pidof app) -a
+Attaching to pid 12512, Ctrl+C to quit.
+[03:00:41] Top 10 stacks with outstanding allocations:
+    addr = 7f8f70863220 size = 8192
+    addr = 7f8f70861210 size = 8192
+    addr = 7f8f7085b1e0 size = 8192
+    addr = 7f8f7085f200 size = 8192
+    addr = 7f8f7085d1f0 size = 8192
+    40960 bytes in 5 allocations from stack
+        fibonacci+0x1f [app]
+        child+0x4f [app]
+        start_thread+0xdb [libpthread-2.27.so] 
+
+		
+从输出可以看到，应用在不停的分配内存，并且这些分配的地址没有被回收。可以看到fibonacci()函数分配的内存没释放
+
+
+修复后再次查看
+重新执行 memleak 工具检查内存泄漏情况
+$ /usr/share/bcc/tools/memleak -a -p $(pidof app)
+Attaching to pid 18808, Ctrl+C to quit.
+[10:23:18] Top 10 stacks with outstanding allocations:
+[10:23:23] Top 10 stacks with outstanding allocations:
+
+
+
+小结：
+应用程序可以访问的用户内存空间，由只读段、数据段、堆、栈以及文件映射段等组成。其中，丢内存和内存映射，需要应用程序来动态管理内存段；不仅要会标准库函数mall()来动态分配内存，还要记得在用完内存后，调用free()函数来释放他们
+
+
+
+
+		
+
+
+
+
+
+
+
+
+
+
+
+
