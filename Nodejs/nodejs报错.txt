@@ -3,7 +3,7 @@
 
 
 根据开发提示需要8.0的node环境：
-但是搭建完启动，app一直重启，支持error 很奇怪
+但是搭建完启动，app一直重启，直到error 很奇怪
 
 pm2 list 报错
 [root@gezhenwang jinyoujia-0107]# pm2 list
