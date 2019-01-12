@@ -1,0 +1,30 @@
+一、安装sendmail与mail
+1、安装sendmail：
+1) centos下可以安装命令：yum -y install sendmail
+2) 安装完后启动sendmail命令：service sendmail start
+
+2、安装mail
+安装命令：yum install -y mailx
+
+
+二、发送邮件
+1、通过文件内容发送
+发送命令：mail -s 'mail test' xxx@yyy.com < con.txt （"mail test"为邮件主题，xxx@yyy.com为收件人邮箱，con.txt保存邮件内容）
+
+2、通过管道符直接发送
+发送命令：echo "this is my test mail" | mail -s 'mail test' xxx@yyy.com
+
+
+
+三、设置发件人信息
+上述发送邮件默认会使用linux当前登录用户信，通常会被当成垃圾邮件，指定发件人邮箱信息命令：vi /etc/mail.rc，编辑内容如：
+set from=username@126.com
+set smtp=smtp.126.com
+set smtp-auth-user=username
+set smtp-auth-password=password
+set smtp-auth=login
+备注：配置中的smtp-auth-password不是邮箱登录密码，是邮箱服务器开启smtp的授权码，每个邮箱开启授权码操作不同（网易126邮箱开启菜单：设置-> 客户端授权密码）。
+
+
+
+
