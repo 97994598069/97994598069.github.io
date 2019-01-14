@@ -36,8 +36,8 @@ fwdretain subject date from to
 set bsdcompat
 
 ###授权信息###
-set from=zcg00w@126.com smtp=smtp.126.com   
-set smtp-auth-user=zcg00w@126.com smtp-auth-password=zhangchaogang123 smtp-auth=login
+set from=abcd@126.com smtp=smtp.126.com   
+set smtp-auth-user=abcd@126.com smtp-auth-password=abcd123 smtp-auth=login
 
 
 
