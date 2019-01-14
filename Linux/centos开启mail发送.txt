@@ -25,6 +25,20 @@ set smtp-auth-password=password
 set smtp-auth=login
 备注：配置中的smtp-auth-password不是邮箱登录密码，是邮箱服务器开启smtp的授权码，每个邮箱开启授权码操作不同（网易126邮箱开启菜单：设置-> 客户端授权密码）。
 
+例如：
+[root@iZ25gmzxq5aZ mail]# tail -f /etc/mail.rc 
+ignore mime-version content-transfer-encoding
+
+# Only include selected header fields when forwarding messages.
+fwdretain subject date from to
+
+# For Linux and BSD, this should be set.
+set bsdcompat
+
+###授权信息###
+set from=zcg00w@126.com smtp=smtp.126.com   
+set smtp-auth-user=zcg00w@126.com smtp-auth-password=zhangchaogang123 smtp-auth=login
+
 
 
 
