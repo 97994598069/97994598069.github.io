@@ -1,0 +1,71 @@
+网站的目录结构为：
+
+# tree /home/wwwroot/linuxeye.com
+/home/wwwroot/linuxeye.com
+├── bbs
+│   └── index.html
+└── www
+    └── index.html
+2 directories, 2 files
+
+/home/wwwroot/linuxeye.com为nginx的安装目录下默认的存放源代码的路径。
+bbs为论坛程序源代码路径；www为主页程序源代码路径；把相应程序放入上面的路径通过；http://www.linuxeye.com 访问的就是主页http://bbs.linuxeye.com 访问的就是论坛，其它二级域名类推。
+
+
+有2种方法，推荐方法一
+方法一：
+server {
+listen 80;
+server_name ~^(?<subdomain>.+).linuxeye.com$;
+access_log /data/wwwlogs/linuxeye.com_nginx.log combined;
+index index.html index.htm index.php;
+root /home/wwwroot/linuxeye/$subdomain/;
+location ~ .php$ {
+    fastcgi_pass unix:/dev/shm/php-cgi.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
+    }
+location ~ .*\.(gif|jpg|jpeg|png|bmp|swf|flv|ico)$ {
+    expires 30d;
+    }
+location ~ .*\.(js|css)?$ {
+    expires 7d;
+    }
+}
+
+
+
+方法二：
+server {
+listen 80;
+server_name *.linuxeye.com;
+access_log /home/wwwlogs/linuxeye.com_nginx.log combined;
+index index.html index.htm index.php;
+if ($host ~* ^([^\.]+)\.([^\.]+\.[^\.]+)$) {
+    set $subdomain $1;
+    set $domain $2;
+}
+location / {
+    root /home/wwwroot/linuxeye.com/$subdomain/;
+    index index.php index.html index.htm;
+}
+location ~ .php$ {
+    fastcgi_pass unix:/dev/shm/php-cgi.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
+    }
+location ~ .*\.(gif|jpg|jpeg|png|bmp|swf|flv|ico)$ {
+    expires 30d;
+    }
+location ~ .*\.(js|css)?$ {
+    expires 7d;
+    }
+}
+
+
+
+
+
+
