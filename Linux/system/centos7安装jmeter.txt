@@ -1,0 +1,51 @@
+1. 安装jdk8
+略
+
+2. 安装jmter5.0
+cd /usr/local/
+wget https://mirrors.tuna.tsinghua.edu.cn/apache//jmeter/binaries/apache-jmeter-5.0.tgz
+tar xf apache-jmeter-5.0.tgz
+mv apache-jmeter-5.0 jmeter
+
+3.xshell配置GUI
+1)测试目前是否安装
+yum -y install xclock
+
+[root@k8s-master local]# xclock
+Error: Can't open display: 
+
+2) 安装X窗口包和字体包
+yum -y groupinstall "X Window System" "Fonts"
+
+3) 设置隧道关联xmanager
+主要在xshell的属性设置中，然后选择隧道勾选"X11转发连接",此处选择xmanager，在本地需要安装xmanager：  
+
+
+4.打开新的窗口进行测试
+在进行测试的时候，必须要打开新的xshell窗口进行测试，如下，会创建一个零时的授权文件：
+例如：
+[root@k8s-master ~]# ls -al
+-rw-------.  1 root root   112 1月  15 14:11 .Xauthority
+
+5.查看相关的进程
+[root@localhost bin]# netstat -unptl |grep sshd
+tcp        0      0 0.0.0.0:22                  0.0.0.0:*                   LISTEN      1274/sshd           
+tcp        0      0 127.0.0.1:6010              0.0.0.0:*                   LISTEN      20271/sshd          
+tcp        0      0 127.0.0.1:6011              0.0.0.0:*                   LISTEN      20328/sshd          
+tcp        0      0 :::22                       :::*                        LISTEN      1274/sshd           
+tcp        0      0 ::1:6010                    :::*                        LISTEN      20271/sshd          
+tcp        0      0 ::1:6011                    :::*                        LISTEN      20328/sshd 
+
+
+再次测试：
+[root@k8s-master local]# xclock   发现在界面会出现一个圆钟图形
+
+
+
+执行jmeter：
+cd /usr/local/jmeter/bin 
+./jmeter.sh  此时会弹出桌面。然后进行配置即可
+
+
+
+
