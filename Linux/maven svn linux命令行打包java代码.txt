@@ -1,0 +1,111 @@
+linux svn服务器命令行maven打包java代码，最终生成的XXX3.war为我需要的，它依赖XXX1、XXX2生成的jar
+ 1. 安装maven
+ a)安装jdk
+ b)配置maven环境
+wget http://mirror.bjtu.edu.cn/apache/maven/binaries/apache-maven-3.0.4-bin.zip
+ unzip -q apache-maven-3.0.4-bin.zip
+ mv apache-maven-3.0.4 /usr/local/maven
+ echo ‘export M2_HOME=/usr/local/maven
+ export PATH=$PATH:$M2_HOME/bin’ >> /etc/profile
+ source /etc/profile
+ c)检查maven
+ mvn –version
+ Apache Maven 3.0.4 (r1232337; 2012-01-17 16:44:56+0800)
+ Maven home: /usr/local/maven
+ Java version: 1.6.0_22, vendor: Sun Microsystems Inc.
+ Java home: /usr/java/jdk1.6.0_22/jre
+ Default locale: en_US, platform encoding: UTF-8
+ OS name: “linux”, version: “2.6.39.1″, arch: “i386″, family: “unix” 
+
+ 
+2. 检查svn是否支持http方式更新代码
+svn co –username username –password password http://192.168.1.100/svn/trunk/APP_Java/XXX1/
+报错：提示svn: Unrecognized URL schemeSVN更新本地checkout目录出现这个问题！
+ 原来是svn不识别url，这就需要加载一个模块 ra_neon！
+ 查看svn版本
+svn –version
+ svn, version 1.6.12 (r955767)
+ compiled Apr 9 2012, 11:57:15 
+Copyright (C) 2000-2009 CollabNet.
+ Subversion is open source software, see http://subversion.tigris.org/
+ This product includes software developed by CollabNet (http://www.Collab.Net/). 
+
+The following repository access (RA) modules are available: 
+
+* ra_svn : Module for accessing a repository using the svn network protocol.
+ - with Cyrus SASL authentication
+- handles ‘svn’ scheme
+ * ra_local : Module for accessing a repository on local disk.
+- handles ‘file’ scheme 
+
+
+发现没有加载ra_dav 这个模块
+wget http://www.webdav.org/neon/neon-0.29.6.tar.gz
+ tar xzf neon-0.29.6.tar.gz
+ mv neon-0.29.6 subversion-1.6.12
+重新编译安装svn，参考：http://www.linuxeye.com/configuration/317.html
+再次查看svn版本
+svn –version
+ svn, version 1.6.12 (r955767)
+ compiled Apr 9 2012, 11:57:15 
+Copyright (C) 2000-2009 CollabNet.
+ Subversion is open source software, see http://subversion.tigris.org/
+ This product includes software developed by CollabNet (http://www.Collab.Net/). 
+
+The following repository access (RA) modules are available: 
+
+* ra_neon : Module for accessing a repository via WebDAV protocol using Neon.
+- handles ‘http’ scheme
+- handles ‘https’ scheme
+ * ra_svn : Module for accessing a repository using the svn network protocol.
+ - with Cyrus SASL authentication
+- handles ‘svn’ scheme
+ * ra_local : Module for accessing a repository on local disk.
+- handles ‘file’ scheme
+
+
+3. 从svn库中更新代码
+mkdir /root/xiangmu
+ cd /root/xiangmu
+ svn co –username username –password password http://192.168.1.100/svn/trunk/APP_Java/XXX1/
+ svn co –username username –password password http://192.168.1.100/svn/trunk/APP_Java/XXX2/
+ svn co –username username –password password http://192.168.1.100/svn/trunk/APP_Java/XXX3/
+你在/root/xiangmu可以看到3个目录XXX1、XXX2、XXX3
+ cd /root/xiangmu/XXX1
+ mvn clean
+ mvn install package -Dmaven.test.skip=true 
+cd ../XXX2
+ mvn clean
+ mvn install package -Dmaven.test.skip=true 
+
+cd ../XXX3
+ mvn clean
+ mvn install package -Dmaven.test.skip=true 
+
+在/root/xiangmu/XXX3生成target，里面有XXX3.war，XXX3.war unzip解压到网站根目录下就ok
+
+
+4. maven常用命令
+mvn compile
+编译主程序源代码，不会编译test目录的源代码。第一次运行时，会下载相关的依赖包，可能会比较费时。 
+
+mvn test-compile
+编译测试代码，compile之后会生成target文件夹，主程序编译在classes下面，测试程序放在test-classes下。 
+
+mvn test
+运行应用程序中的单元测试 
+
+mvn site
+生成项目相关信息的网站 
+
+mvn clean
+清除目标目录中的生成结果 
+
+mvn package
+依据项目生成 jar 文件，打包之前会进行编译，测试。 
+
+mvn install
+在本地 Repository 中安装 jar。 
+
+mvn eclipse:eclipse
+生成 Eclipse 项目文件及包引用定义，注意，需确保定义Classpath Variables: M2_REPO，指向本地maven类库目录。
