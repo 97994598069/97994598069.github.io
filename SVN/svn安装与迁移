@@ -1,0 +1,107 @@
+以下为svn安装与迁移，迁移非常简单直接copy库文件就ok。
+#安装subversion前，须安装apr和apr-util才能正常工作，系统默认情况下，是已经有apr和apr-util这两个包的，但版本较低，仅支持subversion 1.4
+
+1.mkdir /root/svn
+2.cd /root/svn
+3.rpm -e --nodeps apr apr-util
+4.wget http://archive.apache.org/dist/apr/apr-1.4.6.tar.gz
+5.wget http://archive.apache.org/dist/apr/apr-util-1.4.1.tar.gz
+6.tar xzf apr-1.4.6.tar.gz
+7.tar xzf apr-util-1.4.1.tar.gz
+8.cd apr-1.4.6
+9../configure --prefix=/usr/local/apr
+10.make && make install
+11.cd ../apr-util-1.4.1
+12../configure --with-apr=/usr/local/apr
+13.make && make install
+14.cd ../
+15.wget http://www.apache.org/dist//httpd/httpd-2.2.22.tar.gz
+16.tar xzf httpd-2.2.22.tar.gz
+17.cd httpd-2.2.22
+18../configure --prefix=/usr/local/apache --enable-so --enable-ssl
+19.--enable-rewrite --with-mpm=worker --enable-headers --enable-deflate
+20.--enable-dav --with-apr=/usr/local/apr/bin/apr-1-config
+21.--with-apr-util=/usr/local/apr/bin/apu-1-config -enable-maintainer-mode
+22.make && make install
+23.cp /usr/local/apache/bin/apachectl  /etc/init.d/httpd
+24.sed -i '2a # chkconfig: - 85 15' /etc/init.d/httpd
+25.sed -i '3a # description: Apache server' /etc/init.d/httpd
+26.chmod 755 /etc/init.d/httpd
+27.chkconfig --add httpd
+28.chkconfig httpd on
+29.cd ../
+30.
+31.wget http://labs.renren.com/apache-mirror/subversion/subversion-1.7.3.tar.gz
+32.tar xzf subversion-1.7.3.tar.gz
+33.cd subversion-1.7.3
+1../configure –prefix=/usr/local/subversion --with-apxs=/usr/local/apache/bin/apxs --with-apr=/usr/local/apr/bin/apr-1-config --with-apr-util=/usr/local/apr/bin/apu-1-config --with-ssl --with-zlib –without-berkeley-db --enable-maintainer-mode
+
+#报错如下
+1.checking sqlite library version (via header)… unsupported SQLite version
+2.checking sqlite library version (via pkg-config)… none or unsupported 3.3
+3.no
+4.
+5.An appropriate version of sqlite could not be found.  We recommmend
+6.3.7.6.3, but require at least 3.6.18.
+7.Please either install a newer sqlite on this system
+8.
+9.or
+10.
+11.get the sqlite 3.7.6.3 amalgamation from:
+12.
+13.http://www.sqlite.org/sqlite-amalgamation-3.7.6.3.tar.gz
+14.
+15.unpack the archive using tar/gunzip and copy sqlite3.c from the
+16.resulting directory to:
+17./root/svn/subversion-1.7.3/sqlite-amalgamation/sqlite3.c
+18.
+19.configure: error: Subversion requires SQLite
+
+
+#解决方法：根据报错提示
+1.cd ../
+2.wget http://www.sqlite.org/sqlite-autoconf-3071000.tar.gz
+3.mkdir subversion-1.7.3/sqlite-amalgamation
+4.tar xzf sqlite-autoconf-3071000.tar.gz
+5.cp sqlite-autoconf-3071000/sqlite3.c subversion-1.7.3/sqlite-amalgamation/
+6.cd subversion-1.7.3
+
+
+重新编译，可以忽略DBD警告
+1../configure --prefix=/usr/local/subversion \
+2.--with-apxs=/usr/local/apache/bin/apxs --with-apr=/usr/local/apr/bin/apr-1-config \
+3.--with-apr-util=/usr/local/apr/bin/apu-1-config --with-ssl --with-zlib --enable-maintainer-mode
+4.make && make install
+
+配置subversion
+
+
+1. 复制账号密码、权限认证文件
+将账号密码（svn_auth_file）、权限认证（svn_access）复制到/data/svn/目录下
+
+2．修改账号密码文件
+复制过来的svn_auth_file密码都是明文应用/usr/local/apache2/bin/htpasswd /data/svn/svn_auth_file admin，不加密可能不能正常登陆。
+
+3．复制资料库
+将import、repository复制到/data/svn/目录下
+配置apache的httpd.conf
+修改apache下的httpd.conf最后增加以下内容。
+
+1.LoadModule dav_svn_module modules/mod_dav_svn.so
+2.LoadModule authz_svn_module modules/mod_authz_svn.so
+3.<Location /svn>
+4.DAV svn
+5.SVNParentPath /data/svn/repository
+6.AuthType Basic
+7.AuthName "Subversion repository"
+8.AuthUserFile /data/svn/svn_auth_file
+9.AuthzSVNAccessFile "/data/svn/svn_access"
+10.Require valid-user
+11.</Location>
+
+
+验证
+/usr/local/apache/bin/apachectl –t  
+2.Service apache restart  
+http://192.168.1.110/svn/mjm_repo
+
