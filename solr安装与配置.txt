@@ -1,0 +1,44 @@
+pache Solr (读音: SOLer)是一个开源的搜索服务器。使用Java语言开发，主要基于HTTP和ApacheLucene实现。Apache Solr中存储的资源是以Document 为对象进行存储的。每个文档由一系列的 Field 构成，每个Field 表示资源的一个属性。Solr 中的每个 Document 需要有能唯一标识其自身的属性，默认情况下这个属性的名字是 id，在Schema 配置文件中使用：id进行描述。
+
+
+Solr是一个高性能，基于Lucene的全文搜索服务器。文档通过http利用XML加到一个搜索集合中。查询该集合也是通过http收到一个XML/JSON响应来实现。它的主要特性包括：高效、灵活的缓存功能，垂直搜索功能，高亮显示搜索结果，通过索引复制来提高可用性，提供一套强大Data Schema来定义字段，类型和设置文本分析，提供基于Web的管理界面等。 
+
+
+安装前准备
+jdk、tomcat 
+略
+
+solr安装 
+wget http://archive.apache.org/dist/lucene/solr/4.0.0/apache-solr-4.0.0.tgz
+tar xzf apache-solr-4.0.0.tgz
+cp apache-solr-4.0.0/dist/apache-solr-4.0.0.war /usr/local/tomcat/webapps/solr.war
+
+解压下载的apache-solr-4.0.0,在他的dist目录下有个文件叫做apache-solr-4.0.0.war，将这个文件拷贝到tomcat的webapps/目录下，并重命名为solr.war 
+
+
+tomcat配置 
+vi /usr/local/tomcat/conf/server.xml
+  <Service name="Catalina1">
+    <Connector port="8983" maxHttpHeaderSize="8192" maxThreads="150" minSpareThreads="25" maxSpareThreads="75" enableLookups="false" redirectPort="8443" acceptCount="100" connectionTimeout="20000" disableUploadTimeout="true" URIEncoding="UTF-8" />
+#记得打开iptables 8983端口
+
+
+新建/opt/solr文件夹,把下载的solr包中的example/solr文件夹下面的所有文件放入到 /opt/solr里面 
+mkdir /opt/solr
+vi /usr/local/tomcat/conf/Catalina1/localhost/solr.xml
+<Context docBase="/usr/local/tomcat/webapps/solr.war" debug="0" crossContext="true" >
+<Environment name="solr/home" type="java.lang.String" value="/opt/solr" override="true" />
+</Context>
+
+
+solr配置 
+cp -R example/solr/* /opt/solr/
+vi /opt/solr/collection1/conf/solrconfig.xml
+${solr.data.dir:}改成${solr.data.dir:/opt/solr/collection1/data}
+
+
+/opt/solr/collection1/data目录下有Lucene的索引目录index，这里不够灵活，可以加软链接方式实现。 
+注意修改/opt/solr所属用户和所属组 
+
+验证安装
+访问http://ip/:8983/solr 
