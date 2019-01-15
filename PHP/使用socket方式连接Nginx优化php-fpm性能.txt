@@ -1,0 +1,48 @@
+Nginx连接fastcgi的方式有2种：TCP和unix domain socket
+
+什么是Unix domain socket？—— 维基百科
+Unix domain socket 或者 IPC socket是一种终端，可以使同一台操作系统上的两个或多个进程进行数据通信。与管道相比，Unix domain sockets 既可以使用字节流和数据队列，而管道通信则只能通过字节流。Unix domain sockets的接口和Internet socket很像，但它不使用网络底层协议来通信。Unix domain socket 的功能是POSIX操作系统里的一种组件。
+
+Unix domain sockets 使用系统文件的地址来作为自己的身份。它可以被系统进程引用。所以两个进程可以同时打开一个Unix domain sockets来进行通信。不过这种通信方式是发生在系统内核里而不会在网络里传播。
+
+TCP和unix domain socket方式对比
+
+TCP是使用TCP端口连接127.0.0.1:9000
+
+Socket是使用unix domain socket连接套接字/dev/shm/php-cgi.sock（很多教程使用路径/tmp，而路径/dev/shm是个tmpfs，速度比磁盘快得多）
+
+测试机是个1核的centos5.4，2用户并发时系统资源消耗50%左右，10用户资源就跑得很满了。
+机是个1核的centos5.4，2用户并发时系统资源消耗50%左右，10用户资源就跑得很满了。
+　	　								2users	10users
+nginx/1.2.9 + PHP 5.2.5		tcp		1060	1294
+nginx/1.2.9 + PHP 5.2.5		socket	997		1487
+nginx/1.2.9 + PHP 5.3.10	tcp		906		1082
+nginx/1.2.9 + PHP 5.3.10	socket	880		1247
+结论是在服务器压力不大的情况下，tcp和socket差别不大，但在压力比较满的时候，用套接字方式，效果确实比较好。
+
+下面是php 5.3以上版本将TCP改成socket方式的配置方法：
+修改php-fpm.conf（/usr/local/php/etc/php-fpm.conf）
+1.;listen = 127.0.0.1:9000
+2.listen = /dev/shm/php-cgi.sock
+
+
+修改nginx配置文件server段的配置，将http的方式改为socket方式
+1.location ~ [^/]\.php(/|$) {
+2.    #fastcgi_pass 127.0.0.1:9000;
+3.    fastcgi_pass unix:/dev/shm/php-cgi.sock;
+4.    fastcgi_index index.php;
+5.    include fastcgi.conf;
+6.}
+
+
+重启php-fpm与nginx
+1.service nginx restart
+2.service php-fpm restart
+
+
+1.ls -al /dev/shm
+可以看到php-cgi.sock文件unix套接字类型
+
+
+
+
