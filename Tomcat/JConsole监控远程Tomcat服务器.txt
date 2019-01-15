@@ -1,0 +1,66 @@
+为了解决内存溢出的问题，会用到一些监视内存的工具，jconsole这个工具在jdk1.7自带了。这个工具可以查看系统的堆，非堆，线程，等等的一些整体的情况，从而可以判断出系统的一个大概的性能情况。
+
+catalina.sh或者新增setenv.sh来设置(下面是新增tomcat/bin/setenv.sh文件方法)
+1.CATALINA_OPTS='-Djava.rmi.server.hostname=192.168.1.110 \
+2.-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=8081 \
+3.-Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false'
+
+特别注意：
+1.如果你的linux系统下hostname -i显示为127.0.0.1,则jconsole将连接不上远程服务器
+ 方法一可以修改/etc/hosts文件，将其第一行的"127.0.0.1 localhost.localdomain localhost"，修改为："192.168.1.110 localhost.localdomain localhost"，其中，"192.168.1.110"为实际的服务器的IP地址。hosename -i输出结果为192.168.1.110,JConsole图形界面才能显示出来,但是用此方法可能会有问题，如sendmail；推荐使用方法二,在JAVA_OPTS加上'-Djava.rmi.server.hostname=192.168.1.110'
+
+2.-Dcom.sun.management.jmxremote.port=8081，这个端点是jconsole专用的，不要和你的系统的端口冲突。再启动你的应用
+
+3.看了网上很多文章都是在catalina.sh文件中加JAVA_OPTS，这样是有问题的，关闭tomcat会报该端口已经被占用，因为关闭tomcat时候，还会读取catalina.sh，所有最好在startup.sh文件中添加JAVA_OPTS那一段
+
+4.最后双击本机jdk1.6/bin/jconsole.exe，启动Jconsole监控界面，在远程连接处输入：192.168.1.110:8081，不需要输入用户名和密码，连接即可，-Dcom.sun.management.jmxremote.authenticate=false，设置成了false，所以如果不知道Linux机器的用户名和密码，也可以不输入，直接连接。
+
+
+由于tomcat jmx监听端口是随机分配的，所以这种方式必须关闭iptables。下面来看看怎么指定端口分配并加上密码验证：
+1.cd /usr/local/tomcat/conf
+2.cp /usr/java/jdk1.7.0_71/jre/lib/management/jmxremote.access ./
+3.cp /usr/java/jdk1.7.0_71/jre/lib/management/jmxremote.password.template ./jmxremote.password
+4.chmod 600 jmxremote.access jmxremote.password
+
+jmxremote.access 一般保持原始内容不变即可。
+
+对于jmxremote.password，将其中的：
+1.monitorRole  linuxeye
+2.controlRole  linuxeye
+
+井号注释取消掉。其中monitorRole为只拥有只读权限的角色，controlRole有更高权限：读写等等。
+
+新增tomcat/bin/setenv.sh 
+1.CATALINA_OPTS="-Djava.rmi.server.hostname=192.168.1.110
+2.  -Dcom.sun.management.jmxremote.password.file=$CATALINA_BASE/conf/jmxremote.password
+3.  -Dcom.sun.management.jmxremote.access.file=$CATALINA_BASE/conf/jmxremote.access
+4.  -Dcom.sun.management.jmxremote.ssl=false"
+
+
+下载catalina-jmx-remote.jar，放到tomcat/lib目录下 
+1.cd tomcat/lib
+2.wget http://archive.apache.org/dist/tomcat/tomcat-7/v7.0.57/bin/extras/catalina-jmx-remote.jar
+
+编辑server.xml: 
+1.<?xml version='1.0' encoding='utf-8'?>
+2.<Server port="8005" shutdown="SHUTDOWN">
+3.....
+4.  <Listener className="org.apache.catalina.mbeans.JmxRemoteLifecycleListener" rmiRegistryPortPlatform="8081" rmiServerPortPlatform="8082" />
+
+
+最后将固定的端口加入防火墙信任列表 
+1.iptables -I INPUT 5 -p tcp -m state --state NEW -m tcp --dport 8081 -j ACCEPT
+2.iptables -I INPUT 6 -p tcp -m state --state NEW -m tcp --dport 8082 -j ACCEPT
+
+
+重启tomcat
+可以使用netstat -an | grep -E '8081|8082'命令查看端口是否正常启动。
+打开windows java安装路径Java\jdk1.7.0_71\bin\jconsole.exe,输入服务器端相关信息:
+
+选择远程进程
+输入ip端口等信息：例如：192.168.1.104:8080
+
+点击链接进入监控界面
+
+
+
