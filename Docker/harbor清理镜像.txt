@@ -1,0 +1,71 @@
+[root@harbor02 ~]# df -h
+文件系统             容量  已用  可用 已用% 挂载点
+/dev/mapper/cl-root   35G   34G  2.0G   95% /
+devtmpfs             3.8G     0  3.8G    0% /dev
+tmpfs                3.6G     0  3.6G    0% /dev/shm
+tmpfs                3.6G  376M  3.3G   11% /run
+tmpfs                3.6G     0  3.6G    0% /sys/fs/cgroup
+/dev/xvda1          1014M  138M  877M   14% /boot
+tmpfs                730M     0  730M    0% /run/user/0
+/dev/xvde1           400G  2.8G  398G    1% /mnt
+overlay              400G  2.8G  398G    1% /mnt/docker/overlay2/3911ca431098dabe23d0c56eda0c34d58012d4557aa74d2177aae10d23ba8090/merged
+overlay              400G  2.8G  398G    1% /mnt/docker/overlay2/5de7d620f6646784833ed95ab4e8499460a17babff473b7651d017743da92879/merged
+overlay              400G  2.8G  398G    1% /mnt/docker/overlay2/e7d9a3d3bee4c515a78f67e1810eab629f953f8fc4eacbffe80460cfd130cdbe/merged
+overlay              400G  2.8G  398G    1% /mnt/docker/overlay2/d04380f244f95f7d739e12567f740421dafc344ee9c0f4f41e58daf7ce7cb02c/merged
+overlay              400G  2.8G  398G    1% /mnt/docker/overlay2/f1359e0b5938008ccc666ff19916b2ac6027999f1d9d9b5121e40d2be9b1c339/merged
+overlay              400G  2.8G  398G    1% /mnt/docker/overlay2/7c1751e1b550d372c5afa21c887721c713b9788aaa1bb6cdc0fd74d4e419ee25/merged
+overlay              400G  2.8G  398G    1% /mnt/docker/overlay2/2bed8a43bcdb948d5cc3863db86f094563fafa5ba2c78516226d312249bf53b8/merged
+shm                   64M     0   64M    0% /mnt/docker/containers/0f418f2f2f53ac87fc67571307d7da5dca0629cc37edf6e345619c6b9f4956e1/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/ecb0723306c02b6a89b6f78649010baa9e8dad7c0ba000b3eba5f7c6a21b7750/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/87cb7a39316ac4fd81c9f38b6521677d5092fafe512391f4312e73c37cf9ba97/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/0c3a374c5982f9ecef41e21557a1b67fdb204d0ba1290e5fe41633910e2aeda9/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/a94d4cb7b0032a4a43762aaae6adc94d75d4cff9d44101a4b2455807c84e9070/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/1948af7d505dc0037e05f6085189be257099bcec2c06ee61214891fad5c8603f/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/0b82833565c1d5a70fc8f227594752d92ad19b4c6f2e5589ee26bc80606cae94/shm  
+
+
+
+可以看到镜像根分区储存已经使用了95%；经排查是harbor镜像导致
+此时有两种办法
+1) 用软链的方式移动至别处，治标不治本
+mv /data/ /mnt/     ln -s /mnt/data/ /data 
+
+2) 删除harbor过期镜像 推荐
+1.停止harbor 
+cd /root/harbor
+docker-compose stop   ##不能用down
+
+2. 使用--dry-run参数运行容器，预览运行效果，但不删除任何数据   
+预览效果
+docker run -it --name gc --rm --volumes-from registry vmware/registry:2.6.2-photon garbage-collect --dry-run /etc/registry/config.yml
+
+3.真正的删除
+docker run -it --name gc --rm --volumes-from registry vmware/registry:2.6.2-photon garbage-collect  /etc/registry/config.yml
+
+4.启动harbordocker-compose start
+
+5.查看空间释放情况
+[root@harbor02 harbor]# df -h
+文件系统             容量  已用  可用 已用% 挂载点
+/dev/mapper/cl-root   35G   13G   23G   35% /
+devtmpfs             3.8G     0  3.8G    0% /dev
+tmpfs                3.6G     0  3.6G    0% /dev/shm
+tmpfs                3.6G  384M  3.3G   11% /run
+tmpfs                3.6G     0  3.6G    0% /sys/fs/cgroup
+/dev/xvda1          1014M  138M  877M   14% /boot
+tmpfs                730M     0  730M    0% /run/user/0
+/dev/xvde1           400G  1.3G  399G    1% /mnt
+overlay              400G  1.3G  399G    1% /mnt/docker/overlay2/a2c53111ff2c6af7a8c7fecf610e19f6a9cfe6961337080cc9f21ea5289b619f/merged
+shm                   64M     0   64M    0% /mnt/docker/containers/6de1929efe2bea65c9dee6c8d1c042691441668271cbe4862a275c8e82429fec/shm
+overlay              400G  1.3G  399G    1% /mnt/docker/overlay2/709ca6eafd6705f9b7f3e567ae08f4b2f0889cc30c4173c4b886802f95d632b9/merged
+overlay              400G  1.3G  399G    1% /mnt/docker/overlay2/92ea9c9139e9a4736aeb5693f7ccd6ec51b4e642dc0cc90a7469d8c21e1f34f9/merged
+overlay              400G  1.3G  399G    1% /mnt/docker/overlay2/463a2eac0cb4b476f520be1eaf9d557a51c23e3d5ef8957c40273551559c98aa/merged
+shm                   64M     0   64M    0% /mnt/docker/containers/0d92aa77ac13533abe21ec76dc43f5d24dfad5a7923d76da3e297b0411b53173/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/d4009499e8960685a787230792b6f725f0aac9b9abffe5cb2373b669a2f16dd0/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/94d3f5ba0a31c935fa7e784b7de484c7458625029ecb545ee26e44420ebba287/shm
+overlay              400G  1.3G  399G    1% /mnt/docker/overlay2/36a851d4eee27135c18f89c0031845f4e77011c1818ff84f11ba09d6c6b9de25/merged
+shm                   64M     0   64M    0% /mnt/docker/containers/a1fceea79cbea1a45d6c0c266ce75c1593f41653a4509fbfa4a6302935750c3b/shm
+overlay              400G  1.3G  399G    1% /mnt/docker/overlay2/a7637b50e6c8dc132fe7aaf534b495aded0673b0857bc18474283c54595c6842/merged
+overlay              400G  1.3G  399G    1% /mnt/docker/overlay2/23cfec239b68f83ea929527c55948d1c49d6288b269d4da62095ab1648584c3d/merged
+shm                   64M     0   64M    0% /mnt/docker/containers/f30fdd4b70783c587b3fcaa1adac2023e44e16f5f6bf6847a20b47cd1c544d68/shm
+shm                   64M     0   64M    0% /mnt/docker/containers/82e842d3cebfbb5a97eb8c011a918bed735d642abb96882c68506c832f04af0c/shm
