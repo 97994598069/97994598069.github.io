@@ -33,7 +33,7 @@ mv /data/ /mnt/     ln -s /mnt/data/ /data
 2) 删除harbor过期镜像 推荐
 1.停止harbor 
 cd /root/harbor
-docker-compose stop   ##不能用down
+docker-compose stop   ##不能用down;否则报错找不到registry
 
 2. 使用--dry-run参数运行容器，预览运行效果，但不删除任何数据   
 预览效果
@@ -42,7 +42,8 @@ docker run -it --name gc --rm --volumes-from registry vmware/registry:2.6.2-phot
 3.真正的删除
 docker run -it --name gc --rm --volumes-from registry vmware/registry:2.6.2-photon garbage-collect  /etc/registry/config.yml
 
-4.启动harbordocker-compose start
+4.启动harbor
+docker-compose start
 
 5.查看空间释放情况
 [root@harbor02 harbor]# df -h
