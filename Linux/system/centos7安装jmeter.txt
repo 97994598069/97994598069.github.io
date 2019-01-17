@@ -47,6 +47,14 @@ tcp        0      0 ::1:6011                    :::*                        LIST
 cd /usr/local/jmeter/bin 
 ./jmeter.sh  此时会弹出桌面。然后进行配置即可
 
+将界面改成中文：
+vi /usr/local/jmeter/bin/jmeter.properties
+###37行###
+改成如下：
+language=zh_CN
 
+重新启动jmter则可显示中文
+cd /usr/local/jmeter/bin 
+./jmeter.sh  此时会弹出中文界面
 
 
