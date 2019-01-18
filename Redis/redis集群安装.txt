@@ -41,6 +41,8 @@ cluster-config-file  nodes_7000.conf   //集群的配置  配置文件首次启�
 cluster-node-timeout  15000                //请求超时  默认15秒，可自行设置
 appendonly  yes                           //aof日志开启  有需要就开启，它会每次写操作都记录一条日志　
 
+#修改完查看一下：
+grep -E "7005|bind|daemonize|cluster-enabled|cluster-node-timeout|appendonly" ./redis.conf  |grep -v '^#'
 
 接着在另外一台机器上（172.10.10.25），的操作重复以上三步，只是把目录改为7003、7004、7005，对应的配置文件也按照这个规则修改即可
 
