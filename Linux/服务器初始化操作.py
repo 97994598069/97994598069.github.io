@@ -4,8 +4,8 @@ yum -y install wget
 略
 
 2)下载国内yum源和epel
-wget -O /etc/yum.repos.d/epel.repo //mirrors.aliyun.com/repo/epel-7.repo
-wget -O /etc/yum.repos.d/CentOS-Base.repo //mirrors.aliyun.com/repo/Centos-7.repo
+wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
+wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo
 
 3)更新缓存
 yum clean all 
