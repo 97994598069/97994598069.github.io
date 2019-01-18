@@ -1,0 +1,95 @@
+pssh 用于同时管理多台服务器，在安装Hadoop时可以同步Hadoop已经配置好的安装文件，十分方便，本文将介绍pssh的基本命令和使用方法。由于pssh基于python实现的，所以在安装之前务必保证安装好python2.6以上。
+
+安装：
+先安装ez_setup.py，ez_setup.py是python官方给出的一个安装setuptools的工具，利用它，我们可以很轻松用命令行就自动完成安装过程。
+#wget http://peak.telecommunity.com/dist/ez_setup.py
+或者浏览器下载https://pan.baidu.com/s/1ramMZes
+#python ez_setup.py
+
+下载pssh安装包：
+wget http://parallel-ssh.googlecode.com/files/pssh-2.3.tar.gz
+如果Google被墙了可以使用这个站点：
+wget http://files.opstool.com/files/pssh-2.3.tar.gz
+或者浏览器下载https://pan.baidu.com/s/1dGwwBg1
+
+tar zxvf pssh-2.3.tar.gz
+cd pssh-2.3
+python setup.py install
+
+
+使用：
+(假设ssh已做好SSH信任，如果没有的话会要求输入密码关于ssh信任可以参考http://be-evil.org/linux-ssh-login-without-using-password.html)
+#!/bin/bash
+for ip in `cat iplist`;
+do
+   echo yes >ssh-copy-id -i $ip;
+if [ $? -eq 0 ];then
+   echo -e "$ip is OK"
+else
+    echo -e "$ip is error"
+fi
+done
+
+pssh工具包主要有5个程序:
+
+pssh 多主机并行运行命令
+pscp 传输文件到多个hosts，他的特性和scp差不多
+pslurp 从多台远程机器拷贝文件
+pnuke kill远程机器的进程
+pslurp 从远程主机考本文件到本地
+prsync 使用rsync协议从本地计算机同步到远程主机
+
+参数说明:
+-h 执行命令的远程主机列表，是一个文本文件，主机ip或主机名以回车符分隔。
+-l 远程机器的用户名
+-p 一次最大允许多少连接（小写）
+-o 输出内容重定向到一个文件（小写）
+-e 执行错误重定向到一个文件
+-t 设置命令执行的超时时间
+-A 提示输入密码并且把密码传递给ssh
+-O 设置ssh参数的具体配置，参照ssh_config配置文件（大写）
+-x 传递多个SSH 命令，多个命令用空格分开，用引号括起来
+-X 同-x 但是一次只能传递一个命令
+-i 显示标准输出和标准错误在每台host执行完毕后
+-I 读取每个输入命令，并传递给ssh进程 允许命令脚本传送到标准输入
+-P 打印输出（大写）
+
+pssh 多主机并行运行命令：
+[root@centos pssh-2.3]# pssh -P -h host.txt uptime
+192.168.1.199: 11:31:06 up 5 min, 2 users, load average: 0.24, 0.13, 0.07
+
+pscp 把文件并行地复制到多个主机上： 推送
+root@centos pssh-2.3]# pscp -h host.txt /etc/profile /tmp/
+[1] 11:36:55 [SUCCESS] 192.168.1.199
+表示将本地的/etc/profile文件复制到目标服务器的/tmp/目录下
+
+
+prsync 使用rsync协议从本地计算机同步到远程主机：
+[root@centos pssh-2.3]# prsync -h host.txt -l root -a -r /etc/sysconfig /tmp/
+[1] 11:38:47 [SUCCESS] 192.168.1.199
+表示将本地的/etc/sysconfig目录递归同步到目标服务器的 /tmp/目录下,并保持原来的时间戳,使用用户 root
+
+
+pslurp 将文件从远程主机复制到本地： 从多个远程到本地
+和pscp方向相反:
+[root@centos pssh-2.3]# pslurp -h host.txt -L /tmp/test -l root /tmp/network test
+[1] 11:40:54 [SUCCESS] 192.168.1.199
+表示将目标服务器的/tmp/network文件复制到本地的/tmp/test目录下,并更名为test(必须有)
+在/tmp/test目录下即可看见192.168.1.199这个目录，目录中存放复制过来的文件。
+
+pnuke 并行在远程主机杀进程:
+[root@centos pssh-2.3]# pnuke -h host.txt syslog
+[1] 11:45:12 [SUCCESS] 192.168.1.199
+//杀死目标服务器的syslog进程
+
++++++++++++++++++++++++++++++++++++++++++++++
+pssh  使用：
+先打通服务器的免密登陆
+
+[root@deploy ~]# ssh-copy-id root@$ip -p 3411   ##最好配置好用户和端口
+
+[root@deploy ~]# cat host_list02 
+root@$ip:3411
+
+[root@deploy ~]# pssh -h host_list02 -i "uptime"
+[1] 16:45:34 [SUCCESS] root@$ip:3411
