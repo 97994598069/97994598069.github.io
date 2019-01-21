@@ -38,6 +38,10 @@ OPTIONS='--selinux-enabled --log-driver=journald --signature-verification=false'
 改为
 OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
 
+或者：
+vi /usr/lib/systemd/system/docker.service
+ExecStart=/usr/bin/dockerd -H unix:///run/docker.sock -H 0.0.0.0:2375 --selinux-enabled=false --insecure-registry 192.168.2.45:5000 （IP为镜像仓库地址）
+
 9、启动并加入开机启动
 systemctl start docker
 systemctl status docker
