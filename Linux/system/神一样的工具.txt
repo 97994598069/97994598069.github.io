@@ -1,0 +1,350 @@
+Sysdig 就是 system（系统）+dig（挖掘）的组合。Sysdig 是一个开源系统发掘工具，用于系统级别的勘察和排障，我们也可以把它看作一系列传统的 unix 系统工具的组合，主要包括：
+
+strace：追踪某个进程产生和接收的系统调用。
+tcpdump：分析网络数据，监控原始网络通信。
+lsof： list opened files, 列出打开的文件。
+top：监控系统性能工具。
+htop ：交互式的进程浏览器，可以用来替换 top 命令。
+iftop ：主要用来显示本机网络流量情况及各相互通信的流量集合。
+lua：一个小巧的脚本语言。该语言的设计目的是为了嵌入应用程序中，从而为应用程序提供灵活的扩展和定制功能。
+
+
+对于一般的 Linux 发行版，都可以通过下面这个命令直接安装 Sysdig 工具。
+$ curl -s https://s3.amazonaws.com/download.draios.com/stable/install-sysdig| sudo bash
+这是一个在线的自动安装工具，是一个 shell 脚本，会识别常用的 linux 发行版本，并根据对应的版本配置源，最后是安装 Sysdig 包
+
+对于中国的部分用户，可能是防火墙的问题不能在线完成安装。可以分步安装：
+通过 yum 命令安装 Sysdig，我们需要准备好 yum 仓库，由 Sysdig 后面的 Draios 公司来维护。可以运行下面的 wget 命令来完成：
+第一行命令下载 Draios gpg 密钥并把它加入 yum 密钥库。第二行从 Draios 下载 yum 源文件，并把它放到 /etc/yum.repos.d/ 路径下。
+#rpm --import https://s3.amazonaws.com/download.draios.com/DRAIOS-GPG-KEY.public  
+#wget -s -o /etc/yum.repos.d/draios.repo http://download.draios.com/stable/rpm/draios.repo 
+#rpm -i http://mirror.us.leaseweb.net/epel/6/i386/epel-release-6-8.noarch.rpm
+
+Sysdig 工具需要用到内核头文件包，开始安装前，需要确认内核头文件包已安装上。
+#yum -y install kernel-devel-$(uname -r) 
+#yum -y install sysdig
+
+
+sysdig 的输出
+#sysdig |more
+第一列是事件序号，它是自动增长的；
+第二列是发生事件的时间戳；
+第三列是 CPU ID；
+第四列是命令；
+第五列是线程 ID；
+第六列是事件方向，比如进入 ioctl 函数为 >，离开为 <；
+第七列是事件名称（比如 ioctl）；
+第八列是事件参数。
+
+说明：像 tcpdump 一样，Sysdig 命令也可以用 CTRL+C 来强制停止命令行输出。
+
+
+Sysdig 语法和 tcpdump 类似，特别是保存和读取输出文件的时候。Sysdig 所有的输出都可以保存成一个文件。
+写入输出文件：
+# sysdig -w <output file>
+例如:
+# sysdig -w cyq.scap
+
+
+读取记录文件
+# sysdig -r output file
+
+
+按 ASCII 格式输出
+sysdig 默认按照二进制保存文件，但你可以通过使用 -A 标记得到 ASCII 格式的输出。
+sysdig -A
+
+或者：
+# sysdig -A > /tmp/cjhout.txt 
+# cat /tmp/cjhout.txt 
+1 22:26:15.076829633 0 <NA> (7) > switch next=11920(sysdig)
+
+
+
+
+Sysdig 的过滤器
+Sysdig 过滤器和 tcpdump 很像，Sysdig 命令也有过滤器，可以用来过滤输出，得到特定的信息 。通过过滤器（可同时应用于实时数据和记录文件）组合，以获取更多有用的输出。
+过滤器遵从“类 . 字段”结构。例如：
+fd.cip：客户端 IP 地址。
+evt.dir：事件方向，可以是‘ > ’用于进入事件，或‘ < ’用于退出事件。
+完整的过滤器列表可以通过以下命令显示：
+# sysdig -l
+
+
+使用过滤器例子
+抓取特定的进程
+你可以使用“proc.name” 过滤器去抓取特定进程的所有 Sysdig 事件。下面的例子中过滤了所有名字中包含 Docker 的进程。
+# sysdig -r cyq.scap proc.name=docker
+
+
+
+
+Sysdig 中的 chisel（凿子）
+chisel 是用 Lua 语言编写的脚本，用来分析和处理 Sysdig 产生的事件。 Sysidg 会在下列目录中查找 chisel：.， ./chisels， ~/chisels 和 /usr/share/sysdig/chisels。
+
+首先列出 Sysdig 所有可以使用的 chisel 如图 4 。
+# sysdig -cl
+
+默认有以下类目可用，各个类目中分布有多个内建的 chisel。
+CPU Usage：CPU 使用量
+Errors：错误
+I/O
+Logs：日志
+Misc：混杂
+Net：网络
+Performance：性能
+Security：安全
+System State：系统状态
+
+
+如果想查看关于某个 chisel 的详细信息，可以使用 -i 选项：
+要显示指定 chisel 的信息（包括详细的命令行用法），运行以下命令：
+# sysdig – i [chisel 名称 ]
+
+例如，我们可以检查“CPU”类目下关于 topprocs_cpu 凿子的信息：
+# sysdig -i topprocs_cpu
+
+你可以通过 -c 标记和指定 chisel，让 Sysdig 来运行这个 chisel。
+# sysdig -c topprocs_net
+
+
+带过滤器运行 chisel
+运行 chisel 时候，可以使用对特定的事件使用过滤器。例如抓取一个特定进程的所有网络流量
+下面这个例子显示对 sshd 进程使用 echo_fds 凿子。
+# sysdig -A -c echo_fds proc.name=sshd
+
+
+抓取一个特定 IP 的网络流量交换
+这里使用 echo_fds chisel 和 fd.cip 过滤器 ，显示单独一个 IP 所有的网络流量。
+# sysdig -A -c echo_fds fd.cip=192.168.1.11
+
+
+
+
+
+使用 csysdig
+csysdig 就是运 ncurses 库的用户界面的 sysdig 软件包，Ncurses 是一个能提供功能键定义 ( 快捷键 ), 屏幕绘制以及基于文本终端的图形互动功能的动态库。在 sysdig 软件包里还提供了一个工具 csysdig，该工具执行后，运行界面和 top 命令类似。csysdig 工作界面如图 5。
+输入命令csysdig直接展示类似top的工作界面
+csysdig 使用如下快捷键：
+P：暂停屏幕输出信息
+Enter：进入当前突出显示的条目。
+Ctrl+F：列表搜索。
+F1- 帮助信息
+F2- 显示视图选择器。这将让你切换到另一个视图。
+F4- 使用过滤器
+F5- 查看 IO 输出信息
+F7 显示帮助页面当前显示的视图。
+F8 打开视图的操作面板。
+F9，打开列排序面板。
+Q 放弃退出。
+Arrows, PgUP, PgDn, Home, End：图标上下左右的移动控制。
+
+
+
+下面看看两个例子
+查看计算机上运行的容器列表及其资源使用情况 如图 6。
+#csysdig -vcontainers
+
+查看计算机上运行的容器列表及其资源使用情况
+查看容器上下文的进程列表如图 7 
+#csysdig -pc
+
+
+
+
+Sysdig 应用实例
+监控交互用户活动
+假定你作为系统管理员想要监控系统中交互的用户活动（如，用户在命令行输入了什么命令，以及用户去了什么目录），这时 spy_user 这个凿子就派上用场了。
+# sysdig  -c spy_users 
+2486 02:43:07 root) ls --color=auto
+
+上面输出的第一栏表示与指定用户的活动相关进程的 PID。如果你想要定位一个指定的用户（例如 root 用户），以及只监控该用户的活动又怎么样呢？你可以通过用户名对 spy_users 凿子的结果进行过滤：
+# sysdig  -c spy_users "user.name=root"
+2486 02:40:56 root) ls --color=auto 
+2486 02:41:00 root) su cjh
+
+
+监控文件 I/O
+我们可以使用“-p”标识来自定义 Sysdig 记录的输出格式，并指定双引号括起来的想要的字段（如用户名、进程名，以及文件或套接口名称）。在下面的例子，我们将创建一个记录文件，该文件将只包含在用户家目录中的写入事件。
+# sysdig -p "%user.name %proc.name %fd.name" "evt.type=write and fd.name contains /home/cyq" -w writetrace.scap
+
+
+查看使用硬盘带宽最多的进程
+#sysdig -c topprocs_file
+
+
+列出使用大量文件描述符的进程
+#sysdig -c fdcount_by proc.name "fd.type=file"
+
+
+查看所有的 SQL select 查询
+#sysdig -s 2000 -A -c echo_fds evt.buffer contains SELECT
+
+
+
+监控网络 I/O
+作为服务器排障的一部分，你可能想要监听网络通信对于 Sysdig，可以很容易进行通信嗅探，其风格更为对用户友好。
+例如，你可以检查由特定 IP 地址，特定进程（如 sshd）提供的数据（ASCII 编码格式）：
+# sysdig -s 4096 -A -c echo_fds fd.cip=192.168.1.100 -r /mnt/sysdig/debian.scap.gz proc.name=sshd
+
+
+如果你想要监控原生数据传输（二进制格式），请把“-A”替换为“-X”：
+# sysdig -s 4096 -X -c echo_fds fd.cip=192.168.1.100 -r /mnt/sysdig/debian.scap.gz proc.name=sshd
+
+
+查看调用某个文件的进程
+#sysdig fd.name=/etc/resolv.conf
+
+
+
+
+性能分析
+sysdig -c fileslower 100
+
+查看大于 1s 的网络请求
+#sysdig -c netlower 1000
+
+查看 nginx 进程的执行时间
+#sysdig -c procexectime proc.name=nginx
+
+查看 hhvm 大于 1s 的系统调用
+#sysdig -c scallslower 1000 proc.name=hhvm
+
+查看 hhvm 耗时的系统调用
+#sysdig -c topscalls_time proc.name=hhvvm
+
+查看 cpu0 占用资源最多的进程
+#sysdig -c topprocs_cpu evt.cpu=0
+
+查看占用流量最大的端口
+#sysdig -c topports_server
+
+查看占用流量最大的进程
+#sysdig -c topprocs_net
+
+查看 io 最高的文件
+#sysdig -c topfiles_bytes
+
+查看 io 最高的进程
+#sysdig -c topprocs_file
+
+
+
+
+网络相关操作
+查看占用网络带宽最多的进程
+#sysdig -c topprocs_net
+
+查看连接最多的服务器端口
+#sysdig -c fdbytes_by fd.sport
+
+查看某客户端连接最多的 ip
+#sysdig -c fdbytes_by fd.cip
+
+
+
+容器相关的操作
+查看容器上下文的进程列表
+#csysdig -pc
+
+查看运行在 cnetos 容器里 CPU 的使用率
+#sysdig -pc -c topprocs_cpu container.name=cnetos
+
+查看运行在 cnetos 容器里网络带宽的使用率
+#sysdig -pc -c topprocs_net container.name=cnetos
+
+查看在 cnetos 容器里使用网络带宽最多的进程
+#sysdig -pc -c topprocs_net container.name=cnetos
+
+查看在 cnetos 容器里占用 I/O 字节最多的文件
+#sysdig -pc -c topfiles_bytes container.name=cnetos
+
+查看在 cnetos 容器里网络连接的排名情况
+#sysdig -pc -c topconns container.name=cnetos
+
+显示 cnetos 容器里所有命令执行的情况
+#sysdig -pc -c spy_users container.name=cnetos
+
+
+
+
+HTTP 抓包分析
+查看所有的 http 请求
+#sysdig -c httplog
+
+查看 http url top 统计
+#sysdig -c httptop
+
+查看 8080 端口 post 的请求
+#sysdig -A -c echo_fds fd.port=8080 and evt.buffer contains POST
+
+查看 nginx 进程的 accept 链接
+#sysdig proc.name=nginx and evt.type=accept
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
