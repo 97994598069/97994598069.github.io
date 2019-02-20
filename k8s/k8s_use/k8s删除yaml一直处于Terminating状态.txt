@@ -1,0 +1,29 @@
+问题描述：
+1.delete yaml发现其pod一直处于Terminating状态
+2.describe发现其还是running状态
+3.登陆到其所在node上查看进程发现变成了僵尸进程
+
+[root@iZ2zeb5yqs7wxoc01dxb7jZ wuyilai]# kp
+NAME                               READY     STATUS        RESTARTS   AGE
+eureka-peer-8c4c598d6-s2l9f        1/1       Running       0          44d
+jycloud-config-76cd58f89f-55mq6    1/1       Running       0          44d
+jycloud-gateway-856cccd775-8rwrr   1/1       Running       0          23d
+jycloud-general-656d45786-jlbdz    1/1       Running       0          39d
+jycloud-manage-77db66dcd9-7n7cd    1/1       Running       0          18d
+jycloud-member-7555d45c6c-9kfvj    1/1       Running       0          18d
+jycloud-member-7555d45c6c-b4pj5    1/1       Running       0          18d
+jycloud-message-5d8b4cdf86-89gn5   1/1       Running       0          35d
+jycloud-order-79cc75fd4-fmwfs      1/1       Running       0          42d
+jycloud-product-7f696c7964-vgh72   1/1       Running       0          1d
+jycloud-product-b5b8bdf74-v8vss    1/1       Terminating   0          33d
+jycloud-proxy-55498df7d7-htvcs     1/1       Running       0          23d
+jycloud-web-bd8fd89d8-2fdm7        1/1       Running       0          39d
+onlyoffice-6f4dcb4f7c-fgcbb        1/1       Running       0          58d
+ycg-jycloud-6674544bcd-dvjvg       1/1       Running       0          19d
+
+
+解决：
+kubectl delete pod jycloud-product-b5b8bdf74-v8vss --grace-period=0 --force  OK
+
+原因未知
+
