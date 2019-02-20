@@ -27,3 +27,17 @@ kubectl delete pod jycloud-product-b5b8bdf74-v8vss --grace-period=0 --force  OK
 
 原因未知
 
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+[fedora@kube-master kubernetes]$ kubectl delete deployment my-nginx 
+error: timed out waiting for the condition
+
+或者
+kubectl replace --force -f ./message-jycloud-rc.yaml 
+error: timed out waiting for the condition
+
+-bash-4.3# service kube-apiserver restart
+-bash-4.3# service kube-controller-manager restart
+-bash-4.3# service kube-scheduler restart
+
