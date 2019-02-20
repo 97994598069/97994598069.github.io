@@ -390,3 +390,75 @@ hide_ids=YES/NO（NO）
 download_enable=YES/NO（YES） 
 如果设置为NO，所有的文件都不能下载到本地，文件夹不受影响。默认值为YES。
 
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                                                   Ftp创建实例
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#安装vsftpd
+yum install -y vsftpd
+
+#设置开机启动
+systemctl enable vsftpd.service
+
+# 重启
+service vsftpd restart
+
+# 查看vsftpd服务的状态
+systemctl status vsftpd.service
+
+创建用户
+useradd -s /sbin/nologin admin
+
+创建用户密码
+passwd admin 
+
+
+重点来了：
+二、配置vsftpd.conf
+用以下命令，将配置文件备份一份
+cp /etc/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf.default
+
+#执行以下命令打开配置文件
+vim /etc/vsftpd/vsftpd.conf
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=0000
+dirmessage_enable=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+xferlog_file=/var/log/xferlog
+data_connection_timeout=12000000000000000
+chroot_local_user=YES
+local_root=/home/web
+chroot_list_enable=YES
+chroot_list_file=/etc/vsftpd/chroot_list
+listen=YES
+
+pam_service_name=vsftpd
+userlist_enable=NO
+tcp_wrappers=YES
+
+vsftpd_log_file=/var/log/vsftpd.log
+
+
+
+
+touch chroot_list
+vi chroot_list
+root
+admin
+
+
+# 重启
+service vsftpd restart
+
+# 查看vsftpd服务的状态
+systemctl status vsftpd.service
+
+
+
+
+
