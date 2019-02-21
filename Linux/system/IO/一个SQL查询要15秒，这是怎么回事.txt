@@ -1,0 +1,194 @@
+案例：
+三个容器：mysql数据库应用、商品搜索应用、数据处理应用；其中商品搜索应用以http的形式提供了一个接口
+
+/: 返回index page
+/db/insert/products/: 插入指定数量的商品信息
+/products/: 查询指定商品的信息，并返回处理时间
+
+终端1：
+案例应用：192.168.0.10   http://0.0.0.0:10000/  
+
+终端2:
+客户端  curl
+
+终端2中：
+$ curl http://192.168.0.10:10000/products/geektime
+Got data: () in 15.364538192749023 sec
+发现接口返回的是空数据，而且处理时间超过15秒，这么慢的响应是让人无法忍受的：
+在具体分析前，为了避免在分析过程中客户端的请求结束，我们会把curl命令放到一个循环里执行。同时，为了避免给系统过大压力，我们设置在每次查询后，都先等待5s,然后开始执行新的请求
+$ while true; do curl http://192.168.0.10:10000/products/geektime; sleep 5; done
+
+回到终端1中分析接口响应速度慢的原因，不过此时你会发现系统响应慢了很多，很卡顿
+
+终端1中：
+$ top
+top - 12:02:15 up 6 days,  8:05,  1 user,  load average: 0.66, 0.72, 0.59
+Tasks: 137 total,   1 running,  81 sleeping,   0 stopped,   0 zombie
+%Cpu0  :  0.7 us,  1.3 sy,  0.0 ni, 35.9 id, 62.1 wa,  0.0 hi,  0.0 si,  0.0 st
+%Cpu1  :  0.3 us,  0.7 sy,  0.0 ni, 84.7 id, 14.3 wa,  0.0 hi,  0.0 si,  0.0 st
+KiB Mem :  8169300 total,  7238472 free,   546132 used,   384696 buff/cache
+KiB Swap:        0 total,        0 free,        0 used.  7316952 avail Mem
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+27458 999       20   0  833852  57968  13176 S   1.7  0.7   0:12.40 mysqld
+27617 root      20   0   24348   9216   4692 S   1.0  0.1   0:04.40 python
+ 1549 root      20   0  236716  24568   9864 S   0.3  0.3  51:46.57 python3
+22421 root      20   0       0      0      0 I   0.3  0.0   0:01.16 kworker/u
+输出可以看到两个cpu的iowait都比较高，而具体到各个进程，cpu的使用率并不高，最高的也只有1.7%。显然不是cpu的问题，那问题应该是出在了I/O
+
+查看I/O
+$ iostat -d -x 1
+Device            r/s     w/s     rkB/s     wkB/s   rrqm/s   wrqm/s  %rrqm  %wrqm r_await w_await aqu-sz rareq-sz wareq-sz  svctm  %util
+...
+sda            273.00    0.00  32568.00      0.00     0.00     0.00   0.00   0.00    7.90    0.00   1.16   119.30     0.00   3.56  97.20
+输出可以发现，磁盘sda每秒的读数据为32MB，而I/O使用率高达97%，接近饱和，这说明磁盘sda的读取碰到了性能瓶颈
+
+# -d 选项表示展示进程的 I/O 情况
+$ pidstat -d 1
+12:04:11      UID       PID   kB_rd/s   kB_wr/s kB_ccwr/s iodelay  Command
+12:04:12      999     27458  32640.00      0.00      0.00       0  mysqld
+12:04:12        0     27617      4.00      4.00      0.00       3  python
+12:04:12        0     27864      0.00      4.00      0.00       0  systemd-journal
+可以看到是mysql的进程引起的，但是mysql为什么会读取大量的磁盘数据呢？慢查询？
+
+
+追踪mysql进程：
+$ strace -f -p 27458
+[pid 28014] read(38, "934EiwT363aak7VtqF1mHGa4LL4Dhbks"..., 131072) = 131072
+[pid 28014] read(38, "hSs7KBDepBqA6m4ce6i6iUfFTeG9Ot9z"..., 20480) = 20480
+[pid 28014] read(38, "NRhRjCSsLLBjTfdqiBRLvN9K6FRfqqLm"..., 131072) = 131072
+[pid 28014] read(38, "AKgsik4BilLb7y6OkwQUjjqGeCTQTaRl"..., 24576) = 24576
+[pid 28014] read(38, "hFMHx7FzUSqfFI22fQxWCpSnDmRjamaW"..., 131072) = 131072
+[pid 28014] read(38, "ajUzLmKqivcDJSkiw7QWf2ETLgvQIpfC"..., 20480) = 20480
+发现，线程28014正在读取大量数据，且读取文件的描述符编号为38，这儿的38又对应的是哪个文件呢?
+
+$ lsof -p 27458  ##注意此处不应该是28014(线程号)必须为进程号
+COMMAND  PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+...
+​mysqld  27458      999   38u   REG    8,1 512440000 2601895 /var/lib/mysql/test/products.MYD
+从输出可以得到，mysld进程确实打开了大量文件，而根据文件描述符（FD）的编号，我们知道，描述符为38的是一个路径为/var/lib/mysql/test/products.MYD的文件，38后面的u表示，mysqld以读写的方式访问文件
+看到这个文件应该就简单了：
+1.MYD文件，是MyISAM引擎用来存储表数据的文件
+2.文件名就数据表的名字
+3.而这个文件的父目录，也就是数据库的名字
+也就是说，这个文件告诉我们mysqld在读取数据库test中的products表
+
+
+小贴士：
+ls  /var/lib/mysql/test/
+db.opt    products.MYD  products.MYI  products.frm
+这四个文件的作用分别是：
+MYD: 用来存储表的数据
+MYI: 用来存储表的索引
+frm: 用来储存表的元信息（比如表结构）
+opt: 用来储存数据库的元数据（比如字符集、字符校验规则等）
+
+进入数据库排查：
+mysql> show full processlist;
++----+------+-----------------+------+---------+------+--------------+-----------------------------------------------------+
+| Id | User | Host            | db   | Command | Time | State        | Info                                                |
++----+------+-----------------+------+---------+------+--------------+-----------------------------------------------------+
+| 27 | root | localhost       | test | Query   |    0 | init         | show full processlist                               |
+| 28 | root | 127.0.0.1:42262 | test | Query   |    1 | Sending data | select * from products where productName='geektime' |
++----+------+-----------------+------+---------+------+--------------+-----------------------------------------------------+
+2 rows in set (0.00 sec)
+db表示数据库的名字
+command表示sql类型
+time表示执行时间
+state表示状态
+而info则包含了完整的sql语句
+
+多执行几次show full processlist命令，可以看到select *这条sql语句执行事件比较长
+
+一般慢查询都是因为没有利用好索引导致的：
+# 切换到 test 库
+mysql> use test;
+# 执行 explain 命令
+mysql> explain select * from products where productName='geektime';
++----+-------------+----------+------+---------------+------+---------+------+-------+-------------+
+| id | select_type | table    | type | possible_keys | key  | key_len | ref  | rows  | Extra       |
++----+-------------+----------+------+---------------+------+---------+------+-------+-------------+
+|  1 | SIMPLE      | products | ALL  | NULL          | NULL | NULL    | NULL | 10000 | Using where |
++----+-------------+----------+------+---------------+------+---------+------+-------+-------------+
+1 row in set (0.00 sec)
+
+select_type表示查询类型，而这里的SIMPLE表示此查询不包括UNION查询或者子查询
+table表示数据表的名字，这里是products
+typeb表示查询类型，这里的ALL表示全表查询，但索引查询应该是index类型才对
+possible_keys表示可能选用的索引，这里是NULL
+key表示确切会使用的索引，这里也是NULL
+rows表示查询扫描的行数，这里是10000
+
+根据输出可以发现，这条查询没有使用索引，索引查询时，会扫描全表，并且扫描行数高达10000行，响应速度那么慢也就难怪了
+
+查看products表的结构，会看到它只有一个id主键，并不包括productNmae的索引
+mysql> show create table products;
+...
+| products | CREATE TABLE `products` (
+  `id` int(11) NOT NULL,
+  `productCode` text NOT NULL COMMENT '产品代码',
+  `productName` text NOT NULL COMMENT '产品名称',
+...
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC |
+...
+
+接下来，我们就可以给productName建立索引了，也就是执行下面的create index命令：
+mysql> CREATE INDEX products_index ON products (productName);
+ERROR 1170 (42000): BLOB/TEXT column 'productName' used in key specification without a key length
+运行失败，根据错误信息，productName是一个BLOB/TEXT类型，需要设置一个长度，所以，想要创建索引，就必须为productName指定一个前缀长度
+
+那么前缀长度设置多大比较合适呢？这里其实有专门的算法，即通过计算前缀长度的选择性，来确定索引的长度。不过也可以稍微简化一下，直接用一个固定数值（比如64），来创建索引：
+mysql> CREATE INDEX products_index ON products (productName(64));
+Query OK, 10000 rows affected (14.45 sec)
+Records: 10000  Duplicates: 0  Warnings: 0
+
+
+
+总结：
+在访问商品搜索接口时，我们发现接口的响应特别慢，通过系统CPU、内存和磁盘I/O等资源使用情况的分析，发现磁盘I/O触碰瓶颈
+接着使用pidstat发现是mysql进程引起的，然后通过strace、lsof找出了mysql正在读的文件，根据文件的名字和路径，找出了mysql正在操作的数据库和数据表，综合信息判断这是一个没有使用索引的慢查询
+增加索引后解决问题
+
+mysql的MyISAM引擎主要依赖系统缓存加速磁盘I/O的访问。可如果系统中还有其他应用同时运行，MyISAM引擎很难充分利用系统缓存，缓存可能会被其他应用程序占用，甚至被清理掉；所以一般不建议把应用程序的性能优化完全建立在系统缓存上，最好能在应用程序的内部分配内存，构建完全自主控制的缓存，比如redis等第三方缓存应用
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

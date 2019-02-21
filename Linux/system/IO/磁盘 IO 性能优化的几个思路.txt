@@ -1,0 +1,149 @@
+I/O基准测试
+优化之前，先问自己，I/O性能优化的目标是什么？换句话说，我们观察这些I/O性能指标（比如IOPS、吞吐量、延迟等），要达到多少才合适
+事实上，I/O性能指标的具体标准，每个人估计会有不同的答案，因为我们每个人的应用场景、使用的文件系统和物理磁盘，都有可能不一样
+为了更客观合理地评估优化效果，我们首先应该对磁盘和文件系统进行基准测试，得到文件系统或者磁盘I/O的极限性能
+
+fio(flexible I/O Tester)正是最常用的文件系统和磁盘I/O性能基准测试工具。它提供了大量的可定制化选项，可以用来测试，裸盘或者文件系统在各种场景下的I/O性能，包括了不同块大小、不同I/O引擎以及是否使用缓存等场景
+
+安装：
+# Ubuntu
+apt-get install -y fio
+
+# CentOS
+yum install -y fio 
+
+fio的选项非常多，一般会通过几个常见场景的测试方法，介绍一些最常用的选项。这些常见场景包括随机度、随机写、顺序读、顺序写等：
+# 随机读
+fio -name=randread -direct=1 -iodepth=64 -rw=randread -ioengine=libaio -bs=4k -size=1G -numjobs=1 -runtime=1000 -group_reporting -filename=/dev/sdb
+
+# 随机写
+fio -name=randwrite -direct=1 -iodepth=64 -rw=randwrite -ioengine=libaio -bs=4k -size=1G -numjobs=1 -runtime=1000 -group_reporting -filename=/dev/sdb
+
+# 顺序读
+fio -name=read -direct=1 -iodepth=64 -rw=read -ioengine=libaio -bs=4k -size=1G -numjobs=1 -runtime=1000 -group_reporting -filename=/dev/sdb
+
+# 顺序写
+fio -name=write -direct=1 -iodepth=64 -rw=write -ioengine=libaio -bs=4k -size=1G -numjobs=1 -runtime=1000 -group_reporting -filename=/dev/sdb 
+
+在这其中，有几个参数需要重点关注一下:
+direct，表示是否跳过系统缓存。上面示例中设置的是1，表示跳过系统缓存
+iodepth,表示使用异步I/O（asynchronous I/O,简称AIO）时，同时发出的I/O请求上限。在上面的示例中设置的是64
+rw，表示I/O模式，上述示例中read/write分别表示顺序读/写，而randread/randwrite则分别表示随机读/写 
+ioengine，表示I/O引擎，它支持同步(sync)、异步(libaio)、内存映射(mmap)、网络(net)等各种I/O引擎。上述示例中设置的是libaio表示使用异步I/O 
+bs表示I/O的大小。示例中设置成了4K（也就是默认值）
+filename表示文件路径，当然，它可以是磁盘路径(测试磁盘性能)，也可以是文件路径(测试文件系统性能)。示例中，我把它设置成了磁盘/dev/sdb ,不过需注意，用磁盘路径测试写，会破坏这个磁盘中的文件系统，所以在使用前，一定要事先做好数据备份
+
+fio测试顺序读的报告示例：
+read: (g=0): rw=read, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=libaio, iodepth=64
+fio-3.1
+Starting 1 process
+Jobs: 1 (f=1): [R(1)][100.0%][r=16.7MiB/s,w=0KiB/s][r=4280,w=0 IOPS][eta 00m:00s]
+read: (groupid=0, jobs=1): err= 0: pid=17966: Sun Dec 30 08:31:48 2018
+   read: IOPS=4257, BW=16.6MiB/s (17.4MB/s)(1024MiB/61568msec)
+    slat (usec): min=2, max=2566, avg= 4.29, stdev=21.76
+    clat (usec): min=228, max=407360, avg=15024.30, stdev=20524.39
+     lat (usec): min=243, max=407363, avg=15029.12, stdev=20524.26
+    clat percentiles (usec):
+     |  1.00th=[   498],  5.00th=[  1020], 10.00th=[  1319], 20.00th=[  1713],
+     | 30.00th=[  1991], 40.00th=[  2212], 50.00th=[  2540], 60.00th=[  2933],
+     | 70.00th=[  5407], 80.00th=[ 44303], 90.00th=[ 45351], 95.00th=[ 45876],
+     | 99.00th=[ 46924], 99.50th=[ 46924], 99.90th=[ 48497], 99.95th=[ 49021],
+     | 99.99th=[404751]
+   bw (  KiB/s): min= 8208, max=18832, per=99.85%, avg=17005.35, stdev=998.94, samples=123
+   iops        : min= 2052, max= 4708, avg=4251.30, stdev=249.74, samples=123
+  lat (usec)   : 250=0.01%, 500=1.03%, 750=1.69%, 1000=2.07%
+  lat (msec)   : 2=25.64%, 4=37.58%, 10=2.08%, 20=0.02%, 50=29.86%
+  lat (msec)   : 100=0.01%, 500=0.02%
+  cpu          : usr=1.02%, sys=2.97%, ctx=33312, majf=0, minf=75
+  IO depths    : 1=0.1%, 2=0.1%, 4=0.1%, 8=0.1%, 16=0.1%, 32=0.1%, >=64=100.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.1%, >=64=0.0%
+     issued rwt: total=262144,0,0, short=0,0,0, dropped=0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=64
+
+Run status group 0 (all jobs):
+   READ: bw=16.6MiB/s (17.4MB/s), 16.6MiB/s-16.6MiB/s (17.4MB/s-17.4MB/s), io=1024MiB (1074MB), run=61568-61568msec
+
+Disk stats (read/write):
+  sdb: ios=261897/0, merge=0/0, ticks=3912108/0, in_queue=3474336, util=90.09% 
+需要重点关注的是，slat、clat、lat、以及bw和iops这几行
+1) slat，是指从I/O提交到实际执行I/O的时长(submission latency)
+2) clat,是指从I/O提交到I/O完成的时长(completion latency)
+3) lat，是指从fio创建I/O到I/O完成的总时长
+这里需要注意的是，对同步I/O来说，由于I/O提交和I/O完成是一个动作，所以slat实际上就是I/O完成的时间，而clat是0。从示例中可以看到，使用异步I/O(libaio)时，lat近似等于slat+clat之和
+4) bw,是指吞吐量，上述示例中可以看到平均吞吐量大约是16MB(17005 KiB/1024)
+5) iops,其实就是每秒I/O的次数，上面示例中平均IOPS为4250
+
+通常情况下，应用程序的I/O都是读写并行的，而且每次的I/O大小也不一定相同。所以，刚刚说的这几种场景，并不能精确模拟应用程序的I/O模式。那么怎么才能精准模拟应用程序的I/O模式呢？
+幸运的是fio支持I/O的重放。借助blktrace,再配合上fio，就可以实现对应用程序I/O模式的基准测试。需要先用blktrace，记录磁盘设备的I/O访问情况；然后使用fio，重放blktrace的记录
+
+# 使用 blktrace 跟踪磁盘 I/O，注意指定应用程序正在操作的磁盘
+$ blktrace /dev/sdb
+
+# 查看 blktrace 记录的结果
+# ls
+sdb.blktrace.0  sdb.blktrace.1
+
+# 将结果转化为二进制文件
+$ blkparse sdb -d sdb.bin
+
+# 使用 fio 重放日志
+$ fio --name=replay --filename=/dev/sdb --direct=1 --read_iolog=sdb.bin 
+
+这样就通过blkstrace+fio的组合使用，得到了应用程序I/O模式的基准测试报告
+
+
+从应用程序的角度优化I/O的思路：
+应用程序处于整个I/O栈的最上端，它可以通过系统调用来调整I/O模式(如顺序还是随机、同步还是异步)，同时，它也是I/O数据的最终来源，在我看来，可以有这么几种方式来优化应用程序的I/O性能
+1) 可以用追加写代替随机写，减少寻址开销，加快I/O写的速度
+2) 可以借助缓存I/O,充分利用系统缓存，降低实际I/O的次数 
+3) 可以再应用程序内部构建自己的缓存，或者用redis这类外部缓存系统。这样一方面，能在应用程序内部控制缓存的数据和生命周期；另一方面也能降低其他应用程序使用缓存对自身的影响
+4) 在需要频繁读写同一块磁盘空间时，可以用mmap代替read/write,减少内存的拷贝次数
+5) 在需要同步写的场景中，尽量将写请求合并，而不是让每个请求都同步写入磁盘，即可以用fsync()取代O_SYNC
+6) 在多个应用程序共享相同磁盘时，为了保证I/O不被某个应用完全占用，推荐使用croups的I/O子系统，开限制进程/进程组的IOPS以及吞吐量
+
+最后再使用CFQ调度器时，可以用ionice来调整进程的I/O调度优先级，特别是提高核心应用的I/O优先级。ionice支持三个优先类：Idle、Best-effort、Realtime。其中，Best-effort和Realtime还分别支持0-7的级别，数值越小，则表示优先级别越高
+
+
+文件系统优化：
+应用程序访问普通文件时，实际是由文件系统间接负责，文件在磁盘中的读写。所以，跟文件系统中相关的也有很多优化I/O性能的方式
+1)可以根据实际负载场景的不同，选择最合适的文件系统，比如Ubuntu默认使用ext4文件系统，而Centos7默认使用xfs文件系统；相比于ext4,xfs支持更大的磁盘分区和更大的文件数量，如xfs支持大于16TB的磁盘。但是xfs文件系统的缺点在于无法收缩，而ext4则可以
+
+2)在选择好文件系统后，还可以进一步优化文件系统的配置选项，包括文件系统的特性(如ext_attr、dir_index)、日志模式(如journal、ordered、writeback)、挂载选项（如noatime）等等。比如，使用tune2fs这个工具，可以调整文件系统的特性(tune2fs也常用来查看文件系统超级块的内容)。而通过/etc/fstab,或者mount命令行参数，我们可以调整文件系统的日志模式和挂载选项等
+
+3)优化文件系统的缓存。比如，你可以优化pdflush脏页的刷新频率(比如设置dirty_expire_centisecs和dirty_writeback_centisecs)以及脏页的限额(比如调整dirtry_background_ratio和dirty_ratio)；再如，还可以优化内核回收目录项缓存和索引节点缓存的倾向，即调整vfs_cache_pressure(/proc/sys/vm/vfs_cache_pressure,默认值100)，数值越大，就表示越容易回收
+
+4)最后，在不需要持久化时，你还可以用内存文件系统tmpfs,以获得更好的I/O性能。tmpfs把数据直接保存再内存中，而不是磁盘中，比如/dev/shm/,就是大多数linux默认配置的一个内存文件系统，它的大小默认为总内存的一半
+
+
+磁盘优化:
+数据持久化存储，最终还是要落到具体的物理磁盘中，同时，磁盘也是整个I/O栈的最底层。从磁盘脚本出发，自然也有很多有限的性能优化办法
+1) 最简单有效的方法，就是换用性能更好的磁盘，比如用SSD代替HDD
+2) 可以使用RAID，把多块磁盘组合成一个逻辑磁盘，构成冗余独立磁盘阵列。这样做既可以提高数据的可靠性，又可以提升数据的访问性能
+3) 针对磁盘和应用程序I/O模式的特征，我们可以选择最适合的I/O调度算法。比方说SSD和虚拟机中的磁盘，通常用的noop调度算法。而数据库应用，我更推荐使用deadline算法
+4) 我们可以对应用程序的数据，进行磁盘级别的隔离。比如，我们可以为日志、数据库等I/O压力比较重的应用，配置单独的磁盘
+5) 在顺序读比较多的场景中，我们可以增大磁盘的预读数据，比如，你可以通过下面两种方法，调整/dev/sdb的预读大小
+   5-1).调整内核选项/sys/block/sdb/queue/read_ahead_kb,默认大小是128KB，单位为KB
+   5-2).使用blockdev工具设置，比如blockdev--setra 8192 /dev/sdb，注意这里的单位是512B（0.5KB），所以它的数值总是read_ahead_kb的两倍
+6) 我们可以优化内核块设备I/O的选项。比如，可以调整磁盘队列的长度/sys/block/sdb/queue/nr_request,适当增大队列长度，可以提升磁盘的吞吐量（当然也会导致I/O延迟增大）
+
+
+最后，要注意，磁盘本身出现硬件错误，也会导致I/O性能急剧下降，所以发现磁盘性能急剧下降时，还需要确认，磁盘本身是不是出现了硬件错误。比如dmesg中是否有硬件I/O故障的日志。还可以使用badblocks、smartctl等工具，检测磁盘的硬件问题。或用e2fsck等来检测文件系统的错误。如果发现问题，你可以使用fsck等工具来修复
+
+
+
+
+磁盘和文件系统的I/O，通常是整个系统中最慢的一个模块。所以在优化I/O问题时，除了可以优化I/O的执行流程，还可以借助更快的内存、网络、CPU等，减少I/O调用
+比如，可以充分利用系统提供buffer、cache，或是应用程序内部缓存，再或者redis这类的外部缓存系统
+
+
+
+
+
+
+
+
+
+
+
+

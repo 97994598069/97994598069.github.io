@@ -1,0 +1,205 @@
+一般I/O问题,使用iostat查看服务器的整体io使用情况；然后使用pidstat -d来确定是哪个pid进行了大量的I/O操作，然后使用strace -p追踪该程序，确定其系统调用以及写入的文件，，然后使用lsof -p再次确定写入的文件，然后通过调整应用程序的接口日志级别来解决I/O问题；；不过如果应用程序没有动态调整日志级别的功能，则需要修改应用配置并重启应用以便让配置生效
+
+
+案例：
+服务器1：  案例应用
+flask  http://192.168.0.10:10000/   
+
+服务器2：
+curl 客户端
+
+
+终端1中：
+docker run --name=app -p 10000:80 -itd feisky/word-pop 
+
+终端2中：
+curl http://192.168.0.10:10000/ 
+hello world 
+
+curl http://192.168.0.10:1000/popularity/word 
+
+稍等一会儿发现，接口上时间没有响应，为什么呢？
+
+回到终端1中随便输入一个命令例如df 发现也是好久才输出
+$ df 
+Filesystem     1K-blocks    Used Available Use% Mounted on 
+udev             4073376       0   4073376   0% /dev 
+tmpfs             816932    1188    815744   1% /run 
+/dev/sda1       30308240 8713640  21578216  29% / 
+
+通过df可以看到，系统有足够多的磁盘空间，那么为什么响应会变慢呢，需要查看系统资源的使用情况，cpu、内存、磁盘I/O等等
+
+为了避免分析过程中curl请求突然结束，回到终端2中，执行循环：
+while true; do time curl http://192.168.0.10:10000/popularity/word; sleep 1; done 
+并回到终端1查看top输出：
+$ top 
+top - 14:27:02 up 10:30,  1 user,  load average: 1.82, 1.26, 0.76 
+Tasks: 129 total,   1 running,  74 sleeping,   0 stopped,   0 zombie 
+%Cpu0  :  3.5 us,  2.1 sy,  0.0 ni,  0.0 id, 94.4 wa,  0.0 hi,  0.0 si,  0.0 st 
+%Cpu1  :  2.4 us,  0.7 sy,  0.0 ni, 70.4 id, 26.5 wa,  0.0 hi,  0.0 si,  0.0 st 
+KiB Mem :  8169300 total,  3323248 free,   436748 used,  4409304 buff/cache 
+KiB Swap:        0 total,        0 free,        0 used.  7412556 avail Mem 
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND 
+12280 root      20   0  103304  28824   7276 S  14.0  0.4   0:08.77 python 
+   16 root      20   0       0      0      0 S   0.3  0.0   0:09.22 ksoftirqd/1 
+1549 root      20   0  236712  24480   9864 S   0.3  0.3   3:31.38 python3 
+可以看到，cpu的iowait都非常高。内存剩余很充足；python进程的cpu稍微有点高，但是并没有称为瓶颈，很可能与iowait的升高有关
+
+
+回到终端1中查看io的性能指标
+iostat
+-d 选项是指显示出I/O的性能指标
+-x 选项是指显示出扩展统计信息（即显示所有I/O指标）
+
+$ iostat -d -x 1
+Device            r/s     w/s     rkB/s     wkB/s   rrqm/s   wrqm/s  %rrqm  %wrqm r_await w_await aqu-sz rareq-sz wareq-sz  svctm  %util 
+loop0            0.00    0.00      0.00      0.00     0.00     0.00   0.00   0.00    0.00    0.00   0.00     0.00     0.00   0.00   0.00 
+sda              0.00   71.00      0.00  32912.00     0.00     0.00   0.00   0.00    0.00 18118.31 241.89     0.00   463.55  13.86  98.40 
+
+输出分析：
+sda的I/O使用率已经达到了98%，接近饱和了，而且，写请求的响应时间高达18s,每秒的写数据是32MB,显然写磁盘碰到了瓶颈
+
+观察进程的I/O情况：
+$ pidstat -d 1 
+14:39:14      UID       PID   kB_rd/s   kB_wr/s kB_ccwr/s iodelay  Command 
+14:39:15        0     12280      0.00 335716.00      0.00       0  python 
+
+
+追踪这个pid的系统调用：
+$ strace -p 12280 
+strace: Process 12280 attached 
+select(0, NULL, NULL, NULL, {tv_sec=0, tv_usec=567708}) = 0 (Timeout) 
+stat("/usr/local/lib/python3.7/importlib/_bootstrap.py", {st_mode=S_IFREG|0644, st_size=39278, ...}) = 0 
+stat("/usr/local/lib/python3.7/importlib/_bootstrap.py", {st_mode=S_IFREG|0644, st_size=39278, ...}) = 0 
+从输出可以看到大量的stat系统调用，并且大都为python文件，但是，请注意，这里没有任何的write系统调用
+
+由于strace的输出比较多，可以使用grep来过滤下：
+$ strace -p 12280 2>&1 | grep write 
+但是没有任何的输出
+
+综合分析：top和iostat命令输出性能问题是存在的，但是并没有找到write的系统调用；；明明应该有相应的write的系统调用，但是现在的工具却找不到痕迹；
+
+使用非常规工具排查：filetop;是bcc软件包的一部分，基于linux内核的eBPF机制，主要跟踪内核中文件的读写情况，并输出线程ID(TID)、读写大小、读写类型以及文件名称
+# 切换到工具目录 
+$ cd /usr/share/bcc/tools 
+
+# -C 选项表示输出新内容时不清空屏幕 
+$ ./filetop -C 
+
+TID    COMM             READS  WRITES R_Kb    W_Kb    T FILE 
+514    python           0      1      0       2832    R 669.txt 
+514    python           0      1      0       2490    R 667.txt 
+514    python           0      1      0       2685    R 671.txt 
+514    python           0      1      0       2392    R 670.txt 
+514    python           0      1      0       2050    R 672.txt 
+
+...
+
+TID    COMM             READS  WRITES R_Kb    W_Kb    T FILE 
+514    python           2      0      5957    0       R 651.txt 
+514    python           2      0      5371    0       R 112.txt 
+514    python           2      0      4785    0       R 861.txt 
+514    python           2      0      4736    0       R 213.txt 
+514    python           2      0      4443    0       R 45.txt 
+
+可以看到filetop输出了8列内容，分别是线程ID、线程命令行、读写次数、读写大小(单位KB)、文件类型以及读写文件名称
+多观察一会儿发现每隔一段时间，线程号为514的python应用就会写入大量的txt文件，再大量地读
+
+线程514属于哪个进程呢？
+$ ps -efT | grep 514
+root     12280  514 14626 33 14:47 pts/0    00:00:05 /usr/local/bin/python /app.py 
+输出可以看到是属于12280这个进程号的线程   但是filetop只给出了文件名称，却没有文件路径
+
+$ opensnoop 
+12280  python              6   0 /tmp/9046db9e-fe25-11e8-b13f-0242ac110002/650.txt 
+12280  python              6   0 /tmp/9046db9e-fe25-11e8-b13f-0242ac110002/651.txt 
+12280  python              6   0 /tmp/9046db9e-fe25-11e8-b13f-0242ac110002/652.txt 
+这次通过opensoop的输出。可以看到，这些txt路径位于/tmp目录下。还可以看到它打开的文件数量，按照数字编号，从0.txt依次增大到999.txt。远对于filetop看到的数量
+
+综合filetop和opensnoop可以进一步分析，可以猜测案例应用在写入1000个txt文件后，又把这些内容读到内存中进行处理，检查下这个目录中是不是真的有1000个文件
+$ ls /tmp/9046db9e-fe25-11e8-b13f-0242ac110002 | wc -l 
+ls: cannot access '/tmp/9046db9e-fe25-11e8-b13f-0242ac110002': No such file or directory 
+0 
+操作后发现目录居然不存在了，回到opensnoop再观察一会儿：
+$ opensnoop 
+12280  python              6   0 /tmp/defee970-fe25-11e8-b13f-0242ac110002/261.txt 
+12280  python              6   0 /tmp/defee970-fe25-11e8-b13f-0242ac110002/840.txt 
+12280  python              6   0 /tmp/defee970-fe25-11e8-b13f-0242ac110002/136.txt 
+这里的路径已经变成了另一个目录，这说明，这些目录都是应用程序动态生成的，用完就删了
+
+综合前面的所有分析可以判断：案例应用会动态生成一批文件，用来临时存储数据，用完就会删除它们。但是不幸的是，正是这些文件读写，引发了I/O的性能瓶颈，导致整个处理过程非常慢
+
+这是一种常见的利用磁盘空间处理大量数据的技巧，不过本案例中的I/O请求太重，导致磁盘的I/O利用率过高；要解决这一点其实就是算法优化问题了。比如说在内存充足时，就可以把所有数据都放到内存中处理，这样就能避免I/O的性能问题
+
+
+总结：
+使用top、iostat分析了系统的cpu和磁盘I/O使用情况，我们发现系统出现了磁盘的I/O瓶颈，而且正是案例应用导致的；接着在使用strace却没有任何发现后，又使用filetop和opensnoop工具分析它对系统调用write()和open()的追踪结果，发现案例应用正在读写大量的临时文件，因此产生了性能瓶颈，找出瓶颈后，用把文件数据都放在内存的办法，解决了磁盘I/O的性能问题
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

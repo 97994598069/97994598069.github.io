@@ -1,0 +1,80 @@
+在终端运行top命令。观察cpu和内存的使用情况
+# 按 1 切换到每个 CPU 的使用情况 
+$ top 
+top - 14:43:43 up 1 day,  1:39,  2 users,  load average: 2.48, 1.09, 0.63 
+Tasks: 130 total,   2 running,  74 sleeping,   0 stopped,   0 zombie 
+%Cpu0  :  0.7 us,  6.0 sy,  0.0 ni,  0.7 id, 92.7 wa,  0.0 hi,  0.0 si,  0.0 st 
+%Cpu1  :  0.0 us,  0.3 sy,  0.0 ni, 92.3 id,  7.3 wa,  0.0 hi,  0.0 si,  0.0 st 
+KiB Mem :  8169308 total,   747684 free,   741336 used,  6680288 buff/cache 
+KiB Swap:        0 total,        0 free,        0 used.  7113124 avail Mem 
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND 
+18940 root      20   0  656108 355740   5236 R   6.3  4.4   0:12.56 python 
+1312 root      20   0  236532  24116   9648 S   0.3  0.3   9:29.80 python3 
+
+上述可以看到:
+1.cpu0的使用率特别高，它的系统cpu使用率（sys%）为6%，而iostat超过了90%。这说明cpu0上，可能正在运行I/O密集型的进程。
+2.python进程的cpu使用率已经达到了6%，而其余进程的cpu使用率都比较低，不超过3%。看起来python是个可疑进程。记下其PID 18940
+3.总内存是8G，剩余内存为730MB，而Buffer/Cache占用内存高达6GB之多，这说明内存主要被缓存占用。虽然大部分缓存可回收，但是还是需要了解下缓存的去处，确认缓存使用都是合理的
+
+至此可以判断cpu使用率中的iowait是一个潜在瓶颈，而内存部分的缓存占比较大，那磁盘I/O又是怎么样的呢
+# -d 表示显示 I/O 性能指标，-x 表示显示扩展统计（即所有 I/O 指标） 
+$ iostat -x -d 1 
+Device            r/s     w/s     rkB/s     wkB/s   rrqm/s   wrqm/s  %rrqm  %wrqm r_await w_await aqu-sz rareq-sz wareq-sz  svctm  %util 
+loop0            0.00    0.00      0.00      0.00     0.00     0.00   0.00   0.00    0.00    0.00   0.00     0.00     0.00   0.00   0.00 
+sdb              0.00    0.00      0.00      0.00     0.00     0.00   0.00   0.00    0.00    0.00   0.00     0.00     0.00   0.00   0.00 
+sda              0.00   64.00      0.00  32768.00     0.00     0.00   0.00   0.00    0.00 7270.44 1102.18     0.00   512.00  15.50  99.20
+1.上述可以看出，磁盘sda的I/O使用率已经高达99%，很可能已经接近I/O饱和
+2.每秒写磁盘请求数是64，写大小是32MB，写请求的响应时间为7秒，而请求队列长度则达到了1100
+
+至此可以验证sda磁盘已经遇到了严重的性能瓶颈，也就可以理解，为什么前面看到的iowait高达90%，这正是磁盘sda的I/O瓶颈导致的
+
+查找根源：
+$ pidstat -d 1 
+
+15:08:35      UID       PID   kB_rd/s   kB_wr/s kB_ccwr/s iodelay  Command 
+15:08:36        0     18940      0.00  45816.00      0.00      96  python 
+
+15:08:36      UID       PID   kB_rd/s   kB_wr/s kB_ccwr/s iodelay  Command 
+15:08:37        0       354      0.00      0.00      0.00     350  jbd2/sda1-8 
+15:08:37        0     18940      0.00  46000.00      0.00      96  python 
+15:08:37        0     20065      0.00      0.00      0.00    1503  kworker/u4:2 
+从输出可以发现，只有python进程的写比较大，而且每秒写的数据超过45MB，比上面iostat发现的32MB的结果还要大，很明显是python进程导致了I/O瓶颈
+iodelay项，虽然只有python在大量的写数据，但是kworker和jbd2两个进程的延迟，居然比python还大很多（由python大量的写操作造成）
+
+
+追踪python进程：
+$ strace -p 18940 
+strace: Process 18940 attached 
+...
+mmap(NULL, 314576896, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7f0f7aee9000 
+mmap(NULL, 314576896, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7f0f682e8000 
+write(3, "2018-12-05 15:23:01,709 - __main"..., 314572844 
+) = 314572844 
+munmap(0x7f0f682e8000, 314576896)       = 0 
+write(3, "\n", 1)                       = 1 
+munmap(0x7f0f7aee9000, 314576896)       = 0 
+close(3)                                = 0 
+stat("/tmp/logtest.txt.1", {st_mode=S_IFREG|0644, st_size=943718535, ...}) = 0 
+
+从write()系统调用上可以看到，进程向文件描述符编号为3的文件中，写入了300MB的数据。看来，它应该是我们要找的文件。不过write()调用中只能看到文件的描述符编号，文件名和路径还是未知的
+再观察后面的stat()调用，可以看到，它正在获取/tmp/logtest.txt.1的状态。这种"点+数字格式"（/tmp/logtest.txt.1）的文件，在日志回滚中非常常见。可以第一个日志回滚文件，而正在写的日志文件路径则是/tmp/logtest.txt 
+
+验证：
+$ lsof -p 18940 
+COMMAND   PID USER   FD   TYPE DEVICE  SIZE/OFF    NODE NAME 
+python  18940 root  cwd    DIR   0,50      4096 1549389 / 
+python  18940 root  rtd    DIR   0,50      4096 1549389 / 
+… 
+python  18940 root    2u   CHR  136,0       0t0       3 /dev/pts/0 
+python  18940 root    3w   REG    8,1 117944320     303 /tmp/logtest.txt 
+FD表示文件描述符号，TYPE表示文件类型，NAME表示文件路径
+最后一行可以看到这个进程打开了/tmp/logtest.txt.并且它的文件描述符是3号，而3后面的w表示写的方式打开；这和刚才strace的结果一致；看来这就是问题根源，进程18940以每次300MB的速度，在疯狂写日志，而日志文件路径是/tmp/logtest.txt
+
+
+
+
+
+
+
+
