@@ -1,0 +1,153 @@
+tcpdump和wireshark都是常用的网络抓包和分析工具，更是分析网络性能必不可少的利器
+1) tcpdump仅支持命令行格式使用，常用在服务器中抓取和分析网络包
+2) wireshark除了可以抓包外，还提供了强大的图形界面和汇总分析工具，在分析复杂的网络情景时，尤为简单和实用
+
+因而一般做法为，先用tcpdump抓包，后用wireshark分析，也是一种常用的方法
+
+# Ubuntu
+apt-get install tcpdump wireshark
+
+# CentOS
+yum install -y tcpdump wireshark
+
+由于wireshark的图形界面，并不能通过SSH使用，所以推荐windows安装使用https://www.wireshark.org/
+
+
+$ tcpdump -nn udp port 53 or host 35.190.27.188
+当然也可以不加任何参数来抓包，但那样的话，就可能抓取到很多不相干的包，由于我们已经执行过ping命令，知道了geekbang.org的IP地址，所以进行了过滤
+参数介绍:
+1) -nn,表示不解析抓包中的域名(即不反向解析)、协议以及端口号
+2) udp port 53,表示只显示udp协议的端口号(包括源端口和目的端口)为53的包
+3) host 35.190.27.188表示只显示IP地址(包括源地址和目的地址)为35.190.27.188的包
+4) 这两个过滤条件中间的“or”,表示或的关系，也就是说，只要满足上面两个条件中的人一个就显示出来
+
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 262144 bytes
+14:02:31.100564 IP 172.16.3.4.56669 > 114.114.114.114.53: 36909+ A? geektime.org. (30)
+14:02:31.507699 IP 114.114.114.114.53 > 172.16.3.4.56669: 36909 1/0/0 A 35.190.27.188 (46)
+14:02:31.508164 IP 172.16.3.4 > 35.190.27.188: ICMP echo request, id 4356, seq 1, length 64
+14:02:31.539667 IP 35.190.27.188 > 172.16.3.4: ICMP echo reply, id 4356, seq 1, length 64
+14:02:31.539995 IP 172.16.3.4.60254 > 114.114.114.114.53: 49932+ PTR? 188.27.190.35.in-addr.arpa. (44)
+14:02:36.545104 IP 172.16.3.4.60254 > 114.114.114.114.53: 49932+ PTR? 188.27.190.35.in-addr.arpa. (44)
+14:02:41.551284 IP 172.16.3.4 > 35.190.27.188: ICMP echo request, id 4356, seq 2, length 64
+14:02:41.582363 IP 35.190.27.188 > 172.16.3.4: ICMP echo reply, id 4356, seq 2, length 64
+14:02:42.552506 IP 172.16.3.4 > 35.190.27.188: ICMP echo request, id 4356, seq 3, length 64
+14:02:42.583646 IP 35.190.27.188 > 172.16.3.4: ICMP echo reply, id 4356, seq 3, length 64
+这次输出中，前两行，表示tcpdump的选项以及接口的基本信息；从第三行开始，就是抓取到的网络包的输出。这些输出的格式，都是时间戳 协议 源地址 源端口 > 目的地址 目的端口 网络包详细信息（这是基本格式，可以通过选项增加其他字段）
+
+第一条表示，从本地ip发送到114.114.114.114的A记录查询请求，它的报文格式记录在RFC1035中;输出中:
+1) 36909+ 表示查询标识值，它也会出现在响应中，加号表示启用递归查询
+2) A？表示查询A记录
+3) geektime.org表示待查询的域名
+4) 30表示报文长度
+接下来的一条则是从114.114.114.114发送回来的DNS响应--域名geektime.org的A记录值为35.190.27.188
+
+第三条和第四条，是ICMP echo request和ICMP echo reply 响应包的时间戳14:02:31.539667,减去请求包的时间戳14:02:31.508164就可以得到，这次ICMP所用时间为30ms，看起来没有问题
+
+但是随后的两条反向地址解析PTR请求，就比较可疑了。因为我们只看到请求包，却没有应答包。仔细观察它们的时间，你会发现，这两条记录都是发出后5s才出现下一个网络包，两条PTR记录就消耗了10s
+
+再往下看，最后的四个包，则是两次正常的ICMP请求和响应，根据时间戳计算其延迟，也是30ms；正常
+
+知道问题后，解决起来就简单了，只要机制PTR就可以。还是老路子，执行man ping命令，查询使用手册，就可以找出相应的方法，即加上-n选项禁止名称解析。比如，我们可以在终端中执行如下命令:
+$ ping -n -c3 geektime.org
+PING geektime.org (35.190.27.188) 56(84) bytes of data.
+64 bytes from 35.190.27.188: icmp_seq=1 ttl=43 time=33.5 ms
+64 bytes from 35.190.27.188: icmp_seq=2 ttl=43 time=39.0 ms
+64 bytes from 35.190.27.188: icmp_seq=3 ttl=43 time=32.8 ms
+
+--- geektime.org ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2002ms
+rtt min/avg/max/mdev = 32.879/35.160/39.030/2.755 ms
+
+可以发现，现在只需要2s就可以结束，比刚才的11s可是快多了
+
+tcpdump使用--选项类：
+-i     tcpdump -i eth0    指定网络接口，默认是0号接口(如eth0),any表示所有接口
+-nn    tcpdump -nn        不解析IP地址和端口号的名称
+-c     tcpdump -c5        限制要抓取网络包的个数
+-A     tcpdump -A         以ASCII格式显示网络包内容(不指定时只显示头部信息)
+-w     tcpdump -w file.pcap   保存到文件中，文件名通常以.pcap为后缀
+-e     tcpdump -e         输出链路层的头部信息
+
+
+tcpdump使用---过滤表达式类
+host、src host、dst host        tcpdump -nn host 192.168.2.144    主机过滤
+net、 src net、dst net          tcpdumpnet -nn 192.168.0.0        网络过滤
+port、portrange、src port、dst port  tcpdump -nn dst port 80      端口过滤
+ip、ip6、arp、tcp、udp、icmp      tcpdump -nn tcp                 协议过滤
+and or not                       tcpdump -nn icmp or udp          逻辑表达式
+tcp[tcpflags]                    tcpdump -nn "tcp[tcpflags]&tcp-syn != 0"   特定状态的TCP包
+
+
+再次强调tcpdump的输出格式:
+时间戳  协议  源地址  源端口  > 目的地址  目的端口  网络包详细信息 
+
+
+
+
+
+wireshark抓包： 
+打开文件格式 .pcap  
+例如:
+tcpdump -nn udp port 53 or host 35.190.27.188 -w ping.pcap
+接着，把它拷贝到安装有wireshark的机器中，然后使用wireshark打开它
+
+wireshark不仅以更规整的格式，展示了各个网络包的头部信息；还用了不同的颜色来展示DNS和ICMP这两种不同的协议。你也可以一眼看出，中间的两条PTR查询并没有响应包
+
+在网络包列表中选择一个网络包后，在其下方的网络包详情中，还可以看到这个包在协议栈各层的详细信息
+比如：
+IP层(Internet Protocol)的源地址和目的地址、传输层的UDP协议(Uder Datagram Protocol)、应用层的DNS协议(Domain Name System)的概信息;继续点击每层左侧的箭头，就可以看到该成协议的所有信息。比如点击DNS后，就可以看到Transaction、Flags、Queries等DNS协议各个字段的数值以及含义
+
+
+示例:
+访问:http://example.com/   进入终端1，查询example.com的IP，然后执行tcpdump命令，过滤得到的IP地址，并将结果保存到web.pcap中
+$ dig +short example.com
+93.184.216.34
+$ tcpdump -nn host 93.184.216.34 -w web.pcap
+实际上可以在host表达式中，直接使用域名:tcpdump -nn host example.com -w web.pcap 
+
+终端2中，执行curl命令
+$ curl http://example.com
+
+然后终端1中停止tcpdump抓包，然后用wireshark打开抓取的内容
+
+由于HTTP基于TCP，所以你最先看到的三个包，分别是TCP三次握手的包。接下来，中间的才是HTTP请求和响应包，而最后的三个包，则是TCP链接断开时的三次挥手包
+(从带单栏中，点击statistics-->Flow Graph,然后，在弹出的界面中的Flow type选择TCP Flows,可以更清晰的看到，整个过程中TCP流的执行过程)
+
+不过通过分析可以发现，实际挥手过程只有三个包，而不是四个；其实，之所以有三个包，是因为服务器端收到的客户端的FIN后，服务器端同时也要关闭连接，这样就可以把ACK和FIN合并到一起发送，节省了一个包，变成了"三次挥手"
+
+
+
+
+当发现针对相同的网络服务，使用IP地址快而换成域名却慢很多时，就要想到，有可能是DNS在捣鬼。DNS的解析，不仅包括从域名解析出IP地址的A记录请求，还包括性能工具帮你，"聪明"地从IP地址反查域名的PTR请求
+
+实际上，根据IP地址反查域名、根据端口号反查协议名称，是很多网络工具默认的行为，而这往往会导致性能工具的工作缓慢。所以，通常，网络性能工具都会提供一个选项(比如-n或者-nn)来禁止名称解析
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

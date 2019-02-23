@@ -1,0 +1,226 @@
+网络基准测试：
+如何通过性能测试来确定这些指标的基准值
+首先需要考虑一个问题，Linux网络基于TCP/IP协议，而不同协议层的行为显然不同，那么测试之前需要弄清楚你的应用程序基于协议的哪一层？
+1) 基于HTTP或者HTTPS的web应用程序，显然数据应用层，需要我们测试
+2) 而对大多数游戏服务器来说，为了支持更大的同时在线人数，通常会基于TCP或者UDP,与客户端进行交互，这时就需要我们测试TCP/UDP的性能
+3) 当然，还有一些场景，是把Linux作为一个软交换机或者路由器来用的，这种情况下就更需要关注网络包的处理能力(即PPS)，重点关注网络层的转发性能
+
+如下测试均需要两台linux服务器，一台可以当作测试的目标机器，而另一台，则可以当作正在运行网络服务的客户端，用来运行测试工具
+
+各协议层的性能测试
+1.转发能力
+网络接口层和网络层，主要负责网络包的封装、寻址、路由以及发送和接收。在这两个网络协议层，每秒可处理的网络包数PPS，就是最重要的性能指标。特别是64B小包的处理能力，值得特别关注
+工具:
+hping3：可以作为一个SYN攻击的工具来使用，更多的用途是作为一个测试网络包处理能力的性能工具
+pktgen；Linux系统中并不能直接找到pktgen命令。因为pktgen作为一个内核线程来运行，需要加载pktgen内核模块后，再通过/proc文件系统来交互。如下就是pktgen启动的两个内核线程和/proc文件系统的交互文件:
+$ modprobe pktgen
+$ ps -ef | grep pktgen | grep -v grep
+root     26384     2  0 06:17 ?        00:00:00 [kpktgend_0]
+root     26385     2  0 06:17 ?        00:00:00 [kpktgend_1]
+$ ls /proc/net/pktgen/
+kpktgend_0  kpktgend_1  pgctrl
+
+pktgen在每个CPU上启动一个内核线程，并可以通过/proc/net/pktgen下面的同名文件，跟这些线程交互；而pgctrl则主要用来控制这次测试的开启和停止
+备注:如果modprobe命令执行失败，说明你的额内核没有配置CONFIG_NET_PKTGEN选项。这就需要你配置pktgen内核模块(即CONFIG_NET_PKTGEN)后，重新编译内核，才可以使用；在使用pktgen测试网络性能时，需要先给每个内核线程kpktgend_X以及测试网卡，配置pktgen选项，然后再通过pgctrl启动测试
+
+案例如下：
+目标机器：
+IP:192.168.0.30 MAC:11:11:11:11
+
+发包机器: eth0
+
+# 定义一个工具函数，方便后面配置各种测试选项
+function pgset() {
+    local result
+    echo $1 > $PGDEV
+
+    result=`cat $PGDEV | fgrep "Result: OK:"`
+    if [ "$result" = "" ]; then
+         cat $PGDEV | fgrep Result:
+    fi
+}
+
+# 为 0 号线程绑定 eth0 网卡
+PGDEV=/proc/net/pktgen/kpktgend_0
+pgset "rem_device_all"   # 清空网卡绑定
+pgset "add_device eth0"  # 添加 eth0 网卡
+
+# 配置 eth0 网卡的测试选项
+PGDEV=/proc/net/pktgen/eth0
+pgset "count 1000000"    # 总发包数量
+pgset "delay 5000"       # 不同包之间的发送延迟 (单位纳秒)
+pgset "clone_skb 0"      # SKB 包复制
+pgset "pkt_size 64"      # 网络包大小
+pgset "dst 192.168.0.30" # 目的 IP
+pgset "dst_mac 11:11:11:11:11:11"  # 目的 MAC
+
+# 启动测试
+PGDEV=/proc/net/pktgen/pgctrl
+pgset "start"
+
+
+稍等一会儿，测试完成后，结果可以从/proc文件系统中获取，通过下面代码段中的内容，可以查看刚才的测试报告:
+$ cat /proc/net/pktgen/eth0
+Params: count 1000000  min_pkt_size: 64  max_pkt_size: 64
+     frags: 0  delay: 0  clone_skb: 0  ifname: eth0
+     flows: 0 flowlen: 0
+...
+Current:
+     pkts-sofar: 1000000  errors: 0
+     started: 1534853256071us  stopped: 1534861576098us idle: 70673us
+...
+Result: OK: 8320027(c8249354+d70673) usec, 1000000 (64byte,0frags)
+  120191pps 61Mb/sec (61537792bps) errors: 0
+
+  
+可以看到，测试报告主要分为三个部分:
+1.Params是测试选项
+2.current是测试进度，其中，packts so far(pkts-sofar)表示已经发送了100万个包，也就表明测试已完成
+3.result是测试结果，包含测试所用时间、网络包数量和分片、PPS、吞吐量以及错误数
+
+根据上面的结果，我们发现，PPS为12万，吞吐量为61Mb/s，没有发生错误。那么12万的PPS好不好呢？
+作为对比，可以计算下千兆交换机的PPS。交换机可以达到线速(满负载时，无差错转发)，它的PPS就是1000Mbit除以以太网帧的大小，即1000Mps/((64+20)*8bit)=1.5Mpps(其中20B为以太网帧的头部大小)
+可以发现及时是千兆交换机的PPS，也可以达到150万PPS，比我们测试得到的12万大多了。所以。看到这个数值你并不用担心，现在的多核服务器和万兆网卡已经很普遍了，稍做优化就可以达到数百万的PPS。而且，如果用上了DPDK或XDP。还能达到千万数量级
+
+
+
+
+TCP/UDP性能
+常用工具:iperf和netperf;;特别在云计算时代，拿到一批虚拟机，首先要做的就是用iperf测试一下网络性能是否符合预期
+
+iperf和netperf都是常用的网络性能测试工具，测试TCP和UDP的吞吐量。他们都是以客户端和服务器通信的方式，测试一段时间内的平均吞吐量
+
+iperf的最新版本为iperf3:
+# Ubuntu
+apt-get install iperf3
+# CentOS
+yum install iperf3
+
+然后在目标机器上启动iperf服务端:
+# -s 表示启动服务端，-i 表示汇报间隔，-p 表示监听端口
+$ iperf3 -s -i 1 -p 10000
+
+
+接着，在另一台机器上运行iperf客户端，运行测试:
+# -c 表示启动客户端，192.168.0.30 为目标服务器的 IP
+# -b 表示目标带宽 (单位是 bits/s)
+# -t 表示测试时间
+# -P 表示并发数，-p 表示目标服务器监听端口
+$ iperf3 -c 192.168.0.30 -b 1G -t 15 -P 2 -p 10000
+
+
+稍等一会儿(15秒)测试结束后，回到目标服务器，查看iperf的报告
+
+[ ID] Interval           Transfer     Bandwidth
+...
+[SUM]   0.00-15.04  sec  0.00 Bytes  0.00 bits/sec                  sender
+[SUM]   0.00-15.04  sec  1.51 GBytes   860 Mbits/sec                  receiver
+最后的SUM行就是测试的汇总结果，包括测试时间、数据传输量以及带宽等。按照发送和接收，这一部分又分为了Sender和receiver两行
+
+从测试结果可以看到，这台机器TCP接收的带宽(吞吐量)为860Mb/s,跟目标的1Gb/s相比还是有些差距的
+
+
+
+
+HTTP性能：
+从传输层再往上，到了应用层。有的应用程序，会直接基于TCP或UDP构建服务。当然，也有大量的应用，基于应用层的协议来构建服务。当然，也有大量的应用，基于应用层的协议来构建服务，HTTP就是最常用的一个应用层协议。比如，常用的apache、nginx等各种web服务，都是基于HTTP
+
+要测试HTTP的性能，也有大量的工具可以使用，比如ab、webbench等，都是常用的HTTP压力测试工具。其中，ab是apache自带的HTTP压测工具，主要测试HTTP服务的每秒请求数、请求延迟、吞吐量以及请求延迟的分步情况等
+
+安装ab:
+# Ubuntu
+$ apt-get install -y apache2-utils
+# CentOS
+$ yum install -y httpd-tools
+
+# -c 表示并发请求数为 1000，-n 表示总的请求数为 10000
+$ ab -c 1000 -n 10000 http://192.168.0.30/
+...
+Server Software:        nginx/1.15.8
+Server Hostname:        192.168.0.30
+Server Port:            80
+
+...
+
+Requests per second:    1078.54 [#/sec] (mean)
+Time per request:       927.183 [ms] (mean)
+Time per request:       0.927 [ms] (mean, across all concurrent requests)
+Transfer rate:          890.00 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0   27 152.1      1    1038
+Processing:     9  207 843.0     22    9242
+Waiting:        8  207 843.0     22    9242
+Total:         15  233 857.7     23    9268
+
+Percentage of the requests served within a certain time (ms)
+  50%     23
+  66%     24
+  75%     24
+  80%     26
+  90%    274
+  95%   1195
+  98%   2335
+  99%   4663
+ 100%   9268 (longest request)
+可以看到ab的测试结果分为三个部分，分别是请求汇总、连接时间汇总还有请求延迟汇总。
+在请求汇总部分可以看到:
+1) Requests per second 为1074
+2) 每个请求的延迟(Time per second)分为两行，第一行的927ms表示平均延迟，包括了线程运行的调度时间和网络请求响应时间，而下一行的0.927ms则表示实际请求的响应时间
+3) Transfer rate表示吞吐量(BPS)为890KB/s 
+
+连接时间汇总部分，则是分别展示了建立连接、请求、等待以及汇总等的各类时间，包括最小、最大、平均以及中值处理时间
+
+最后的请求延迟汇总部分，则给出了不同时间段内处理请求的百分比，比如，90%的请求，都可以再274ms内完成
+
+
+
+应用负载性能
+当你用iperf或者ab等测试工具，得到TCP、HTTP等的性能数据后，这些数据是否就能表示应用程序的实际性能呢，答案是否定的
+比如你的应用程序基于http协议，为最终用户提供一个web服务。这时，使用ab工具，可以得到某个页面的访问性能，但这个结果跟用户的实际请求，很可能不一致，因为用户请求往往会附带着各种的负载(payload),而这些负载会影响web应用程序内部的处理逻辑，从而影响最终性能
+
+那么为了得到应用程序的实际性能，就要求性能工具本身可以模拟用户的请求负载，而iperf、ab这类工具就无能为力了，幸运的是，我们还可以使用wrk、TCPCopy、jmeter或者LoadRunner等实现这个目标
+
+$ https://github.com/wg/wrk
+$ cd wrk
+$ apt-get install build-essential -y
+$ make
+$ sudo cp wrk /usr/local/bin/
+
+
+# -c 表示并发连接数 1000，-t 表示线程数为 2
+$ wrk -c 1000 -t 2 http://192.168.0.30/
+Running 10s test @ http://192.168.0.30/
+  2 threads and 1000 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    65.83ms  174.06ms   1.99s    95.85%
+    Req/Sec     4.87k   628.73     6.78k    69.00%
+  96954 requests in 10.06s, 78.59MB read
+  Socket errors: connect 0, read 0, write 0, timeout 179
+Requests/sec:   9641.31
+Transfer/sec:      7.82MB
+
+这里使用2个线程、并发1000连接，重新测试了nginx的性能，可以看到，每秒请求数为9641，吞吐量为7.82MB，平均延迟为65ms，比前面ab的压测结果要好很多；这也说明，性能工具本身的性能，对性能测试也是至关重要的，不合适的性能工具并不能准确测出应用程序的最佳性能
+
+
+
+
+性能评估是优化网络性能的前提，只有在你发现网络性能瓶颈时，才需要进行网络性能优化。根据TCP/IP协议栈的原理，不同协议层关注的性能重点不完全一样，也就对应不同的性能测试方法
+比如：
+1) 在应用层，你可以使用wrk、Jmeter等模拟用户的负载，测试应用程序的每秒请求数、处理延迟、错误数等
+2) 而在传输层，则可以使用iperf等工具，测试TCP的吞吐情况
+3) 再向下，还可以用linux内核自带的pktgen，测试服务器的PPS
+
+由于底层协议是高层协议的基础。所以一般情况下，需要从上到下，对每个协议层进行性能测试，然后根据性能测试的结果，结合Linux网络协议的原理，找出导致性能瓶颈的根源，进而优化网络性能
+
+
+
+
+
+
+
+
+
+
+

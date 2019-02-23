@@ -1,0 +1,175 @@
+DDoS简介:
+DDoS是DoS(Denail of service),即拒绝服务攻击，指利用大量的合理请求，来占用过多的目标资源，从而使目标服务无法响应正常请求
+DDos(Distributed Denial of service)则是在DoS的基础上，采用分布式结构，利用多台主机同时攻击目标主机。这样，即使目标服务部署了网络防御设备，面对大量网络请求时，还是无力应对
+
+从攻击原理上来看，DDoS可以分为如下几种类型:
+1) 耗尽带宽，无论是服务器还是路由器、交换机等网络设备，带宽都有固定的上限。宽带耗尽后，就会发生网络拥堵，从而无法传输其他正常的网络报文
+2) 耗尽操作系统的资源。网络服务的正常运行，都需要一定的系统资源，像CPU、内存等物理资源，以及连接表等软件资源。一旦资源耗尽，系统就不能处理其他正常的网络连接
+3) 消耗应用程序的运行资源。应用程序的运行，通常还需要跟其他的资源或系统交互，如果应用程序一直忙于处理无效请求，也会导致正常请求的处理变慢，甚至得不到响应
+
+
+案例:
+终端1中启动nginx应用:
+# 运行 Nginx 服务并对外开放 80 端口
+# --network=host 表示使用主机网络（这是为了方便后面排查问题）
+$ docker run -itd --name=nginx --network=host nginx
+
+
+在终端2和终端3中，使用curl访问nginx监听的端口，确认nginx正常启动，假设192.168.0.30是nginx所在虚拟机的IP地址，那么运行curl命令后，可以看到如下输出:
+# -w 表示只输出 HTTP 状态码及总时间，-o 表示将响应重定向到 /dev/null
+$ curl -s -w 'Http code: %{http_code}\nTotal time:%{time_total}s\n' -o /dev/null http://192.168.0.30/
+...
+Http code: 200
+Total time:0.002s
+
+此时可以看出，访问正常，访问nginx所需时间只有2ms(0.002s)
+
+
+终端2中模拟DoS攻击:
+# -S 参数表示设置 TCP 协议的 SYN（同步序列号），-p 表示目的端口为 80
+# -i u10 表示每隔 10 微秒发送一个网络帧
+$ hping3 -S -p 80 -i u10 192.168.0.30
+
+现在回到终端1会发现，不管执行什么命令都慢了很多，不过在实践中需注意:
+1) 如果你的现象不那么明显，那么请尝试把参数里面的u10调小(比如调成u1),或者加上-flood选项
+2) 如果你的终端1完全没有响应了，那么请适当调大u10(比如调成u30),否则后面就不能通过SSH操作VM1
+
+然后在终端3中模拟正常客户端的连接:
+# --connect-timeout 表示连接超时时间
+$ curl -w 'Http code: %{http_code}\nTotal time:%{time_total}s\n' -o /dev/null --connect-timeout 10 http://192.168.0.30
+...
+Http code: 000
+Total time:10.001s
+curl: (28) Connection timed out after 10000 milliseconds
+
+可以发现：在终端3中，正常客户端的连接超时了，并没有收到nginx服务的响应
+
+回到终端1中排查；检查网络状况。可以使用sar来管擦PPS(每秒收发的报文数)。还可以管擦BPS(每秒收发的字节数)
+$ sar -n DEV 1
+08:55:49        IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s   %ifutil
+08:55:50      docker0      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+08:55:50         eth0  22274.00    629.00   1174.64     37.78      0.00      0.00      0.00      0.02
+08:55:50           lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+从输出可以看到网络连接的PPS已经达到了20000多，但是BPS却只有1174KB，这样每个包的大小就只有54B(1174*1024/22274=54)
+这个明显是小包了，
+
+终端1中抓包查看
+# -i eth0 只抓取 eth0 网卡，-n 不解析协议名和主机名
+# tcp port 80 表示只抓取 tcp 协议并且端口号为 80 的网络帧
+$ tcpdump -i eth0 -n tcp port 80
+09:15:48.287047 IP 192.168.0.2.27095 > 192.168.0.30: Flags [S], seq 1288268370, win 512, length 0
+09:15:48.287050 IP 192.168.0.2.27131 > 192.168.0.30: Flags [S], seq 2084255254, win 512, length 0
+09:15:48.287052 IP 192.168.0.2.27116 > 192.168.0.30: Flags [S], seq 677393791, win 512, length 0
+09:15:48.287055 IP 192.168.0.2.27141 > 192.168.0.30: Flags [S], seq 1276451587, win 512, length 0
+09:15:48.287068 IP 192.168.0.2.27154 > 192.168.0.30: Flags [S], seq 1851495339, win 512, length 0
+...
+从输出中可以看到，Flags[S]表示这是一个SYN包，大量的SYN包表明，这是一个SYN Flood攻击。
+实际上SYN Flood正是互联网中最经典的DDoS攻击方式。它的原理:
+1) 即客户端构造大量的SYN包，请求建立TCP链接
+2) 而服务器收到包后，会向源IP发送SYN+ACK报文，并等待三次握手的最后一次ACK报文，直到超时
+
+这种等待状态TCP链接，通常也被称为半开连接。由于连接表的大小有限，大量的半开连接就会导致连接表迅速占满，从而无法建立新的TCP连接
+
+查看TCP半开连接的方法，关键在于SYN_RECEIVED状态的连接。可以使用netstat来查看所有的连接状态，不过要注意SYN_REVEIVED的状态，通常被缩写为SYN_RECV
+# -n 表示不解析名字，-p 表示显示连接所属进程
+$ netstat -n -p | grep SYN_REC
+tcp        0      0 192.168.0.30:80          192.168.0.2:12503      SYN_RECV    -
+tcp        0      0 192.168.0.30:80          192.168.0.2:13502      SYN_RECV    -
+tcp        0      0 192.168.0.30:80          192.168.0.2:15256      SYN_RECV    -
+tcp        0      0 192.168.0.30:80          192.168.0.2:18117      SYN_RECV    -
+...
+从结果中可以发现SYN_RECV状态的连接，并且源IP地址为192.168.0.2
+
+$ netstat -n -p | grep SYN_REC | wc -l
+193
+
+找出源IP后，要解决SYN攻击的问题，只要丢掉相关的包就可以。这时，iptables可以帮你完成这个任务，可以在终端1中执行iptables命令:
+$ iptables -I INPUT -s 192.168.0.2 -p tcp -j REJECT
+
+然后回到终端3中，再次执行curl命令，查看正常用户访问nginx的情况:
+$ curl -w 'Http code: %{http_code}\nTotal time:%{time_total}s\n' -o /dev/null --connect-timeout 10 http://192.168.0.30
+Http code: 200
+Total time:1.572171s
+从输出可以看出，可以正常访问nginx了，但是响应比较慢，从原来的2ms变成了现在的1.5s
+
+不过，SYN Flood攻击中的源IP一般都不是固定的，比如你可以在hping3命令中，加入--rand-source选项，来随机化源IP。不过，这时，刚才的方法就不适用了；可以如下:
+# 限制 syn 并发数为每秒 1 次
+$ iptables -A INPUT -p tcp --syn -m limit --limit 1/s -j ACCEPT
+
+# 限制单个 IP 在 60 秒新建立的连接数为 10
+$ iptables -I INPUT -p tcp --dport 80 --syn -m recent --name SYN_FLOOD --update --seconds 60 --hitcount 10 -j REJECT
+
+
+如果是多台机器同时发送SYN Flood,这种方法可能就直接无效了。因为你很可能无法SSH登陆(SSH也是基于TCP的)到机器上。
+所以需要事先对系统做一下TCP优化:
+1)SYN Flood会导致SYN_RECV状态的链接急剧增大。在上面netstat命令中，可以看到190多个处于半开状态的连接;
+不过半开状态连接是有限制的，如下命令可以查看，默认的半连接容量只有256个
+$ sysctl net.ipv4.tcp_max_syn_backlog
+net.ipv4.tcp_max_syn_backlog = 256
+
+换句话说，SYN包数再稍微增大一些，就不能SSH登陆机器了，所以，还应该增大半连接的容量，比如用下面命令将其增大为1024
+$ sysctl -w net.ipv4.tcp_max_syn_backlog=1024
+net.ipv4.tcp_max_syn_backlog = 1024
+
+另外，连接每个SYN_RECV时，如果失败的话，内核还会自动重试，并且默认的重试次数是5次，可以执行如下命令将其缩小为1次:
+$ sysctl -w net.ipv4.tcp_synack_retries=1
+net.ipv4.tcp_synack_retries = 1
+
+
+除此之外，TCP SYN Cookies也是一种专门防御SYN Flood攻击方法。SYN Cookies基于连接信息(包括源地址、源端口、目的地址、目的端口等等)以及一个加密种子(如系统启动时间)，计算出一个哈希值(SHA1),这个哈希值称为cookie;;然后这个cookie就被用做序列号来应答SYN+ACK包，并释放连接状态。当客户端发送完三次握手的最后一次ACK后，服务器就会被再次计算这个哈希值，确认是上次返回的SYN+ACK的返回包，才会进入TCP的连接状态
+因而，开启SYN cookies后就不需要维护半开连接状态了，进而也就没有了半开连接的限制
+
+备注: 开启TCP syncookies后，内核选项net.ipv4.tcp_max_syn_backlog也就无效了
+
+可以通过如下命令，开启TCP SYN Cookies:
+$ sysctl -w net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_syncookies = 1
+
+
+上述sysctl命令修改的配置都是临时的，重启后这些配置就会丢失，所以，为了保证配置持久化，还可以把这些配置写入/etc/sysctl.conf文件中，比如:
+$ cat /etc/sysctl.conf
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_synack_retries = 1
+net.ipv4.tcp_max_syn_backlog = 1024
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

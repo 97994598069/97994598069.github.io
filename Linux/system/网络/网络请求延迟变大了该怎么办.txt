@@ -1,0 +1,214 @@
+除了DDoS会带来网络延迟增大外，还有其他也会造成网络延迟:
+1. 网络传输慢，导致延迟
+2. Linux内核协议报文处理慢，导致延迟
+3. 应用程序数据处理慢，导致延迟等等
+
+
+网络延迟:
+网络延迟，网络数据传输所用的时间。
+这个时间可能是单向的:指从源地址发送到目的地址的单程时间
+也有可能是双向的，即从源地址发送目的地址，然后又从目的地址发回响应，这个往返全程所用的时间
+
+通常，我们更常用的是双向的往返通信延迟，比如ping测试的结果，就是往返延迟RTT(Round-Trip Time)
+
+
+除了网络延迟外，另一个常用的指标时应用程序延迟，它是指，从应用程序接收到请求，再到发回响应，全程所用的时间。通常，应用程序延迟也指的是往返延迟，是网络数据传输时间加上数据处理时间的和
+
+
+我们可以通过ping来测试网络延迟，ping是基于ICMP协议，它通过计算ICMP回显响应报文与ICMP回显报文的时间差，来获得往返延时。这个过程并不需要特殊认证，常被很多网络攻击利用，比如端口扫描nmap、组包工具hping3等等
+
+为了避免这些问题，很多网络服务一般会把ICMP给禁止掉，这也导致无法使用ping来测试网络服务的可用性和往返延时，这时可以使用traceroute或者hping3的TCP和UDP模式来获取网络延迟
+例如:
+# -c 表示发送 3 次请求，-S 表示设置 TCP SYN，-p 表示端口号为 80
+$ hping3 -c 3 -S -p 80 baidu.com
+HPING baidu.com (eth0 123.125.115.110): S set, 40 headers + 0 data bytes
+len=46 ip=123.125.115.110 ttl=51 id=47908 sport=80 flags=SA seq=0 win=8192 rtt=20.9 ms
+len=46 ip=123.125.115.110 ttl=51 id=6788  sport=80 flags=SA seq=1 win=8192 rtt=20.9 ms
+len=46 ip=123.125.115.110 ttl=51 id=37699 sport=80 flags=SA seq=2 win=8192 rtt=20.9 ms
+
+--- baidu.com hping statistic ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 20.9/20.9/20.9 ms
+从hping3的结果中，可以看到，往返延迟RTT为20.9ms
+
+
+
+使用traceroute也可以得到类似结果:
+# --tcp 表示使用 TCP 协议，-p 表示端口号，-n 表示不对结果中的 IP 地址执行反向域名解析
+$ traceroute --tcp -p 80 -n baidu.com
+traceroute to baidu.com (123.125.115.110), 30 hops max, 60 byte packets
+ 1  * * *
+ 2  * * *
+ 3  * * *
+ 4  * * *
+ 5  * * *
+ 6  * * *
+ 7  * * *
+ 8  * * *
+ 9  * * *
+10  * * *
+11  * * *
+12  * * *
+13  * * *
+14  123.125.115.110  20.684 ms *  20.798 ms
+
+traceroute会在路由的没一跳发送三个包，并在收到响应后，输出往返延时，如果无响应或者响应超时（默认5s）,就会输出一个星号
+
+
+案例:
+$ https://github.com/wg/wrk
+$ cd wrk
+$ apt-get install build-essential -y
+$ make
+$ sudo cp wrk /usr/local/bin/
+
+
+终端1跑nginx；并验证正常
+# 80 端口正常
+$ curl http://192.168.0.30
+<!DOCTYPE html>
+<html>
+...
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+# 8080 端口正常
+$ curl http://192.168.0.30:8080
+...
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+
+接着使用hping3来测试它们的延迟，终端2中分别测试机器的80和8080端口的延迟
+# 测试 80 端口延迟
+$ hping3 -c 3 -S -p 80 192.168.0.30
+HPING 192.168.0.30 (eth0 192.168.0.30): S set, 40 headers + 0 data bytes
+len=44 ip=192.168.0.30 ttl=64 DF id=0 sport=80 flags=SA seq=0 win=29200 rtt=7.8 ms
+len=44 ip=192.168.0.30 ttl=64 DF id=0 sport=80 flags=SA seq=1 win=29200 rtt=7.7 ms
+len=44 ip=192.168.0.30 ttl=64 DF id=0 sport=80 flags=SA seq=2 win=29200 rtt=7.6 ms
+
+--- 192.168.0.30 hping statistic ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 7.6/7.7/7.8 ms
+
+# 测试 8080 端口延迟
+$ hping3 -c 3 -S -p 8080 192.168.0.30
+HPING 192.168.0.30 (eth0 192.168.0.30): S set, 40 headers + 0 data bytes
+len=44 ip=192.168.0.30 ttl=64 DF id=0 sport=8080 flags=SA seq=0 win=29200 rtt=7.7 ms
+len=44 ip=192.168.0.30 ttl=64 DF id=0 sport=8080 flags=SA seq=1 win=29200 rtt=7.6 ms
+len=44 ip=192.168.0.30 ttl=64 DF id=0 sport=8080 flags=SA seq=2 win=29200 rtt=7.3 ms
+
+--- 192.168.0.30 hping statistic ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 7.3/7.6/7.7 ms
+
+从输出中可以看到，两个端口的延迟差不多，都是7ms，不过这只是单个请求的情况，换成并发请求的话呢:
+# 测试 80 端口性能
+$ # wrk --latency -c 100 -t 2 --timeout 2 http://192.168.0.30/
+Running 10s test @ http://192.168.0.30/
+  2 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     9.19ms   12.32ms 319.61ms   97.80%
+    Req/Sec     6.20k   426.80     8.25k    85.50%
+  Latency Distribution
+     50%    7.78ms
+     75%    8.22ms
+     90%    9.14ms
+     99%   50.53ms
+  123558 requests in 10.01s, 100.15MB read
+Requests/sec:  12340.91
+Transfer/sec:     10.00MB
+
+# 测试 8080 端口性能
+$ wrk --latency -c 100 -t 2 --timeout 2 http://192.168.0.30:8080/
+Running 10s test @ http://192.168.0.30:8080/
+  2 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    43.60ms    6.41ms  56.58ms   97.06%
+    Req/Sec     1.15k   120.29     1.92k    88.50%
+  Latency Distribution
+     50%   44.02ms
+     75%   44.33ms
+     90%   47.62ms
+     99%   48.88ms
+  22853 requests in 10.01s, 18.55MB read
+Requests/sec:   2283.31
+Transfer/sec:      1.85MB
+
+从输出可以看到，官方nginx(80端口)平均延迟是9.19ms，而案例nginx的平均延迟(8080端口)则是43.6ms。从延迟的分布来看，官方nginx(80端口)90%的请求，都可以在9ms以内完成；而案例nginx(8080端口)50%的请求就已经达到了44ms
+
+再结合上面hping3的输出，容易发现，案例nginx在并发请求下的延迟增大了很多，为什么呢？
+抓包分析:
+终端1中，执行tcpdump抓取8080端口上收发的网络包并保存到nginx.pcap文件
+$ tcpdump -nn tcp port 8080 -w nginx.pcap
+
+然后切换到终端2中，然后执行wrk命令
+# 测试 8080 端口性能
+$ wrk --latency -c 100 -t 2 --timeout 2 http://192.168.0.30:8080/
+当wrk命令结束后，再次到终端1，停止tcpdump并用wireshark打开nginx.pcap;;由于网络包的数量比较多，可以先过滤一下，比如，在选择一个包后，可以单击右键并选择"Follow" ---> "TCP Stream";;然后关闭弹出来的对话框，回到wireshark主窗口。这时候，你会发现wireshark已经自动帮你设置了一个过滤表达式tcp.stream eq 24
+
+从这里，可以看到这个TCP连接从三次握手开始的每个请求和响应情况。当然，这可能还不够直观，可以继续点击菜单栏里的statics --> Flow Graph,选中"Limit to display filter"并设置flow type为"TCP Flows":
+注意: 这个图的左侧是客户端，而右边是nginx服务器，通过这个图就可以看出，前面三次握手，以及第一次HTTP请求和响应还是挺快的，但第二次HTTP请求就比较慢了，特别是客户端在收到服务器第一个分组后，40ms后才发出了ACK响应
+
+看到这个40ms这个值，很特殊，是TCP延迟确认(Delayed ACK)的最小超时时间
+
+这里解释一下延迟确认:这是针对TCP ACK的一种优化机制，也就是说不用每次请求都发送一个ACK，而是先等一会儿(比如40ms),看看有没有顺风车，如果这段时间内正好有其他包需要发送，那就捎带着ACK一起发送过去，当然，如果一直等不到其他包，那就超过后单独发送ACK。
+
+因为案例中40ms发生在客户端上，猜测是客户端开启了确认机制，而这里的客户端实际上就是wrk
+
+
+查询TCP文档，就会发现，只有TCP套接字专门设置了TCP_QUICKACK，才会开启快速确认模式；否则，默认情况下，采用的就是延迟确认机制
+
+为了验证猜测:
+终端2中 
+$ strace -f wrk --latency -c 100 -t 2 --timeout 2 http://192.168.0.30:8080/
+...
+setsockopt(52, SOL_TCP, TCP_NODELAY, [1], 4) = 0
+...
+这样，你可以看到，wrk只设置了TCP_NODELAY选项，而没有设置TCP_QUICKACK。这说明wrk采用的正是延迟确认，也就解释了上面这个40ms的问题；
+
+
+
+网络延迟增大后的分析方法:
+网络延迟，是最核心的网络性能指标，由于网络传输、网络包处理等各种因为的影响，网络延迟不可避免。但过大的网络延迟，会直接影响用户的体验
+
+所以，在发现网络延迟增大后，可以用traceroute、hping3、tcpdump、wireshark、strace等多种工具，来定位网络中的潜在问题，比如:
+1) 使用hping3以及wrk等工具，确认单次请求和并发请求情况的网络延迟是否正常
+2) 使用traceroute确认路由是否正确，并查看路由中每一跳网关的延迟
+3) 使用tcpdump和wireshark，确认网络包的收发是否正常
+4) 使用strace等，观察应用程序对网络套接字的调用情况是否正常
+
+这样就可以依次从路由、网络包的收发、再到应用程序等，逐层排查，直到定位问题根源
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,244 @@
+以极客时间的网站time.geekbang.org为例，执行下面的nslookup命令，就可以查询到这个域名的A记录，可以看到，它的IP地址是39.106.233.17
+$ nslookup time.geekbang.org
+# 域名服务器及端口信息
+Server:		114.114.114.114
+Address:	114.114.114.114#53
+
+# 非权威查询结果
+Non-authoritative answer:
+Name:	time.geekbang.org
+Address: 39.106.233.17
+
+这里需要注意，由于114.114.114.114并不是直接管理time.geekbang.org的域名服务器，所以查询结果是非权威的，使用上面的命令只能得到114.114.114.114查询的结果
+如果没有命中缓存，DNS查询实际上是一个递归过程那有没有办法可以知道整个递归查询的执行呢？
+其实除了nslookup，另外常用的一个DNS解析工具dig，就提供了trace功能，可以展示递归查询的整个过程:
+# +trace 表示开启跟踪查询
+# +nodnssec 表示禁止 DNS 安全扩展
+$ dig +trace +nodnssec time.geekbang.org
+
+; <<>> DiG 9.11.3-1ubuntu1.3-Ubuntu <<>> +trace +nodnssec time.geekbang.org
+;; global options: +cmd
+.			322086	IN	NS	m.root-servers.net.
+.			322086	IN	NS	a.root-servers.net.
+.			322086	IN	NS	i.root-servers.net.
+.			322086	IN	NS	d.root-servers.net.
+.			322086	IN	NS	g.root-servers.net.
+.			322086	IN	NS	l.root-servers.net.
+.			322086	IN	NS	c.root-servers.net.
+.			322086	IN	NS	b.root-servers.net.
+.			322086	IN	NS	h.root-servers.net.
+.			322086	IN	NS	e.root-servers.net.
+.			322086	IN	NS	k.root-servers.net.
+.			322086	IN	NS	j.root-servers.net.
+.			322086	IN	NS	f.root-servers.net.
+;; Received 239 bytes from 114.114.114.114#53(114.114.114.114) in 1340 ms
+
+org.			172800	IN	NS	a0.org.afilias-nst.info.
+org.			172800	IN	NS	a2.org.afilias-nst.info.
+org.			172800	IN	NS	b0.org.afilias-nst.org.
+org.			172800	IN	NS	b2.org.afilias-nst.org.
+org.			172800	IN	NS	c0.org.afilias-nst.info.
+org.			172800	IN	NS	d0.org.afilias-nst.org.
+;; Received 448 bytes from 198.97.190.53#53(h.root-servers.net) in 708 ms
+
+geekbang.org.		86400	IN	NS	dns9.hichina.com.
+geekbang.org.		86400	IN	NS	dns10.hichina.com.
+;; Received 96 bytes from 199.19.54.1#53(b0.org.afilias-nst.org) in 1833 ms
+
+time.geekbang.org.	600	IN	A	39.106.233.176
+;; Received 62 bytes from 140.205.41.16#53(dns10.hichina.com) in 4 ms
+
+dig trace的输出，主要包括四部分:
+1) 从114.114.114.114查到的一些根域名服务器(.)的NS记录
+2) 从NS记录结果中选一个(h.root-servers.net.),并查询顶级域名org.的NS记录 
+3) 从org.的NS记录中选择一个(b0.org.afilias-nst.org.),查询二级域名geekbang.org.的NS服务器
+4) 从geekbang.org.的NS服务器(dns10.hichina.com)查询最终主机time.geekbang.org的A记录
+
+
+
+案例1：DNS解析失败
+/# nslookup time.geekbang.org
+;; connection timed out; no servers could be reached
+可以发现这个命令阻塞很久后，还是失败了，报了onnection timed out; no servers could be reached的错误
+看到这里，估计第一反应就是网络不通了，到底是不是这样呢？
+/# ping -c3 114.114.114.114
+PING 114.114.114.114 (114.114.114.114): 56 data bytes
+64 bytes from 114.114.114.114: icmp_seq=0 ttl=56 time=31.116 ms
+64 bytes from 114.114.114.114: icmp_seq=1 ttl=60 time=31.245 ms
+64 bytes from 114.114.114.114: icmp_seq=2 ttl=68 time=31.128 ms
+--- 114.114.114.114 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 31.116/31.163/31.245/0.058 ms
+
+这个输出中，可以看到网络是通的。那要怎么知道nslookup命令失败的原因呢？，这里其实有很多种办法，最简单的一种，就是开启nslookup的调试输出，查看查询过程中详细步骤，排查其中是否有异常
+/# nslookup -debug time.geekbang.org
+;; Connection to 127.0.0.1#53(127.0.0.1) for time.geekbang.org failed: connection refused.
+;; Connection to ::1#53(::1) for time.geekbang.org failed: address not available.
+
+从这次的输出可以看到，nslookup连接环回地址(127.0.0.1和::1)的53端口失败。这里就有问题了，为什么会去连接环回地址呢，而不是我们先前看到的114.114.114.114呢？
+此时可以猜测到，很有可能是因为没有配置DNS服务器
+# cat /etc/resolv.conf
+果然没有输出，说明没有配置DNS服务器，编辑并配置上dns服务地址重新测试
+/# echo "nameserver 114.114.114.114" > /etc/resolv.conf
+/# nslookup time.geekbang.org
+Server:		114.114.114.114
+Address:	114.114.114.114#53
+
+Non-authoritative answer:
+Name:	time.geekbang.org
+Address: 39.106.233.176
+
+到这里轻松解决
+
+
+
+
+DNS 解析不稳定
+/# time nslookup time.geekbang.org
+Server:		8.8.8.8
+Address:	8.8.8.8#53
+
+Non-authoritative answer:
+Name:	time.geekbang.org
+Address: 39.106.233.176
+
+real	0m10.349s
+user	0m0.004s
+sys	0m0.0
+
+可以看到这次解析非常慢，居然用了10秒。如果多次运行上面的nslookup命令，可能碰到如下：
+/# time nslookup time.geekbang.org
+;; connection timed out; no servers could be reached
+
+real	0m15.011s
+user	0m0.006s
+sys	0m0.006s
+换句话说，跟上一个案例类似，也会出现解析失败的情况。综合来看，现在DNS解析的结果不但比较慢，而且还或发生超时失败的情况。
+为什么呢？怎么处理？
+其实，根据前面的讲解，DNS解析，说白了就是客户端与服务器交互的过程，并且这个过程还使用了UDP协议
+那么对于整个流程来说，解析结果不稳定，就有很多种可能的情况了：
+1.DNS服务器本身有问题，响应慢并且不稳定
+2.或者是，客户端到DNS服务器的网络延迟比较大
+3.再或者，DNS请求或者响应包，在某些情况下被链路中的网络设备弄丢了
+
+根据上面nslookup的输出，可以看到，现在客户端连接的DNS是8.8.8.8,这是google提供的DNS服务。对google还是比较放心的，dns出问题的概率比较小。排除第一种情况
+那是不是第二种呢，本机到dns服务器的延迟比较大呢
+/# ping -c3 8.8.8.8
+PING 8.8.8.8 (8.8.8.8): 56 data bytes
+64 bytes from 8.8.8.8: icmp_seq=0 ttl=31 time=137.637 ms
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=31 time=144.743 ms
+64 bytes from 8.8.8.8: icmp_seq=2 ttl=31 time=138.576 ms
+--- 8.8.8.8 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 137.637/140.319/144.743/3.152 ms
+
+从输出可以看到，这里的延迟已经达到了140ms，这页就可以解释，为什么解析这么慢了，实际上，如果多次运行上面的ping测试，还会看到偶尔出现丢包现象
+$ ping -c3 8.8.8.8
+PING 8.8.8.8 (8.8.8.8): 56 data bytes
+64 bytes from 8.8.8.8: icmp_seq=0 ttl=30 time=134.032 ms
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=30 time=431.458 ms
+--- 8.8.8.8 ping statistics ---
+3 packets transmitted, 2 packets received, 33% packet loss
+round-trip min/avg/max/stddev = 134.032/282.745/431.458/148.713 ms
+
+这也进一步解释了，为什么nslookup偶尔会失败，正是网络链路中的丢包导致的
+怎么解决？显然，既然延迟大，那就换一个延迟更小的DNS服务器，比如电信的114.114.114.114
+/# ping -c3 114.114.114.114
+PING 114.114.114.114 (114.114.114.114): 56 data bytes
+64 bytes from 114.114.114.114: icmp_seq=0 ttl=67 time=31.130 ms
+64 bytes from 114.114.114.114: icmp_seq=1 ttl=56 time=31.302 ms
+64 bytes from 114.114.114.114: icmp_seq=2 ttl=56 time=31.250 ms
+--- 114.114.114.114 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 31.130/31.227/31.302/0.072 ms
+显然比之前的8.8.8.8要好
+
+/# echo nameserver 114.114.114.114 > /etc/resolv.conf
+/# time nslookup time.geekbang.org
+Server:		114.114.114.114
+Address:	114.114.114.114#53
+
+Non-authoritative answer:
+Name:	time.geekbang.org
+Address: 39.106.233.176
+
+real    0m0.064s
+user    0m0.007s
+sys     0m0.006s
+发现现在只需要64ms就可以完成解析，比刚才的10s要好很多
+
+
+到这里问题看似解决了，不过，如果你多次运行nslookup命令，估计就不是每次都有好结果了，比如，在我的机器中，就经常需要1s甚至更多的时间
+/# time nslookup time.geekbang.org
+Server:		114.114.114.114
+Address:	114.114.114.114#53
+
+Non-authoritative answer:
+Name:	time.geekbang.org
+Address: 39.106.233.176
+
+real	0m1.045s
+user	0m0.007s
+sys	0m0.004s
+
+1秒的DNS解析时间还是太长了，对很多应用来说也是不可接受的，那么该怎么解决这个问题呢？我想一定想到了DNS缓存。这样，只有第一次查询时需要去DNS服务器请求，以后的查询，只要DNS记录不过期使用缓存中的记录就可以了
+
+想要为系统开启DNS缓存，就需要你做额外的配置，比如，最简单的方法，就是使用dnsmasq
+/# /etc/init.d/dnsmasq start
+ * Starting DNS forwarder and DHCP server dnsmasq                    [ OK ]
+然后，修改/etc/resolv.conf,将DNS服务器改为dnsmasq的监听地址，这儿是127.0.0.1，接着，重新执行多次nslookup命令
+/# echo nameserver 127.0.0.1 > /etc/resolv.conf
+/# time nslookup time.geekbang.org
+Server:		127.0.0.1
+Address:	127.0.0.1#53
+
+Non-authoritative answer:
+Name:	time.geekbang.org
+Address: 39.106.233.176
+
+real	0m0.492s
+user	0m0.007s
+sys	0m0.006s
+
+/# time nslookup time.geekbang.org
+Server:		127.0.0.1
+Address:	127.0.0.1#53
+
+Non-authoritative answer:
+Name:	time.geekbang.org
+Address: 39.106.233.176
+
+real	0m0.011s
+user	0m0.008s
+sys	0m0.003s
+
+现在可以看到只有第一次的解析很慢，需要0.5s,以后的每次解析都很快，只需要11ms。并且，后面每次DNS解析需要的时间也都很稳定
+
+
+
+
+DNS是互联网中最基础的一项服务，提供了域名和IP地址间映射关系的查询服务。很多应用程序在最初开发时，并没考虑DNS解析的问题，后续出现问题后，排查好久才发现是dns解析慢导致的
+
+试想，如果一个web服务的接口，每次都需要1s时间来等待DNS解析，那么，无论你怎么优化应用程序的内在逻辑，对用户来说，这个接口的响应都太慢，因为响应时间总会大于1秒的
+所以在应用程序开发过程中，必须考虑到DNS解析可能带来的性能问题，掌握常见的优化办法:
+1) 对DNS解析的结果进行缓存。缓存是最有效的方法，但是要注意，一旦缓存过期，还是要去DNS服务器重新获取新记录。不过这时大部分应用程序都是可接受的
+2) 对DNS解析的结果进行预期。这时浏览器等web应用中最常用的方法，也就是说，不等用户点击页面上的超链接，浏览器就会在后台自动解析域名，并把结果缓存起来
+3) 使用HTTPDNS取代常规的DNS解析。这是很多移动应用会选择的方法，特别是如今域名劫持的普遍存在，使用HTTP协议绕过链路中的DNS服务器，就可以避免域名劫持的问题
+4) 基于DNS的全局负载均衡(GSLB)。这不仅为服务提供了负载均衡和高可用的功能，还可以根据用户的位置，返回距离最近的IP地址
+
+
+ 
+
+DNS解析受到各种网络状况的影响，性能可能不稳定。比如公网延迟增大，缓存过期导致要重新去上游服务器请求，或者流量高峰时DNS服务器不足等，都会导致DNS响应的延迟增大
+此时可以借助nslookup或者dig的调试功能分析DNS的解析过程，再配合ping等工具调试DNS服务器的延迟，从而定位出性能瓶颈，通常，可以用缓存、预取、HTTPDNS等方法来优化DNS性能
+
+
+
+
+
+
+
+
+
+
+
