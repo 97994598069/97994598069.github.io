@@ -410,6 +410,8 @@ systemctl status vsftpd.service
 
 创建用户
 useradd -s /sbin/nologin admin
+或useradd -d /var/ftp/public_root -g ftp -s /sbin/nologin ftpuser
+
 
 创建用户密码
 passwd admin 
