@@ -1,0 +1,66 @@
+问题描述：
+现象：
+公司网站www.chinabim.com 
+1.mac系统高版本的浏览器不能访问；低版本的可以访问
+2.同样的网络，windows系统访问正常 
+3.mac系统高版本的换个网络出口访问正常
+4.ping ip和ping 域名均不丢包
+
+解决：
+1. 执行命令 vi /etc/sysctl.conf。
+2. 添加如下内容：net.ipv4.tcp_tw_recycle=0
+net.ipv4.tcp_timestamps=0。
+3. 输入指令 # sysctl -p 使配置生效。  
+
+重新打开OK
+
+百度搜索结果：
+https://blog.csdn.net/zhuyiquan/article/details/68925707
+
+我们发现，只要为客户端的TCP带上时间戳，就会导致问题发生，关闭客户端时间戳，问题恢复。这就解释了为什么只有部分用户有问题，其他用户正常。 
+
+
+
+https://my.oschina.net/tsh/blog/1335116
+
+https://huoding.com/2012/01/19/142
+https://www.cnxct.com/coping-with-the-tcp-time_wait-state-on-busy-linux-servers-in-chinese-and-dont-enable-tcp_tw_recycle/
+
+
+
+问题总结：
+现象:
+1.mac系统高版本的浏览器不能访问；低版本的可以访问;同样的网络，windows系统访问正常
+2.mac系统高版本的换个网络出口访问正常
+
+排查：
+1.ping ip和ping 域名均不丢包
+2.客户端上抓包分析服务端不回复  无法完成tcp 3次握手
+
+解决方法：
+目前看有两种方法解决:
+(1)是在服务器上修改变量
+首先我们先查看一下我们服务器net.ipv4.tcp_timestamps的默认值，如果该值为0测说名不是该问题导致，如果是1我们需要将该值设置为1。
+查看默认值的方法：[root@localhost ~]# cat /proc/sys/net/ipv4/tcp_timestamps
+修改该值的方法：vim /etc/sysctl.conf  添加 net.ipv4.tcp_timestamps=0  net.ipv4.tcp_tw_recycle=0
+
+(2)修改客户端的注册表Tcp1323Opts设置为0。
+
+
+原因:
+TCP有一种行为，可以缓存每个主机最新的时间戳，后续请求中如果时间戳小于缓存的时间戳，即视为无效，相应的数据包会被丢弃
+Linux是否启用这种行为取决于tcp_timestamps和tcp_tw_recycle，因为tcp_timestamps缺省就是开启的，所以当tcp_tw_recycle被开启后，实际上这种行为就被激活了，当客户端或服务端以NAT方式构建的时候就可能出现问题
+当多个客户端通过NAT方式联网并与服务端交互时，服务端看到的是同一个IP，也就是说对服务端而言这些客户端实际上等同于一个，可惜由于这些客户端的时间戳可能存在差异，于是乎从服务端的视角看，便可能出现时间戳错乱的现象，进而直接导致时间戳小的数据包被丢弃。如果发生了此类问题，具体的表现通常是是客户端明明发送的SYN，但服务端就是不响应ACK
+但是只有客户端和服务端都开启时间戳的情况下，才会出现能ping通不能建立tcp三次握手的情况，所以做为提供服务的公司，不可能保证所有的用户都关闭时间戳，这个功能，所以我们必须关闭时间戳，这样才能给所用用户提供正常的服务。
+
+
+
+
+限于实际的网络情况，很多用户的客户端没有公网IP，只能依赖于NAT分享同一个公网IP， 这样由于同一NAT下的不同机器的时间戳不一定保证同步，所以就导致同一个NAT过来的数据包的时间戳不能保证单调递增。这样就打破了RFC1323中PAWS方法依赖于对端时间戳单调递增的要求。所以就表现为时间戳错乱，导致丢弃时间戳较小的数据包，表现为packets rejects in established connections because of timestamp的数据不断增加。所以，在LVS中的机器需要关闭tcp_tw_recycle
+
+
+
+
+
+
+
