@@ -1,0 +1,246 @@
+如何扫描Rootkit，后门和漏洞在Linux中使用“Rootkit Hunter”
+
+什么是Rkhunter？
+Rkhunter（Rootkit的亨特 ）是一个开源的Linux系统的Unix / Linux的扫描工具，根据GPL，它可以扫描你的系统后门，后门和本地攻击释放。
+
+它可以扫描隐藏文件，二进制文件上设置错误的权限，内核等可疑字符串要了解更多关于Rkhunter及其功能参观http://www.rootkit.nl/ 。
+
+
+在Linux系统中安装Rootkit Hunter Scanner
+
+首先要下载Rkhunter工具的最新的稳定版本http://www.rootkit.nl/projects/rootkit_hunter.html或者使用下面的命令Wget的下载它在你的系统中。
+
+# cd /tmp
+# wget http://downloads.sourceforge.net/project/rkhunter/rkhunter/1.4.2/rkhunter-1.4.2.tar.gz
+或者https://pan.baidu.com/s/1bTChybHXW9NOnRTeLFlRvw
+
+第2步：安装Rkhunter
+一旦你已经下载了最新版本，以root用户来安装它运行以下命令。
+# tar -xvf rkhunter-1.4.2.tar.gz 
+# cd rkhunter-1.4.2
+# ./installer.sh --layout default --install
+
+
+示例输出
+Checking system for:
+Rootkit Hunter installer files: found
+A web file download command: wget found
+Starting installation:
+Checking installation directory "/usr/local": it exists and is writable.
+Checking installation directories:
+Directory /usr/local/share/doc/rkhunter-1.4.2: creating: OK
+Directory /usr/local/share/man/man8: exists and is writable.
+Directory /etc: exists and is writable.
+Directory /usr/local/bin: exists and is writable.
+Directory /usr/local/lib64: exists and is writable.
+Directory /var/lib: exists and is writable.
+Directory /usr/local/lib64/rkhunter/scripts: creating: OK
+Directory /var/lib/rkhunter/db: creating: OK
+Directory /var/lib/rkhunter/tmp: creating: OK
+Directory /var/lib/rkhunter/db/i18n: creating: OK
+Directory /var/lib/rkhunter/db/signatures: creating: OK
+Installing check_modules.pl: OK
+Installing filehashsha.pl: OK
+Installing stat.pl: OK
+Installing readlink.sh: OK
+Installing backdoorports.dat: OK
+Installing mirrors.dat: OK
+Installing programs_bad.dat: OK
+Installing suspscan.dat: OK
+Installing rkhunter.8: OK
+Installing ACKNOWLEDGMENTS: OK
+Installing CHANGELOG: OK
+Installing FAQ: OK
+Installing LICENSE: OK
+Installing README: OK
+Installing language support files: OK
+Installing ClamAV signatures: OK
+Installing rkhunter: OK
+Installing rkhunter.conf: OK
+Installation complete
+
+
+第3步：更新Rkhunter
+运行RKH更新通过运行以下命令来填充数据库属性。
+# /usr/local/bin/rkhunter --update
+# /usr/local/bin/rkhunter --propupd
+
+
+示例输出
+[ Rootkit Hunter version 1.4.2 ]
+Checking rkhunter data files...
+Checking file mirrors.dat                                  [ No update ]
+Checking file programs_bad.dat                             [ Updated ]
+Checking file backdoorports.dat                            [ No update ]
+Checking file suspscan.dat                                 [ No update ]
+Checking file i18n/cn                                      [ No update ]
+Checking file i18n/de                                      [ No update ]
+Checking file i18n/en                                      [ No update ]
+Checking file i18n/tr                                      [ No update ]
+Checking file i18n/tr.utf8                                 [ No update ]
+Checking file i18n/zh                                      [ No update ]
+Checking file i18n/zh.utf8                                 [ No update ]
+[ Rootkit Hunter version 1.4.2 ]
+File created: searched for 174 files, found 137
+
+
+第4步：设置Cronjob和电子邮件警报
+创建名为下/etc/cron.daily/ rkhunter.sh文件，然后每天会扫描你的文件系统，并发送电子邮件通知到您的电子邮件ID。 在您喜欢的编辑器的帮助下创建以下文件。
+# vi /etc/cron.daily/rkhunter.sh
+
+添加以下代码行，并与你的“ 电子邮件ID”替换“YourServerNameHere”与“ 服务器名称 ”和“your@email.com”。
+#!/bin/sh
+(
+/usr/local/bin/rkhunter --versioncheck
+/usr/local/bin/rkhunter --update
+/usr/local/bin/rkhunter --cronjob --report-warnings-only
+) | /bin/mail -s 'rkhunter Daily Run (PutYourServerNameHere)' your@email.com
+
+
+对文件设置执行权限。
+# chmod 755 /etc/cron.daily/rkhunter.sh
+
+第5步：手动扫描和使用
+要扫描整个文件系统，运行Rkhunter作为根用户。
+# rkhunter --check
+
+
+示例输出
+[ Rootkit Hunter version 1.4.2 ]
+Checking system commands...
+Performing 'strings' command checks
+Checking 'strings' command                               [ OK ]
+Performing 'shared libraries' checks
+Checking for preloading variables                        [ None found ]
+Checking for preloaded libraries                         [ None found ]
+Checking LD_LIBRARY_PATH variable                        [ Not found ]
+Performing file properties checks
+Checking for prerequisites                               [ OK ]
+/usr/local/bin/rkhunter                                  [ OK ]
+/usr/sbin/adduser                                        [ OK ]
+/usr/sbin/chkconfig                                      [ OK ]
+/usr/sbin/chroot                                         [ OK ]
+/usr/sbin/depmod                                         [ OK ]
+/usr/sbin/fsck                                           [ OK ]
+/usr/sbin/fuser                                          [ OK ]
+/usr/sbin/groupadd                                       [ OK ]
+/usr/sbin/groupdel                                       [ OK ]
+/usr/sbin/groupmod                                       [ OK ]
+/usr/sbin/grpck                                          [ OK ]
+/usr/sbin/ifconfig                                       [ OK ]
+/usr/sbin/ifdown                                         [ Warning ]
+/usr/sbin/ifup                                           [ Warning ]
+/usr/sbin/init                                           [ OK ]
+/usr/sbin/insmod                                         [ OK ]
+/usr/sbin/ip                                             [ OK ]
+/usr/sbin/lsmod                                          [ OK ]
+/usr/sbin/lsof                                           [ OK ]
+/usr/sbin/modinfo                                        [ OK ]
+/usr/sbin/modprobe                                       [ OK ]
+/usr/sbin/nologin                                        [ OK ]
+/usr/sbin/pwck                                           [ OK ]
+/usr/sbin/rmmod                                          [ OK ]
+/usr/sbin/route                                          [ OK ]
+/usr/sbin/rsyslogd                                       [ OK ]
+/usr/sbin/runlevel                                       [ OK ]
+/usr/sbin/sestatus                                       [ OK ]
+/usr/sbin/sshd                                           [ OK ]
+/usr/sbin/sulogin                                        [ OK ]
+/usr/sbin/sysctl                                         [ OK ]
+/usr/sbin/tcpd                                           [ OK ]
+/usr/sbin/useradd                                        [ OK ]
+/usr/sbin/userdel                                        [ OK ]
+/usr/sbin/usermod                                        [ OK ]
+....
+[Press  to continue]
+Checking for rootkits...
+Performing check of known rootkit files and directories
+55808 Trojan - Variant A                                 [ Not found ]
+ADM Worm                                                 [ Not found ]
+AjaKit Rootkit                                           [ Not found ]
+Adore Rootkit                                            [ Not found ]
+aPa Kit                                                  [ Not found ]
+.....
+[Press  to continue]
+Performing additional rootkit checks
+Suckit Rookit additional checks                          [ OK ]
+Checking for possible rootkit files and directories      [ None found ]
+Checking for possible rootkit strings                    [ None found ]
+....
+[Press  to continue]
+Checking the network...
+Performing checks on the network ports
+Checking for backdoor ports                              [ None found ]
+....
+Performing system configuration file checks
+Checking for an SSH configuration file                   [ Found ]
+Checking if SSH root access is allowed                   [ Warning ]
+Checking if SSH protocol v1 is allowed                   [ Warning ]
+Checking for a running system logging daemon             [ Found ]
+Checking for a system logging configuration file         [ Found ]
+Checking if syslog remote logging is allowed             [ Not allowed ]
+...
+System checks summary
+=====================
+File properties checks...
+Files checked: 137
+Suspect files: 6
+Rootkit checks...
+Rootkits checked : 383
+Possible rootkits: 0
+Applications checks...
+Applications checked: 5
+Suspect applications: 2
+The system checks took: 5 minutes and 38 seconds
+All results have been written to the log file: /var/log/rkhunter.log
+One or more warnings have been found while checking the system.
+Please check the log file (/var/log/rkhunter.log)
+
+
+上述命令下与Rkhunter做出的检查结果/var/log/rkhunter.log生成日志文件。
+# cat /var/log/rkhunter.log
+
+
+示例输出
+03:33:40] Running Rootkit Hunter version 1.4.2 on server
+[03:33:40]
+[03:33:40] Info: Start date is Tue May 31 03:33:40 EDT 2016
+[03:33:40]
+[03:33:40] Checking configuration file and command-line options...
+[03:33:40] Info: Detected operating system is 'Linux'
+[03:33:40] Info: Found O/S name: CentOS Linux release 7.2.1511 (Core) 
+[03:33:40] Info: Command line is /usr/local/bin/rkhunter --check
+[03:33:40] Info: Environment shell is /bin/bash; rkhunter is using bash
+[03:33:40] Info: Using configuration file '/etc/rkhunter.conf'
+[03:33:40] Info: Installation directory is '/usr/local'
+[03:33:40] Info: Using language 'en'
+[03:33:40] Info: Using '/var/lib/rkhunter/db' as the database directory
+[03:33:40] Info: Using '/usr/local/lib64/rkhunter/scripts' as the support script directory
+[03:33:40] Info: Using '/usr/lib64/qt-3.3/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /bin /sbin /usr/libexec /usr/local/libexec' as the command directories
+[03:33:40] Info: Using '/var/lib/rkhunter/tmp' as the temporary directory
+[03:33:40] Info: No mail-on-warning address configured
+[03:33:40] Info: X will be automatically detected
+[03:33:40] Info: Found the 'basename' command: /usr/bin/basename
+[03:33:40] Info: Found the 'diff' command: /usr/bin/diff
+[03:33:40] Info: Found the 'dirname' command: /usr/bin/dirname
+[03:33:40] Info: Found the 'file' command: /usr/bin/file
+[03:33:40] Info: Found the 'find' command: /usr/bin/find
+[03:33:40] Info: Found the 'ifconfig' command: /usr/sbin/ifconfig
+[03:33:40] Info: Found the 'ip' command: /usr/sbin/ip
+...
+
+
+有关更多信息和选项，请运行以下命令。
+# rkhunter --help
+
+
+
+
+
+
+
+
+
+
+
+
