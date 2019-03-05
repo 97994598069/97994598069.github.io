@@ -1,0 +1,405 @@
+网络延迟是最核心的网络性能指标。由于网络传输、网络包处理等各种因素的影响，网络延迟不可避免。但过大的网络延迟，会直接影响用户的体验
+当发现网络延迟增大的情况后，可以先从路由、网络包的收发、网络包的处理，再到应用程序等，从各个层级分析网络延迟，等到找出网络延迟的来源层级后，再深入定位瓶颈所在
+
+另外一个可能导致网络延迟的因素，即网络地址转换(Network Address Translation),缩写为NAT
+
+
+NAT原理:
+NAT技术可以重写IP数据包的源IP或者目的IP，被普通地用来解决公网IP地址短缺的问题
+主要原理:网络中的多台主机，通过共享同一个公网IP地址，来访问外网资源。同时，由于NAT屏蔽了内网网络，自然也就为局域网中的机器提供了安全隔离
+
+NAT: 既可以在支持网络地址转换的路由器(称为NAT网关)中配置NAT，也可以再Linux服务器中配置NAT，如果采用第二种方式，Linux服务器实际上充当的是"软"路由器的角色
+
+NAT的主要目的是实现地址转换，根据实现方式的不同，NAT可以分为三类:
+1) 静态NAT，即内网IP与公网IP是一对一的永久映射关系
+2) 动态NAT，即内网IP从公网IP池中，动态选择一个进行映射
+3) 网络地址端口转换NAPT(Network Address and Port Translation),即把内网IP映射到公网IP的不同端口上，让多个内网IP可以共享同一个公网IP地址
+
+NAPT是目前最流行的NAT类型，我们在Linux中配置的NAT也是这种类型。而根据转换方式的不同，我们可以把NAPT分为三类:
+1) 源地址转换SNAT，即目的地址不变，只替换源IP或源端口。SNAT主要用于多个内网IP共享一个公网IP，来访问外网资源的场景
+2) 目的地址转换DNAT，即源IP保持不变，只替换目的IP或者目的端口，DNAT主要通过公网IP的不同端口号，来访问内网的多种服务，同时会隐藏后端服务器的真是IP地址
+3) 是双向地址转换，即同时使用SNAT和DNAT，当接收到网络包时，执行DNAT，把目的IP转换为内网IP；而在发送网络包时，执行SNAT，把源IP替换为外部IP
+
+双向地址转换，其实就是外网IP与内网IP的一对一映射关系，所以常用在虚拟化环境中，为虚拟机分配浮动的公网IP地址。
+
+示例:
+本地服务器的内网IP地址: 192.168.0.2
+NAT网关中的公网IP地址: 100.100.100.100
+要访问的目的服务器baidu.com的地址为123.125.115.110
+
+内网服务器访问百度：
+1. 当服务器访问baidu.com时，NAT网关会把源地址，从服务器的内网IP 192.168.0.2替换成公网IP地址100.100.100.100然后才发给baidu.com 
+2. 当baidu.com发回响应包时，NAT网关又会把目的地址，从公网IP地址100.100.100.100替换成服务器内网IP 192.168.0.2，然后再发送内网中的服务器
+
+
+
+iptables与NAT
+Linux内核提供的Netfilter框架，允许对网络数据包进行修改(比如NAT)和过滤(比如防火墙)。在这个基础上，iptables、ip6tables、ebtables等工具，又提供了更易用的命令行接口，以便系统管理员配置和管理NAT、防火墙的规则
+
+filter表中，内置INPUT、OUTPUT和FORWARD链
+nat表,内置PREROUTING、POSTROUTING、OUTPUT
+
+
+要实现NAT功能，主要是在nat表进行操作，而nat表内置了三个链:
+PREROUTINIG,用于路由判断前所执行的规则，比如，对接收到的数据包进行DNAT
+POSTROUTINIG,用于路由判断后所执行的规则，比如，对发送或转发的数据包进行SNAT或者MASQUERADE
+OUTPUT，类似于PREROUTING，但只处理从本机发送出去的包
+
+SNAT:
+SNAT需要在nat表的POSTROUTING链中配置，通常两种方法:
+1) 为一个子网统一配置SNAT，并由Linux选择默认的出口IP，这实际上就是常说的MASQUERADE
+$ iptables -t nat -A POSTROUTING -s 192.168.0.0/16 -j MASQUERADE
+
+2) 是为具体的IP地址配置SNAT，并指定转换后的源地址:
+$ iptables -t nat -A POSTROUTING -s 192.168.0.2 -j SNAT --to-source 100.100.100.100
+
+
+
+DNAT:
+再来看DNAT，显然，DNAT需要在nat表的PREROUTING或者OUTPUT连中配置，其中PREROUTING链更常用:
+$ iptables -t nat -A PREROUTING -d 100.100.100.100 -j DNAT --to-destination 192.168.0.2
+
+
+双向地址转换:
+双向地址转换，就是同时添加SNAT和DNAT规则，为公网IP和内网IP实现一对一的映射关系，即:
+$ iptables -t nat -A POSTROUTING -s 192.168.0.2 -j SNAT --to-source 100.100.100.100
+$ iptables -t nat -A PREROUTING -d 100.100.100.100 -j DNAT --to-destination 192.168.0.2
+
+在使用iptables配置NAT规则时，Linux需要转发来自其他IP的网络包，所以千万不要忘记开启Linux的IP转发功能
+$ sysctl net.ipv4.ip_forward
+net.ipv4.ip_forward = 1
+
+
+NAT技术能够重写IP数据包的源IP和目的IP，所以普遍用来解决公网IP地址短缺的问题，它可以让网络中的多台主机，通过共享同一个公网IP地址，来访问外网资源。同时，由于NAT屏蔽了内网网络，也为局域网中机器起到安全隔离的作用
+
+Linux中的NAT，是基于内核的链接跟踪模块实现，所以，它维护每个链接状态的同时，也对网络性能有一定影响，那么怎么优化:
+示例:
+服务器1: nginx php 192.168.0.30
+服务器2: ab curl 192.168.0.2
+
+
+终端1中:启动nginx，注意选项--network=host,表示容器使用host网络模式，即不适用NAT:
+$ docker run --name nginx-hostnet --privileged --network=host -itd feisky/nginx:80
+
+终端2中:
+1.确认nginx正常启动
+$ curl http://192.168.0.30/
+...
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+2.执行ab命令，对nginx进行压力测试，不过在测试前要注意，Linux默认允许打开的文件描述数大小
+# open files
+$ ulimit -n
+1024
+
+# 临时增大当前会话的最大文件描述符数
+$ ulimit -n 65536
+
+执行ab压力测试:
+# -c 表示并发请求数为 5000，-n 表示总的请求数为 10 万
+# -r 表示套接字接收错误时仍然继续执行，-s 表示设置每个请求的超时时间为 2s
+$ ab -c 5000 -n 100000 -r -s 2 http://192.168.0.30/
+...
+Requests per second:    6576.21 [#/sec] (mean)
+Time per request:       760.317 [ms] (mean)
+Time per request:       0.152 [ms] (mean, across all concurrent requests)
+Transfer rate:          5390.19 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0  177 714.3      9    7338
+Processing:     0   27  39.8     19     961
+Waiting:        0   23  39.5     16     951
+Total:          1  204 716.3     28    7349
+...
+
+通过输出怎么评估系统的网络性能
+1) 每秒请求数(Requests per secoond)为6576
+2) 每个请求的平均延迟(Time per request)为760ms
+3) 建立连接的平均延迟（connect）为177ms
+
+目前这几个数值是如下案例的基准指标:
+
+
+终端1中:
+1) 停止这个未使用NAT的nginx应用
+$ docker rm -f nginx-hostnet
+
+2) 执行如下命令，启动案例应用，使用DNAT来实现Host的8080端口，到容器的8080端口的映射关系:
+$ docker run --name nginx --privileged -p 8080:8080 -itd feisky/nginx:nat
+
+3) 查看DNAT转发
+$ iptables -nL -t nat
+Chain PREROUTING (policy ACCEPT)
+target     prot opt source               destination
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
+
+...
+
+Chain DOCKER (2 references)
+target     prot opt source               destination
+RETURN     all  --  0.0.0.0/0            0.0.0.0/0
+DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:8080 to:172.17.0.2:8080
+可以看出，在PREROUTING链中，目的为本地的请求，会转到DOCKER链；而在DOCKER链中，目的端口为8080的tcp请求，会被DNAT到172.17.0.2的8080端口，其中172.17.0.2就是nginx容器的IP地址
+
+
+终端2中:
+$ curl http://192.168.0.30:8080/
+...
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+# -c 表示并发请求数为 5000，-n 表示总的请求数为 10 万
+# -r 表示套接字接收错误时仍然继续执行，-s 表示设置每个请求的超时时间为 2s
+$ ab -c 5000 -n 100000 -r -s 2 http://192.168.0.30:8080/
+...
+apr_pollset_poll: The timeout specified has expired (70007)
+Total of 5602 requests completed
+
+果然，刚才正常运行的ab，现在运行失败了，还报了连接超时的错误。运行ab时的-s参数，设置了每个请求的超时时间为2s,而从输出可以看到，这次只完成了5602个请求
+
+既然是为了得到ab的测试结果，可以延长到30s，延迟增大意味着要等待更长时间，为了快点得到结果，可以把测试次数减少到10000
+$ ab -c 5000 -n 10000 -r -s 30 http://192.168.0.30:8080/
+...
+Requests per second:    76.47 [#/sec] (mean)
+Time per request:       65380.868 [ms] (mean)
+Time per request:       13.076 [ms] (mean, across all concurrent requests)
+Transfer rate:          44.79 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0 1300 5578.0      1   65184
+Processing:     0 37916 59283.2      1  130682
+Waiting:        0    2   8.7      1     414
+Total:          1 39216 58711.6   1021  130682
+...
+
+再重新查看输出:
+1) 每秒请求数(Requests per second)为76
+2) 每个请求的延迟(Time per request)为65s
+3) 建立连接的延迟(Connect)为1300ms
+
+显然，每个指标都比基准值差了很多
+
+可以通过tcpdump抓包的方法，找出延迟增大的根源
+
+另外的办法:
+动态追踪工具SystemTap
+
+由于今天的案例是在压测场景下，并发请求数大大降低，并且我们清楚是NAT是罪魁祸首，此时有理由怀疑是内核中发生了丢包现象:
+
+终端1中，创建一个dropwatch.stp的脚本文件:
+#! /usr/bin/env stap
+
+############################################################
+# Dropwatch.stp
+# Author: Neil Horman <nhorman@redhat.com>
+# An example script to mimic the behavior of the dropwatch utility
+# http://fedorahosted.org/dropwatch
+############################################################
+
+# Array to hold the list of drop points we find
+global locations
+
+# Note when we turn the monitor on and off
+probe begin { printf("Monitoring for dropped packets\n") }
+probe end { printf("Stopping dropped packet monitor\n") }
+
+# increment a drop counter for every location we drop at
+probe kernel.trace("kfree_skb") { locations[$location] <<< 1 }
+
+# Every 5 seconds report our drop locations
+probe timer.sec(5)
+{
+  printf("\n")
+  foreach (l in locations-) {
+    printf("%d packets dropped at %s\n",
+           @count(locations[l]), symname(l))
+  }
+  delete locations
+}
+
+该脚本，跟踪内核函数kfree_skb()的调用，并统计丢包的位置。文件保存好后，执行下面的stap命令，可以运行丢包追踪脚本。这里的stap是systemtap的命令工具:
+$ stap --all-modules dropwatch.stp
+Monitoring for dropped packets
+
+当看到probe begin 输出的"Monitoring for dropped packets"时，表明SystemTap已经将脚本编译为内核模块，并启动运行了
+
+
+终端2中:
+$ ab -c 5000 -n 10000 -r -s 30 http://192.168.0.30:8080/
+
+终端1中观察stap命令的输出:
+10031 packets dropped at nf_hook_slow
+676 packets dropped at tcp_v4_rcv
+
+7284 packets dropped at nf_hook_slow
+268 packets dropped at tcp_v4_rcv
+
+发现，大量的丢包都发生在nf_hook_slow位置，看到这个名字，能够想到，这是Netfilter Hook的钩子函数中，出现丢包问题了，但是不是NAT还不能确定，接下来，我们还得跟踪nf_hook_slow的执行过程，可以通过perf来完成:
+
+终端2中:
+$ ab -c 5000 -n 10000 -r -s 30 http://192.168.0.30:8080/
+
+
+终端1中执行perf record和perf report:
+# 记录一会（比如 30s）后按 Ctrl+C 结束
+$ perf record -a -g -- sleep 30
+
+# 输出报告
+$ perf report -g graph,0
+
+从输出中，可以看到nf_hook_slow调用最多的有三个地方，分别是ipv4_conntrack_in、br_nf_pre_routing以及iptables_nat_ipv4_in。换言之，nf_hook_slow主要在执行三个动作
+1) 接收网络包时，在连接跟踪表中查找连接，并为新的链接分配跟踪对象(Bucket)
+2) 在Linux网桥中转发包，这是因为案例nginx是一个Docker容器，而容器的网络通过网桥来实现
+3) 接收网络包时，执行DNAT，即把8080端口收到的包转发给容器
+到这里，其实已经找到了性能下降的三个来源，这三个来源都是Linux的内核机制，所以优化也需要从内核入手:
+
+根据以前各个资源模块的内容，我们知道，Linux内核为用户提供了大量的可配置选项，这些选项可以通过proc文件系统，或者sys文件系统，来查看和修改，除此之外，你还可以用sysctl这个命令行工具，来查看和修改内核配置。
+比如今天我们主题是DNAT，而DNAT的基础是conntrack，可以看看内核提供了哪些conntrack的配置选项:
+$ sysctl -a | grep conntrack
+net.netfilter.nf_conntrack_count = 180
+net.netfilter.nf_conntrack_max = 1000
+net.netfilter.nf_conntrack_buckets = 65536
+net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 60
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 120
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 120
+...
+
+可以看到:
+1) net.netfilter.nf_conntrack_count,表示当前连接跟踪数
+2) net.netfilter.nf_conntrack_max 表示最大连接跟踪数
+3) net.netfilter.nf_conntrack_buckets 表示连接跟踪表的大小
+这个输出告诉我们，当前连接跟踪数是180，最大链接跟踪数是1000，链接跟踪表的大小，则是65536
+
+回想前面ab命令，并发请求数是5000，而请求数是100000，显然，跟踪表设置成，只记录1000个连接，是远远不够的
+
+
+实际上，内核在工作异常时，会把异常信息记录到日志中，比如前面ab测试，内核已经在日志中报出了"nf_conntrack:table full"的错误，执行dmesg命令可以看到:
+$ dmesg | tail
+[104235.156774] nf_conntrack: nf_conntrack: table full, dropping packet
+[104243.800401] net_ratelimit: 3939 callbacks suppressed
+[104243.800401] nf_conntrack: nf_conntrack: table full, dropping packet
+[104262.962157] nf_conntrack: nf_conntrack: table full, dropping packet
+
+其中，net_ratelimit表示有大量的日志被压缩掉了，这是内核预防日志攻击的一种措施，而当你看到"nf_conntrack:table fuill"的错误时，就表示“nf_conntrack_max”太小了；
+那是不是，直接；把连接跟踪表调大就可以了呢？调节前，你先明白，连接跟踪表，实际上是内存中一个哈希表，如果连接跟踪数过大，也会耗费大量内存
+
+其实，我们上面看到的"nf_conntrack_buckets"就是哈希表的大小，哈希表中的每一项，都是一个链接表(称为bucket)，而链表长度，就等于nf_conntrack_max除以nf_conntrack_buckets
+
+比如我们可以估算一下，上述配置的链接跟踪表占用的内存大小:
+# 连接跟踪对象大小为 376，链表项大小为 16
+nf_conntrack_max* 连接跟踪对象大小 +nf_conntrack_buckets* 链表项大小 
+= 1000*376+65536*16 B
+= 1.4 MB
+
+接下来，我们将nf_conntrack_max改大一些，比如改成131072(即nf_conntrack_buckets的2倍):
+$ sysctl -w net.netfilter.nf_conntrack_max=131072
+$ sysctl -w net.netfilter.nf_conntrack_buckets=65536
+
+终端2中:重新执行ab命令，注意，这次我们把超时时间改回原来的2s:
+$ ab -c 5000 -n 100000 -r -s 2 http://192.168.0.30:8080/
+...
+Requests per second:    6315.99 [#/sec] (mean)
+Time per request:       791.641 [ms] (mean)
+Time per request:       0.158 [ms] (mean, across all concurrent requests)
+Transfer rate:          4985.15 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0  355 793.7     29    7352
+Processing:     8  311 855.9     51   14481
+Waiting:        0  292 851.5     36   14481
+Total:         15  666 1216.3    148   14645
+果然，可以看到:
+1) 每秒请求数(request per second)为6315(不用nat时为6576)
+2) 每个请求的延迟(Time per second)为791ms(不用nat时为760ms)
+3) 每个链接的延迟(Connect)为355ms(不用nat时为177ms)
+
+这个结果已经比刚才测试的好了很多，也很接近最初不用nat时的基准结果了
+
+不过，链接跟踪表里，到底都包含了哪些东西呢？这里的东西，有时怎么刷新的呢？
+实际上，可以用conntrack命令行的工具，来查看链接跟踪表的内容:
+# -L 表示列表，-o 表示以扩展格式显示
+$ conntrack -L -o extended | head
+ipv4     2 tcp      6 7 TIME_WAIT src=192.168.0.2 dst=192.168.0.96 sport=51744 dport=8080 src=172.17.0.2 dst=192.168.0.2 sport=8080 dport=51744 [ASSURED] mark=0 use=1
+ipv4     2 tcp      6 6 TIME_WAIT src=192.168.0.2 dst=192.168.0.96 sport=51524 dport=8080 src=172.17.0.2 dst=192.168.0.2 sport=8080 dport=51524 [ASSURED] mark=0 use=1
+可以看出，链接跟踪表里的对象，包括了协议、链接状态、源IP、源端口、目的IP、目的端口、跟踪状态等。由于这个格式是固定的，可以使用awk、sort等工具对其进行统计分析
+
+比如，还是ab为例，终端2启动ab命令后，回到终端1中执行如下命令:
+# 统计总的连接跟踪数
+$ conntrack -L -o extended | wc -l
+14289
+
+# 统计 TCP 协议各个状态的连接跟踪数
+$ conntrack -L -o extended | awk '/^.*tcp.*$/ {sum[$6]++} END {for(i in sum) print i, sum[i]}'
+SYN_RECV 4
+CLOSE_WAIT 9
+ESTABLISHED 2877
+FIN_WAIT 3
+SYN_SENT 2113
+TIME_WAIT 9283
+
+# 统计各个源 IP 的连接跟踪数
+$ conntrack -L -o extended | awk '{print $7}' | cut -d "=" -f 2 | sort | uniq -c | sort -nr | head -n 10
+  14116 192.168.0.2
+    172 192.168.0.96
+
+这里统计了总链接跟踪数，TCP协议各个状态的链接跟踪数，以及各个源IP的链接跟踪数，可以看到，大部分的TCP的链接跟踪，都属于TIME_WAIT状态，并且它们大都来自于192.168.0.2这个ip地址(也就是运行ab命令的vm2)
+
+
+这些处于TIME_WAIT的链接跟踪记录，会在超时后清理，而默认的超时时间是120s,可以执行如下命令来查看:
+$ sysctl net.netfilter.nf_conntrack_tcp_timeout_time_wait
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 120
+所以，如果你的链接数非常大，确实应该考虑，适当减小超时时间
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
