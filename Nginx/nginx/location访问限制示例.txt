@@ -1,0 +1,41 @@
+server{
+	listen 80;
+	server_name www.abc.com;
+	root /abc/a;
+	index index.html index.htm index.shtml index.php;
+	#index index.html;
+
+	error_page  404               /404.html;
+        #Custom rules Start
+        #Custom rules End
+    location = /500.html {
+        root   /usr/share/nginx/html;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass   unix:/dev/shm/php.sock;
+        include        fastcgi_params;
+        fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+        access_log     /abc/apps/nginx/logs/a.access.log main;
+    }
+
+    location ~ /\.ht {
+        deny  all;
+    }
+   location ~ /e/bjjy_manage/ {
+   #location ~ /e/ {
+        allow 1.1.1.1.1;
+        allow 2.2.2.2.2;
+	    allow 127.0.0.1;
+	    deny all;
+   }
+    location ~* \.php$ {
+        allow 1.1.1.1.1;
+        allow 2.2.2.2.2;
+        allow 127.0.0.1;
+        allow 3.3.3.3;
+        allow 4.4.4.4;
+        deny all;
+
+    }
+}
