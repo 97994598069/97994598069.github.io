@@ -13,8 +13,6 @@ yum makecache
 
 2.安装常用工具
 yum install ntpdate lsof net-tools gcc gcc-c++ make sysstat mtr nethogs iftop lrzsz vim openssh* psmisc openssl* ncurses ncurses-devel -y
-yum provides '*/applydeltarpm'
-yum install deltarpm -y
 
 
 3.系统时间同步
