@@ -1,0 +1,14 @@
+背景:
+网站做百度推广的时候其顶级域名备案没有完成用的公司的二级域名，之后其顶级域名下来后添加到nginx后，但是发现从百度搜索引擎中打开发现还是二级域名而不是其顶级域名，影响百度排名，需要做301重定向
+server {
+        listen       80;
+        access_log /var/log/nginx/baike_access.log;
+        error_log /var/log/nginx/baike_error.log;
+        server_name  www.abc.net abc.net ss.cdf.com;
+        if ($host = 'ss.cdf.com' ) {  
+                rewrite ^/(.*)$ http://www.abc.net/$1 permanent;  
+        }  
+		
+##将ss.cdf.com转发到www.abc.net
+
+		
