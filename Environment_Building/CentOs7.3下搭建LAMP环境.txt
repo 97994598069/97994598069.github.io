@@ -1,0 +1,155 @@
+LAMP安装有顺序：先安装Apache或Mysql，最后安装PHP。
+
+1.安装Apache
+yum -y install httpd httpd-manual mod_ssl mod_perl mod_auth_mysql
+
+systemctl enable httpd.service
+systemctl start httpd.service
+
+
+
+2.安装Mysql
+rpm -qa | gerp mysql
+yum remove -y   mysql mysql mysql-server mysql-libs compat-mysql51
+
+查看多余文件没删干净
+find / -name mysql
+
+删除多余文件
+rm -rf  /etc/my.cnf
+
+开始安装
+rpm -ivh http://dev.mysql.com/get/mysql57-community-release-el7-8.noarch.rpm
+yum install -y mysql-server
+
+systemctl enable mysqld.service
+systemctl start mysqld.service
+
+查看Mysql5.7默认密码
+grep 'temporary password' /var/log/mysqld.log
+
+登陆Mysql，输入用户名root，复制粘贴密码
+mysql -uroot -p
+
+修改密码(mysql5.7的密码设置规则：大写字母、小写字母、数字、特殊字符加起来)
+SET PASSWORD = PASSWORD('Abc123!');
+
+查看数据库
+show databases;
+
+
+Mysql配置安装成功。
+配置远程连接数据库( 详细配置 )
+创建用户
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY 'a123456!' WITH GRANT OPTION;
+(第一个root表示用户名，%表示所有的电脑都可以连接，也可以设置某个ip地址运行连接，第二个 a123456! 表示密码)。
+
+命令立即执行生效
+flush privileges;
+
+查看用户
+SELECT DISTINCT CONCAT('User: ''',user,'''@''',host,''';') AS query FROM mysql.user;
+
+配置成功
+exit;
+
+
+
+
+3、安装PHP
+1.删除以前的php版本（跟上面删除mysql的命令是一样的）
+rpm -qa | grep php
+yum remove 文件名
+
+2. 配置yum源
+事先确认yum源的链接是不是有效的。
+yum install epel-release
+rpm -ivh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm
+
+3. 确认安装的php版本
+yum list --enablerepo=remi --enablerepo=remi-php56 | grep php
+
+4. 安装php5.6
+yum install --enablerepo=remi --enablerepo=remi-php56 php php-opcache php-pecl-apcu php-devel php-mbstring php-mcrypt php-mysqlnd php-phpunit-PHPUnit php-pecl-xdebug php-pecl-xhprof php-pdo php-pear php-fpm php-cli php-xml php-bcmath php-process php-gd php-common
+php-opcache及php-pecl-apcu会有效的提高php执行速度。
+
+5. 确认php版本
+php -v
+安装成功
+
+
+
+
+4、安装Composer，用国内镜像比较快 https://pkg.phpcomposer.com/
+1.安装composer
+php -r "copy('https://install.phpcomposer.com/installer', 'composer-setup.php');"
+php composer-setup.php
+php -r "unlink('composer-setup.php');"
+
+
+2.配置全局
+sudo mv composer.phar /usr/local/bin/composer
+
+
+
+
+5、安装laravel5.2版本
+1.composer create-project laravel/laravel --prefer-dist laravel5.2(项目名) 5.2.*
+注：compser 执行命令提示Do not run Composer as root/super user! See https://getcomposer.org/root for details，这个是因为composer为了防止非法脚本在root下执行，解决办法随便切换到非root用户即可。
+2.用ftp工具下载laravel5.2/public/.htaccess到windows,用文本编辑工具打开，修改 laravel5.2/public/.htaccess 文件，把 RewriteEngine On 前面的#号去掉，有些服务器要在后面加一行 RewriteBase /
+
+
+6、最后配置Apache和laravel5.2
+用ftp工具下载/etc/httpd/conf/httpd.conf到windows,用文本编辑工具打开
+1.# LoadModule foo_module modules/mod_foo.so //这句前面的#号不要去掉，否则apache重启动不了
+LoadModule rewrite_module modules/mod_rewrite.so
+如果有mod_rewrite.so这句，就把这句前面的#号去掉；如果没有mod_rewrite.so这句，就在mod_foo.so这句后面加上这句；反正就是开启mod_rewrite.so这个服务
+
+2.把AllowOverride None改成AllowOverride All
+3.配置虚拟主机，把下面这段加在/etc/httpd/conf/httpd.conf最后面，注意去掉注释
+
+
+7.最后一步重启
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
