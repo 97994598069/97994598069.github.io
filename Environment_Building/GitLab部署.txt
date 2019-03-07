@@ -1,0 +1,102 @@
+GitLab是利用 Ruby on Rails 一个开源的版本管理系统，实现一个自托管的Git项目仓库，可通过Web界面进行访问公开的或者私人项目。它拥有与Github类似的功能，能够浏览源代码，管理缺陷和注释。可以管理团队对仓库的访问，它非常易于浏览提交过的版本并提供一个文件历史库。团队成员可以利用内置的简单聊天程序(Wall)进行交流。它还提供一个代码片段收集功能可以轻松实现代码复用，便于日后有需要的时候进行查找。
+
+社区版基于MIT license开源完全免费
+无用户，协作和仓库限制
+保护你的源码安全
+管理仓库，用户与访问权限
+
+
+GitLab部署（yum）
+配置国内源（清华）
+https://mirror.tuna.tsinghua.edu.cn/help/gitlab-ce/
+
+创建yum源 /etc/yum.repos.d/gitlab.repo
+[gitlab-ce]
+name=Gitlab CE Repository
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el$releasever/
+gpgcheck=0
+enabled=1
+
+[gitlab-ci-multi-runner]
+name=gitlab-ci-multi-runner
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/gitlab-ci-multi-runner/yum/el7
+repo_gpgcheck=0
+gpgcheck=0
+enabled=1
+gpgkey=https://packages.gitlab.com/gpg.key
+
+
+yum部署
+sudo yum makecache
+sudo yum install gitlab-ce
+
+
+初始化GitLab
+gitlab-cli reconfigure
+
+
+启动服务
+注意：不要轻信启动的信息，注意各种端口是否占用，比如80
+gitlab-ctl restart
+启动需要一段时间，这段时间会是502页面，等1分钟左右再刷新
+
+修改配置
+访问GitLab页面，并修改密码
+访问http://192.168.0.238
+配置root用户密码
+基础配置
+关闭用户注册
+
+
+创建用户
+创建组
+为各个业务线创建组
+
+在组中创建项目
+设置私有、公共
+设置用户，并设置权限
+
+
+
+安装工具获取代码当前版本
+GitLab管理工具安装及配置
+下载Git客户端并生成公钥
+下载地址
+https://git-for-windows.github.io/
+
+生成本机公钥
+桌面右键Git Bash
+ssh-keygen -t rsa -C "dinghe_1986@126.com"
+
+公钥目录
+C:\Users\BrandynX\.ssh
+
+将公钥内容添加到GitLab中
+
+
+下载Git外壳工具和中文语言包
+https://tortoisegit.org/download/
+
+桌面右键TortoiseGit-->设置-->常规菜单-->语言-->选择中国
+
+设置TortoiseGit的ssh程序
+桌面右键TortoiseGit-->设置-->网络-->设置ssh Client为
+C:\Program Files\TortoiseGit\bin\TortoiseGitPlink.exe
+
+通过本机私钥生成ppk文件
+运行C:\Program Files\TortoiseGit\bin\puttygen.exe
+Conversions-->import key-->选择私钥id_rsa-->Save private key-->保存为ppk
+获取和更新代码
+桌面右键-->Git克隆-->配置URL和目录-->选择加载Putty密钥-->选择生成的ppk文件
+
+
+
+
+
+
+
+
+Git基本流程
+添加提交文件-->添加注释信息-->commit（提交到本地仓库）-->推送（推送到服务器）-->拉取-->从服务器更新到本地仓库
+
+
