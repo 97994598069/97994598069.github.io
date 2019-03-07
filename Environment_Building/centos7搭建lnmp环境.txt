@@ -1,0 +1,263 @@
+Nginx版本：Nginx 1.10.2
+MySQL版本：MySQL 5.6.24
+PHP版本：PHP 5.6.38
+
+[root@localhost html]# cat /etc/redhat-release
+CentOS Linux release 7.6.1810 (Core) 
+
+yum groupinstall "Development tools" -y
+yum install zlib-devel pcre-devel openssl-devel -y
+yum install epel-release -y
+yum install perl perl-devel perl-ExtUtils-Embed libxslt libxslt-devel libxml2 libxml2-devel gd gd-devel GeoIP GeoIP-devel -y
+
+wget http://nginx.org/download/nginx-1.10.2.tar.gz
+tar xvf nginx-1.10.2.tar.gz -C /usr/local/src
+cd /usr/local/src/nginx-1.10.2
+./configure --prefix=/etc/nginx \
+--sbin-path=/usr/sbin/nginx \
+--conf-path=/etc/nginx/nginx.conf \
+--error-log-path=/var/log/nginx/error.log \
+--http-log-path=/var/log/nginx/access.log \
+--pid-path=/var/run/nginx.pid \
+--lock-path=/var/run/nginx.lock \
+--http-client-body-temp-path=/var/tmp/nginx/client \
+--http-proxy-temp-path=/var/tmp/nginx/proxy \
+--http-fastcgi-temp-path=/var/tmp/nginx/fcgi \
+--http-uwsgi-temp-path=/var/tmp/nginx/uwsgi \
+--http-scgi-temp-path=/var/tmp/nginx/scgi \
+--user=nginx --group=nginx \
+--with-pcre --with-http_v2_module \
+--with-http_ssl_module \
+--with-http_realip_module \
+--with-http_addition_module \
+--with-http_sub_module \
+--with-http_dav_module \
+--with-http_flv_module \
+--with-http_mp4_module \
+--with-http_gunzip_module \
+--with-http_gzip_static_module \
+--with-http_random_index_module \
+--with-http_secure_link_module \
+--with-http_stub_status_module \
+--with-http_auth_request_module \
+--with-mail --with-mail_ssl_module \
+--with-file-aio \
+--with-ipv6 \
+--with-http_v2_module \
+--with-threads \
+--with-stream \
+--with-stream_ssl_module
+make && make install
+mkdir -p /var/tmp/nginx/client
+
+
+useradd nginx
+chown -R nginx:nginx /etc/nginx/
+
+vi /usr/lib/systemd/system/nginx.service
+[Unit]
+Description=nginx - high performance web server
+Documentation=https://nginx.org/en/docs/
+After=network-online.target remote-fs.target nss-lookup.target
+Wants=network-online.target 
+
+[Service]
+Type=forking
+PIDFile=/var/run/nginx.pid
+ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
+ExecStart=/usr/sbin/nginx -c /etc/nginx/nginx.conf
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID 
+
+[Install] 
+WantedBy=multi-user.target
+
+systemctl start nginx
+systemctl enable nginx
+
+
+
+
+
+yum install ncurses-devel bison gnutls-devel –y
+yum install cmake -y
+mkdir /mnt/data
+groupadd -r mysql
+useradd -r -g mysql -s /sbin/nologin mysql
+id mysql
+
+chown -R mysql:mysql /mnt/data
+wget https://downloads.mysql.com/archives/get/file/mysql-5.6.24.tar.gz
+tar xvf mysql-5.6.24.tar.gz -C  /usr/local/src
+cd /usr/local/src/mysql-5.6.24
+cmake . -DCMAKE_INSTALL_PREFIX=/usr/local/mysql \
+-DMYSQL_DATADIR=/mnt/data \
+-DSYSCONFDIR=/etc \
+-DWITH_INNOBASE_STORAGE_ENGINE=1 \
+-DWITH_ARCHIVE_STORAGE_ENGINE=1 \
+-DWITH_BLACKHOLE_STORAGE_ENGINE=1 \
+-DWITH_READLINE=1 \
+-DWITH_SSL=system \
+-DWITH_ZLIB=system \
+-DWITH_LIBWRAP=0 \
+-DMYSQL_TCP_PORT=3306 \
+-DDEFAULT_CHARSET=utf8 \
+-DDEFAULT_COLLATION=utf8_general_ci \
+-DMYSQL_UNIX_ADDR=/usr/local/mysql/mysql.sock \
+-DWITH_SYSTEMD=1 \
+-DINSTALL_SYSTEMD_UNITDIR=/usr/lib/systemd/system \
+make && make install
+
+chown -R mysql:mysql /usr/local/mysql/
+
+cd /usr/local/mysql
+/usr/local/mysql/scripts/mysql_install_db --user=mysql --datadir=/mnt/data/
+mv /etc/my.cnf /etc/my.cnf.bak
+cp /usr/local/mysql/support-files/my-default.cnf /etc/my.cnf
+
+echo -e "basedir = /usr/local/mysql\ndatadir = /mnt/data\n" >> /etc/my.cnf
+vi /usr/lib/systemd/system/mysql.service
+[Unit]
+Description=MySQL Community Server
+After=network.target
+After=syslog.target
+
+[Install]
+WantedBy=multi-user.target
+Alias=mysql.service
+
+[Service]
+User=mysql
+Group=mysql
+PermissionsStartOnly=true
+ExecStart=/usr/local/mysql/bin/mysqld
+TimeoutSec=600
+Restart=always
+PrivateTmp=false
+
+
+echo "export PATH=$PATH:/usr/local/mysql/bin" > /etc/profile.d/mysql.sh
+source /etc/profile.d/mysql.sh
+
+systemctl enable mysql
+systemctl start mysql
+mysql  进入mysql
+GRANT all privileges ON *.* TO 'xuxu'@'%' identified by '000000' WITH GRANT OPTION;
+
+
+
+安装PHP-FPM
+yum install libmcrypt libmcrypt-devel mhash mhash-devel libxml2 libxml2-devel bzip2 bzip2-devel
+wget http://cn2.php.net/get/php-5.6.38.tar.bz2/from/this/mirror
+cp mirror php-5.6.38.tar.bz2
+tar xvf php-5.6.38.tar.bz2 -C /usr/local/src
+cd /usr/local/src/php-5.6.38
+./configure --prefix=/usr/local/php \
+--with-config-file-scan-dir=/etc/php.d \
+--with-config-file-path=/etc \
+--with-mysql=/usr/local/mysql \
+--with-mysqli=/usr/local/mysql/bin/mysql_config \
+--enable-mbstring \
+--with-freetype-dir \
+--with-jpeg-dir \
+--with-png-dir \
+--with-zlib \
+--with-libxml-dir=/usr \
+--with-openssl \
+--enable-xml \
+--enable-sockets \
+--enable-fpm \
+--with-mcrypt \
+--with-bz2
+make && make install
+
+cp /usr/local/src/php-5.6.38/php.ini-production /etc/php.ini
+cd /usr/local/php/etc/
+cp php-fpm.conf.default php-fpm.conf
+sed -i 's@;pid = run/php-fpm.pid@pid = /usr/local/php/var/run/php-fpm.pid@' php-fpm.conf
+
+vi /usr/lib/systemd/system/php-fpm.service
+[Unit]
+Description=The PHP FastCGI Process Manager
+After=network.target
+
+[Service]
+Type=simple
+PIDFile=/usr/local/php/var/run/php-fpm.pid ExecStart=/usr/local/php/sbin/php-fpm --nodaemonize --fpm-config /usr/local/php/etc/php-fpm.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
+systemctl start php-fpm
+systemctl enable php-fpm
+
+service php-fpm start
+
+
+
+添加Nginx对FastCGI的支持。
+备份默认的Nginx配置文件
+cp /etc/nginx/nginx.conf /etc/nginx/nginx.confbak
+cp nginx.conf.default nginx.conf.default.bak
+cp /etc/nginx/nginx.conf.default /etc/nginx/nginx.conf
+
+
+输入命令vi /etc/nginx/nginx.conf打开Nginx的配置文件，按下i键，在所支持的主页面格式中添加PHP格式的主页，类似如下：
+location / {
+  root   /etc/nginx/html;
+  index  index.php index.html index.htm;
+}
+
+取消以下内容前面的注释：
+location ~ \.php$ {
+ root html;
+ fastcgi_pass 127.0.0.1:9000;
+ fastcgi_index index.php;
+ fastcgi_param SCRIPT_FILENAME /scripts$fastcgi_script_name;
+ include fastcgi_params;
+}
+将root html;改成root /etc/nginx/html;。
+将fastcgi_param SCRIPT_FILENAME /scripts$fastcgi_script_name;改成fastcgi_param SCRIPT_FILENAME /etc/nginx/html/$fastcgi_script_name;。
+按下Esc键，然后输入:wq并回车以保存并关闭Nginx配置文件。
+
+systemctl restart nginx重新载入Nginx的配置文件。
+
+输入命令vi /etc/nginx/html/index.php打开index.php文件，按下i键，然后在文件中写入如下内容：
+<?php
+$conn=mysql_connect('127.0.0.1','root','');
+if ($conn){
+echo "LNMP platform connect to mysql is successful!";
+}else{
+echo "LNMP platform connect to mysql is failed!";
+}
+phpinfo();
+?>
+
+
+例如:
+[root@localhost conf.d]# cat piwik.conf 
+server {
+    listen 80;
+    server_name localhost 127.0.0.1 192.168.2.109;
+    location ~ \.php$ {
+        root /etc/nginx/html;
+        fastcgi_pass 127.0.0.1:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME /etc/nginx/html/$fastcgi_script_name;
+        include fastcgi_params;
+    }
+    location / {
+        root /etc/nginx/html;
+        index index.php;
+   }
+}
+
+
+
+
+
+
+
+
