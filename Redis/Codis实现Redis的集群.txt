@@ -1,0 +1,230 @@
+Codis 是一个分布式 Redis 解决方案, 对于上层的应用来说, 连接到 Codis Proxy 和连接原生的 Redis Server 没有明显的区别 (不支持的命令列表https://github.com/CodisLabs/codis/blob/release3.2/doc/unsupported_cmds.md), 上层应用可以像使用单机的 Redis 一样使用, Codis 底层会处理请求的转发, 不停机的数据迁移等工作, 所有后边的一切事情, 对于前面的客户端来说是透明的, 可以简单的认为后边连接的是一个内存无限大的 Redis 服务：
+
+Codis是豌豆荚的开源方案，目前在redis集群实现方式对比，codis集群比较稳定的方案，并且客户端不需要做任何修改，相对redis cluster兼容性更强，可节约大量开发成本并减少大量后期维护成本， 主要由以下特点：
+可以无缝迁移到codis，自带迁移工具，并且案例较多
+可以动态扩容和缩容
+多业务完全透明，业务不知道运行的是codis
+支持多核心CPU，twemproxy只能单核
+codis是中心基于proxy的设计，是客户端像连接单机一样操作proxy
+有部分命令不能支持，比如keys *等
+支持group划分，组内可以设置一个主多个从，通过sentinel 监控redis主从，当主down了自动将从切换为主
+设置的进程要最大等于CPU的核心，不能超过CPU的核心数
+其依赖于zookeeper，里面保存的是key保存的redis主机位置，因此zookeeper要做高可用
+监控可以使用接口和dashboard
+
+环境初始化
+Go语言环境安装
+cd /opt/
+wget https://storage.googleapis.com/golang/go1.8.1.linux-amd64.tar.gz
+tar xzf go1.8.1.linux-amd64.tar.gz
+mv go /usr/local/
+mkdir /usr/local/go/work
+
+cat >> /etc/profile <<EOF
+export PATH=$PATH:/usr/local/go/bin
+export GOROOT=/usr/local/go
+export GOPATH=/usr/local/go/work
+EOF
+. /etc/profile
+
+go version
+go version go1.8.1 linux/amd64
+
+
+
+Zookeeper部署
+略
+
+
+Codis部署
+源码部署
+二进制部署
+下载并建立目录
+cd /opt
+wget https://github.com/CodisLabs/codis/releases/download/3.2.0/codis3.2.0-go1.8.1-linux.tar.gz
+tar xzf codis3.2.0-go1.8.1-linux.tar.gz
+mv codis3.2.0-go1.8.1-linux /usr/local/ && cd /usr/local/
+ln -s codis3.2.0-go1.8.1-linux codis-server
+mkdir /usr/local/codis-server/logs
+#根据不同角色定义目录
+#ln -s codis3.2.0-go1.8.1-linux codis-dashboard
+#mkdir /usr/local/codis-dashboard/logs
+#ln -s codis3.2.0-go1.8.1-linux codis-proxy
+#mkdir /usr/local/codis-proxy/logs
+
+
+将源码包中的config目录拷贝到/usr/local/codis/目录下
+cd /opt/
+wget https://codeload.github.com/CodisLabs/codis/tar.gz/3.2.0
+tar xzf 3.2.0
+cp -a  /opt/codis-3.2.0/config  /usr/local/codis-server/
+#cp -a  /opt/codis-3.2.0/config  /usr/local/codis-dashboard/
+#cp -a  /opt/codis-3.2.0/config  /usr/local/codis-proxy/
+
+
+修改目录权限
+chown root.root -R /usr/local/codis
+
+
+配置Codis-Server（Redis）
+主机名	监听端口	session_auth	数据目录	最大内存	IP地址
+rds01	6900	codis6m4zGKYz	/data/codis_6900/	1G	192.168.0.106
+rds01	6901	codis6m4zGKYz	/data/codis_6901/	1G	192.168.0.106
+rds02	6902	codis6m4zGKYz	/data/codis_6902/	1G	192.168.0.227
+rds02	6903	codis6m4zGKYz	/data/codis_6903/	1G	192.168.0.227
+
+初始化目录和配置文件
+192.168.0.116
+mkdir /data/codis_690{0..1}
+cd /usr/local/codis-server/config/
+cp redis.conf 6900_codis.conf
+cp redis.conf 6901_codis.conf
+
+
+192.168.0.227
+mkdir /data/codis_690{2..3}
+cd /usr/local/codis-server/config/
+cp redis.conf 6902_codis.conf
+cp redis.conf 6903_codis.conf
+
+
+配置文件(主要参数)
+#grep ^[a-Z] redis_6900.conf 
+bind 192.168.0.227
+port 6902
+daemonize yes
+pidfile /data/codis_6902/redis_6902.pid
+loglevel notice
+logfile "/data/codis_6902/redis_6902.log"
+databases 16
+dbfilename dump_6902.rdb
+dir /data/codis_6902/
+requirepass codis6m4zGKYz
+maxmemory 1G
+appendonly yes
+appendfilename "appendonly.aof"
+
+
+启动并测试
+/usr/local/codis-server/codis-server /usr/local/codis-server/config/6900_codis.conf
+/usr/local/codis-server/redis-cli -h 192.168.0.106 -p 6900 -a codis6m4zGKYz
+
+
+配置codis-proxy
+基础环境
+主机名	代理端口	管理端口	product_auth	session_auth	IP地址
+dal01	19000	11080	dashfpyYmglC	codis6m4zGKYz	192.168.0.111
+dal02	19000	11080	dashfpyYmglC	codis6m4zGKYz	192.168.0.239
+
+写在之前
+product_auth是Codis各个角色间通讯的密码，Codis-server中的requirepass就是设置的这个密码
+session_auth是把Codis-Server中的requirepass的功能，提升到了Codis-proxy来实现
+最终就是客户端连接Codis集群时，所带的密码是session_auth密码，而所有Codis角色间通讯，都使用product_auth密码
+
+
+配置
+# Set Codis Product Name/Auth.
+product_name = "codis-cluster"
+product_auth = "dashfpyYmglC"
+
+# Set auth for client session
+#   1. product_auth is used for auth validation among codis-dashboard,
+#      codis-proxy and codis-server.
+#   2. session_auth is different from product_auth, it requires clients
+#      to issue AUTH <PASSWORD> before processing any other commands.
+session_auth = "codis6m4zGKYz"
+
+admin_addr = "192.168.0.110:11080"
+
+proto_type = "tcp4"
+proxy_addr = "192.168.0.110:19000"
+
+jodis_name = "zookeeper"
+jodis_addr = "192.168.0.112:2181,192.168.0.112:2182,192.168.0.112:2183"
+jodis_timeout = "20s"
+jodis_compatible = false
+
+疑问？proxy_addr配置所有proxy还是自己？
+启动服务
+nohup /usr/local/codis-proxy/codis-proxy --ncpu=1 -c /usr/local/codis-proxy/config/proxy.toml -l /usr/local/codis-proxy/logs/proxy.log --log-level=WARN >> /usr/local/codis-proxy/logs/nohup_proxy.log &
+
+
+
+配置codis-dashboard
+基础环境
+主机名	    管理端口	product_auth	IP地址
+dashboard	18080	    dashfpyYmglC	192.168.0.111
+fe	         8888	         -	        192.168.0.111
+
+
+配置修改
+修改存储为zookeeper并修改product_name名称
+# Set Coordinator, only accept "zookeeper" & "etcd" & "filesystem".
+# Quick Start
+#coordinator_name = "filesystem"
+#coordinator_addr = "/tmp/codis"
+coordinator_name = "zookeeper"
+coordinator_addr = "192.168.0.112:2181,192.168.0.112:2182,192.168.0.112:2183"
+
+# Set Codis Product Name/Auth.
+product_name = "codis-cluster"
+product_auth = "dashfpyYmglC"
+
+# Set bind address for admin(rpc), tcp only.
+admin_addr = "192.168.0.111:18080"
+
+
+
+启动Dashboard
+nohup /usr/local/codis/codis-dashboard --ncpu=1 -c /usr/local/codis/config/dashboard.toml -l /usr/local/codis/logs/dashboard.log --log-level=WARN  >>  /usr/local/codis/logs/nohup_dashboard.log &
+
+
+查看端口和zookeeper是否有数据
+[zk: 192.168.0.112:2181,192.168.0.112:2181,192.168.0.112,2183(CONNECTED) 2] get /codis3/codis-cluster/topom
+{
+    "token": "a3eefb8d4762addf12265a5c6f847ea8",
+    "start_time": "2017-08-23 13:01:44.961022186 +0800 CST",
+    "admin_addr": "192.168.0.111:18080",
+    "product_name": "codis-cluster",
+    "pid": 13773,
+    "pwd": "/usr/local/codis-dashboard/config",
+    "sys": "Linux dashboard.prod.ding 3.10.0-514.16.1.el7.x86_64 #1 SMP Wed Apr 12 15:04:24 UTC 2017 x86_64 x86_64 x86_64 GNU/Linux"
+}
+c
+
+
+启动codis-fe
+nohup /usr/local/codis-dashboard/codis-fe --ncpu=1 -l /usr/local/codis-dashboard/logs/fe.log --log-level=WARN --zookeeper=192.168.0.112:2181,192.168.0.112:2182,192.168.0.112:2183 --listen=192.168.0.111:8888 >> /usr/local/codis-dashboard/logs/nohup_fe.log &
+
+配置哨兵，通过codis-fe添加到集群中
+注意，配置文件只添加如下内容，剩下的系统自动添加
+#cat 26379_sentinel.conf 
+bind 192.168.0.110
+port 26379
+daemonize yes
+protected-mode yes
+dir "/tmp"
+loglevel notice
+logfile "/data/setinel-26379.log"
+
+
+启动哨兵
+/usr/local/codis-proxy/codis-server /usr/local/codis-server/config/26379_sentinel.conf --sentinel
+
+
+在codis-fe中增加哨兵
+最终图形界面
+
+
+
+
+
+
+
+
+
+
+
+
+
+
