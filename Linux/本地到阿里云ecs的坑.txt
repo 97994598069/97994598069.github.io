@@ -54,5 +54,7 @@ ftp> 221 Goodbye.
 [root@iZ25gmzxq5aZ ~]# cat /etc/zabbix/zabbix_agentd.conf |grep "$公司出口ip"
 Server=$zabbix-server的外网ip,$公司出口ip
 ServerActive=$zabbix-server的外网ip,$公司出口ip
-
+经测试：
+Server=server端的公网出口IP,$服务器内网ip
+ServerActive=server端的公网出口ip
 
