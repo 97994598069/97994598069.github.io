@@ -1,0 +1,178 @@
+背景:
+整体架构 spring cloud + k8s 微服务架构
+k8s集群 192.168.1.104 192.168.1.105 192.168.1.106 192.168.1.107 192.168.1.108
+
+192.168.1.104和192.168.1.107 即为master节点又为node节点
+192.168.1.105 192.168.1.106 192.168.1.108 为node节点
+
+
+spring cloud的各个服务:jycloud-config eureka-peer jycloud-gateway jycloud-proxy jycloud-general jycloud-member jycloud-manage jycloud-message jycloud-order jycloud-product jycloud-proxy
+jycloud-config eureka-peer jycloud-gateway jycloud-proxy  依次依赖，必须依次启动
+jycloud-general jycloud-member jycloud-manage jycloud-message jycloud-order jycloud-product jycloud-proxy 无依赖可批量启动
+
+jycloud-general jycloud-member jycloud-manage jycloud-message jycloud-order jycloud-product jycloud-proxy需要连接jycloud-config eureka-peer服务
+
+问题在此:
+编写yaml的时候使用的node_port模式:
+举例:
+启动完config后，config的端口是6086,由于使用的是node_port模式，所以在各个node上6086端口都是通的，所以之前想的是三个方案:
+1) 单独的使用其中的一个node ip + port的模式进行连接  事实证明是可行的；；但是存在单点故障的问题
+2) 使用cluster IP 连接     也是可行的 ；；；但是重启svc cluster IP是变化的，如果服务由于业务需要重启，每次的启动都需要重新配置其余服务的配置文件；；；；除此之外jycloud-config eureka-peer 需要外部访问(需要排查一些问题)
+3) 使用外部的nginx或者haproxy等做负载调度，肯定也是可行的，但是服务器有限，即使使用一台服务器做调度，调度器本身就存在单点故障，如调度器做成冗余则需要增加服务器，无服务器使用
+
+
+
+
+想法，如果能在yaml中指定其cluster ip 将可行；；怎么实现呢？ 如下：
+
+通过查看特定的:
+[root@k8s01 jycloud]# kubectl get service kubernetes -o yaml
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: 2018-10-30T05:01:44Z
+  labels:
+    component: apiserver
+    provider: kubernetes
+  name: kubernetes
+  namespace: default
+  resourceVersion: "6"
+  selfLink: /api/v1/namespaces/default/services/kubernetes
+  uid: e595401b-dc00-11e8-a79d-286ed488c846
+spec:
+  clusterIP: 10.1.7.1
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 6443
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
+
+
+
+修改之前:
+[root@k8s01 jycloud_bak0311]# cat config-jycloud-rc.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-config
+spec:
+  type: NodePort
+  ports:
+  - port: 8088
+    nodePort: 8088
+  selector:
+    app: jycloud-config
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jycloud-config
+  template:
+    metadata:
+      labels:
+        app: jycloud-config
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-config
+        image: 192.168.2.45:5000/org.jygroup.cloud/config:V1.0.6
+        ports:
+        - containerPort: 8088
+		
+修改成cluster之后:
+[root@k8s01 jycloud]# cat config-jycloud-rc.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: jycloud-config
+spec:
+  clusterIP: 10.1.7.2   ###指定cluster_ip，若该IP已经使用，则启动会报错
+  ports:
+  - port: 8088
+    targetPort: 8088
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  type: ClusterIP
+  selector:
+    app: jycloud-config
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: jycloud-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jycloud-config
+  template:
+    metadata:
+      labels:
+        app: jycloud-config
+    spec:
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: jycloud-config
+        image: 192.168.2.45:5000/com.ciip.cloud/config:V1.0.9
+        ports:
+        - containerPort: 8088
+
+
+经测试：
+依次修改config---->discovery--->gateway----proxy 经测试启动完成并没有报错
+
+
+discovery的本地查看问题:
+使用nginx做反向代理可以查看
+
+
+避免点单故障原理:
+重要的依赖服务启动多个pod（默认是尽可能地分布在不同的node上），但是链接的时候使用其指定的cluster IP(指定后，即使重启svc也不会改变)；；这样即使一个node出现了意外，重要的依赖服务也不会出现不能用的状态
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
