@@ -47,7 +47,7 @@ location / {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header Host $host;
-#        allow 182.50.115.98;           ##新增，发版前打开，发版测试完关闭
+#        allow 1.2.3.4;           ##新增，发版前打开，发版测试完关闭 （IP为公司出口IP）
 #        deny all;                      ##新增，发版前打开，发版测试完关闭
 #        error_page 403 http://update.abc.com/$1;  ##新增，发版前打开，发版测试完关闭 （可一直打开着，无影响）
         }
