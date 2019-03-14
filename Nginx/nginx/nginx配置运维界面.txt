@@ -1,0 +1,76 @@
+背景:
+1. nginx多域名
+2. 公司web网站需要版本迭代上线，但是在上线的时间中不能使网站突然变为白板，这样对于客户是不友好的
+
+问题:
+增加一静态界面(例如：网站正在更新中，请稍后！)，
+但是如果只是增加一个静态界面，临时将静态界面目录给修改的话，发版完怎么测试呢，（例如域名是www.abc.com;由于网站临时被切换到了维护界面,那么发版完测试人员访问也会是维护界面）
+
+为了解决上述问题
+修改网站配置文件:
+
+1.增加个二级域名为update.abc.com 
+2.nginx增加一个server
+[root@_i conf.d]# cat yunwei.conf 
+server {
+    listen 80;
+    server_name update.abc.com;
+    root /etc/nginx/yunwei;
+    index baike.html;
+}
+
+3.更改网站的server
+[root@_i conf.d]# cat baiker.abc.com.conf
+upstream node_app {
+        server 127.0.0.1:3000;
+    }
+
+upstream baiker {
+        server 127.0.0.1:8080;
+        }
+server {
+        listen       80;
+        access_log /var/log/nginx/baiker_access.log;
+        error_log /var/log/nginx/baiker_error.log;
+        server_name  www.abc.com abc.com baiker.dcf.com;
+         if ($host = 'baiker.dcf.com' ) {                    
+                rewrite ^/(.*)$ http://www.abc.com/$1 permanent;       ###为了百度排名做的重定向
+        }  
+         if ($host = 'abc.com' ) {  
+                rewrite ^/(.*)$ http://www.abc.com/$1 permanent;        ###为了百度排名做的重定向
+        }  
+
+
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+#        allow 182.50.115.98;           ##新增，发版前打开，发版测试完关闭
+#        deny all;                      ##新增，发版前打开，发版测试完关闭
+#        error_page 403 http://update.abc.com/$1;  ##新增，发版前打开，发版测试完关闭 （可一直打开着，无影响）
+        }
+
+
+}
+	
+server {
+	listen       80;
+        server_name  api.baiker.dcf.com;
+location / {
+
+        proxy_pass http://baiker;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
+
+
+原理:
+网站发版，配置了公司IP的allow所以此时只会允许公司内部ip访问网站，其余的ip全部会走deny会报403;;然后会走下面的403的重定向界面也就是提前配置好的运维页面
+
+也就是说外网访问网站的时候会出现运维界面（网站正在升级，请稍等）。但是内部访问是正常的；可以给测试同学进行测试
