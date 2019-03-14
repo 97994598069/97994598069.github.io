@@ -1,3 +1,5 @@
 [root@k8s02 ~]# curl -H 'Cache-Control: no-cache' -o /dev/null -s -w '%{time_total} %{http_code}' http://www.abc,com/products/67
 
 [root@k8s02 ~]# curl -H 'Cache-Control: no-cache' -o /dev/null -s -w '%{time_total} %{http_code}' http://www.abc.com/products/67
+
+[root@localhost vhost]# curl -X GET -I http://www.abc.com/_nuxt/layouts_default.a195f3eb33cffa6275a3.js
