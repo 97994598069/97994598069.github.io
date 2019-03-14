@@ -1,0 +1,3 @@
+[root@k8s02 ~]# curl -H 'Cache-Control: no-cache' -o /dev/null -s -w '%{time_total} %{http_code}' http://www.abc,com/products/67
+
+[root@k8s02 ~]# curl -H 'Cache-Control: no-cache' -o /dev/null -s -w '%{time_total} %{http_code}' http://www.abc.com/products/67
