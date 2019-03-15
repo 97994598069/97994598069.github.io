@@ -1,0 +1,163 @@
+[root@_i conf.d]# cat baiker.china.com.conf
+upstream node_app {
+        server 127.0.0.1:3000;
+    }
+
+upstream baiker {
+        server 127.0.0.1:8080;
+        }
+server {
+        listen       80;
+        access_log /var/log/nginx/baiker_access.log;
+        error_log /var/log/nginx/baiker_error.log;
+        server_name  www.baiker.com baiker.com baiker.china.com;
+         if ($host = 'baiker.china.com' ) {  
+                rewrite ^/(.*)$ http://www.baiker.com/$1 permanent;  
+        }  
+         if ($host = 'baiker.com' ) {  
+                rewrite ^/(.*)$ http://www.baiker.com/$1 permanent;  
+        }  
+    
+#######################禁止压测###############################   ##如下同理，重复可写成一个
+
+         if ($http_user_agent ~ ApacheBench|webBench|Java/) {
+                 return 403;
+        }
+		
+#######################反爬虫(注意运营的百度推广等，不能禁了常用浏览器的抓取)#################################   
+         if ($http_user_agent ~ "WinHttp|WebZIP|FetchURL|node-superagent|java/|FeedDemon|Jullo|JikeSpider|Indy Library|Alexa Toolbar|AskTbFXTV|AhrefsBot|CrawlDaddy|Java|Feedly|Apache-HttpAsyncClient|UniversalFeedParser|ApacheBench|Microsoft URL Control|Swiftbot|ZmEu|oBot|jaunty|Python-urllib|lightDeckReports Bot|YYSpider|DigExt|HttpClient|MJ12bot|heritrix|EasouSpider|Ezooms|BOT/0.1|YandexBot|FlightDeckReports|Linguee Bot|^$" ) {
+               return 403;
+        }
+
+######################禁止非GET|HEAD|POST方式的抓取##############################
+        if ($request_method !~ ^(GET|HEAD|POST)$) {
+                return 403;
+        }
+
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        #allow 1.1.1.1;
+	    #deny all;
+        #error_page 403 http://update.baiker.com/$1;
+        }
+
+
+}
+	
+server {
+	listen       80;
+        server_name  api.baiker.china.com;
+location / {
+
+        proxy_pass http://baiker;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
+
+######################################################################################################################################################################################
+######################################################################################################################################################################################
+
+Nginx被爬虫的服务器，会在某个时间点CPU占用骤增, 不同时间段CPU占用较高（也可能会出现内存溢出等问题）。如果服务器有web业务，那么基本可以确定被爬虫了...
+首先对爬虫IP进行屏蔽
+策略: 通过awk筛选日志，找出访问量较高的可以IP地址进行屏蔽。
+
+(1)查找要禁止的IP:
+awk '{print $1}' /var/log/nginx/access.log|sort |uniq -c|sort -rn
+
+(2)屏蔽IP或IP段
+在nginx server区段添加如下即可：
+deny 5.188.211.72;
+或
+deny 5.188.211.70/32;
+
+
+Nginx判断UA处理反爬虫
+这个时候就有充足的时间通过一些手段进行反爬虫处理了...
+
+将下面的if语句放在nginx配置文件的server或者location代码区域内【不能放在http区域】。
+#禁止指定UA及UA为空的访问(常见UA列表详见附录)
+
+if ($http_user_agent ~* "Applebot|SEOkicks-Robot|DotBot|YunGuanCe|Exabot|spiderman|Scrapy|HttpClient|Teleport|TeleportPro|SiteExplorer|WBSearchBot|Elefent|psbot|TurnitinBot|wsAnalyzer|ichiro|ezooms|FeedDemon|Indy Library|Alexa Toolbar|AskTbFXTV|AhrefsBot|CrawlDaddy|CoolpadWebkit|Java|Feedly|UniversalFeedParser|ApacheBench|Microsoft URL Control|Swiftbot|ZmEu|oBot|jaunty|Python-urllib|lightDeckReports Bot|YYSpider|DigExt|HttpClient|MJ12bot|heritrix|EasouSpider|Ezooms|^$") {
+  return 403;
+}
+
+
+测试
+curl -I -A "spiderman" https://xx.xxx.com
+或
+curl -I -A "YunGuanCe" https://xx.xxx.com
+
+如果返回403的输出，则说明配置已经生效了
+
+
+
+
+自行筛选屏蔽UA
+log筛选命令：
+cat access.log|awk -F '"' '{print $6}'|sort|uniq -c |sort -rn|head -20
+将可疑的UA加入以上屏蔽列表即可。
+
+
+常见搜索引擎爬虫的User-Agent  
+（这些最好不要禁，若要禁则需要和运营协商）
+
+
+百度爬虫
+Baiduspider+(+http://www.baidu.com/search/spider.htm”)
+
+Google爬虫
+Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
+Googlebot/2.1 (+http://www.googlebot.com/bot.html)
+Googlebot/2.1 (+http://www.google.com/bot.html)
+
+雅虎爬虫(分别是雅虎中国和美国总部的爬虫)
+Mozilla/5.0 (compatible; Yahoo! Slurp China; http://misc.yahoo.com.cn/help.html”)
+Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp”)
+
+新浪爱问爬虫
+iaskspider/2.0(+http://iask.com/help/help_index.html”)
+Mozilla/5.0 (compatible; iaskspider/1.0; MSIE 6.0)
+
+搜狗爬虫
+Sogou web spider/3.0(+http://www.sogou.com/docs/help/webmasters.htm#07″)
+Sogou Push Spider/3.0(+http://www.sogou.com/docs/help/webmasters.htm#07″)
+
+网易爬虫
+Mozilla/5.0 (compatible; YodaoBot/1.0; http://www.yodao.com/help/webmaster/spider/”; )
+
+MSN爬虫
+msnbot/1.0 (+http://search.msn.com/msnbot.htm”)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
