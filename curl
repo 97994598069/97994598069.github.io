@@ -3,3 +3,9 @@
 [root@k8s02 ~]# curl -H 'Cache-Control: no-cache' -o /dev/null -s -w '%{time_total} %{http_code}' http://www.abc.com/products/67
 
 [root@localhost vhost]# curl -X GET -I http://www.abc.com/_nuxt/layouts_default.a195f3eb33cffa6275a3.js
+
+
+测试：
+curl -X PUT http://192.168.2.64:8080/hello777.jsp%20 -d "HelloJSP"  ###会在ROOT下新建一个文件hello777.jsp   内容是HelloJSP   如果是shell脚本？？
+curl -X DELETE http://192.168.2.64:8080/test.log   删除ROOT目录下test.log
+curl -v -X OPTIONS http://192.168.2.64:8080
