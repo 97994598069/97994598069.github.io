@@ -25,6 +25,25 @@ Sysdig 工具需要用到内核头文件包，开始安装前，需要确认内�
 #yum -y install sysdig
 
 
+##安装的坑####
+1) dkms  安装https://centos.pkgs.org/6/epel-i386/dkms-2.4.0-1.20170926git959bd74.el6.noarch.rpm.html    down下来然后rpm安装  (需要yum -y install libreoffice* ？？)
+解决如下问题:
+错误：Package: sysdig-0.24.2-1.x86_64 (draios)
+          Requires: dkms
+ You could try using --skip-broken to work around the problem
+** Found 3 pre-existing rpmdb problem(s), 'yum check' output follows:
+1:libreoffice-core-4.2.8.2-11.el6.x86_64 has missing requires of libjawt.so()(64bit)
+1:libreoffice-core-4.2.8.2-11.el6.x86_64 has missing requires of libjawt.so(SUNWprivate_1.1)(64bit)
+1:libreoffice-ure-4.2.8.2-11.el6.x86_64 has missing requires of jre >= ('0', '1.5.0', None)
+
+2).安装完成后输入sysdig  报错error opening device /dev/sysdig0. Make sure you have root credentials and that the sysdig-probe module is loaded.
+输入命令
+whereis sysdig-probe-loader
+/usr/bin/sysdig-probe-loader
+
+输入sysdig 显示正常
+
+
 sysdig 的输出
 #sysdig |more
 第一列是事件序号，它是自动增长的；
