@@ -9,3 +9,7 @@
 curl -X PUT http://192.168.2.64:8080/hello777.jsp%20 -d "HelloJSP"  ###会在ROOT下新建一个文件hello777.jsp   内容是HelloJSP   如果是shell脚本？？
 curl -X DELETE http://192.168.2.64:8080/test.log   删除ROOT目录下test.log
 curl -v -X OPTIONS http://192.168.2.64:8080
+
+
+
+curl -o /dev/null -s -w http_code:'\t'%{http_code}'\n'http_connect:'\t'%{http_connect}'\n'content_type:'\t'%{content_type}'\n'time_namelookup:'\t'%{time_namelookup}'\n'time_redirect:'\t'%{time_redirect}'\n'time_pretransfer:'\t'%{time_pretransfer}'\n'time_connect:'\t'%{time_connect}'\n'time_starttransfer:'\t'%{time_starttransfer}'\n'time_total:'\t'%{time_total}'\n'speed_download:'\t'%{speed_download} http://www.jinyoujia.net/products/67
