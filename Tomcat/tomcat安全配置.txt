@@ -1,0 +1,238 @@
+一、删除示例文档
+删除webapps/docs、examples、manager、ROOT、host-manager
+
+二、禁止列目录
+打开web.xml，将<param-name>listings</param-name> 改成</param-name> false</param-name> ，防止直接访问目录时由于找不到默认页面而列出目录下的文件。
+
+三、修改默认端口
+编辑conf/server.xml文件，把8080改成1024-65535的未使用端口。
+
+四、禁用tomcat默认帐号
+打开conf/tomcat-user.xml文件，将以下用户注释掉：
+<!--
+<role rolename="tomcat"/>
+<role rolename="role1"/>
+<user username="tomcat" password="tomcat" roles="tomcat"/>
+<user username="both" password="tomcat" roles="tomcat,role1"/>
+<user username="role1" password="tomcat" roles="role1"/>
+-->
+
+
+五、禁用不需要的http方法
+对应开头，一般禁用delete，put方法，修改web.xml文件，增加如下内容：
+<security-constraint>
+<web-resource-collection>
+<url-pattern>/*</url-pattern>
+<http-method>PUT</http-method>
+<http-method>DELETE</http-method>
+<http-method>HEAD</http-method>
+<http-method>OPTIONS</http-method>
+<http-method>TRACE</http-method>
+</web-resource-collection>
+<auth-constraint>
+</auth-constraint>
+</security-constraint>
+<login-config>
+<auth-method>BASIC</auth-method>
+</login-config>
+
+注意，web.xml文件的修改，需重启tomcat生效。
+
+
+六、启用安全cookie
+防止xss跨站点攻击，tomcat6开始支持此属性，此处在context.xml中添加启用配置，context.xml配置即调用时生效不需要重启tomcat
+# http://tomcat.apache.org/tomcat-6.0-doc/config/context.html
+<Context useHttpOnly="true">
+
+
+七、修改tomcat版本信息
+进入apache-tomcat目录lib下，找到catalina.jar，使用压缩工具依次找到org\apache\catalina\util下的ServerInfo.properties。打开ServerInfo.properties编辑：（去掉版本信息）如下：
+server.info=Apache Tomcat
+server.number=
+server.built=
+
+
+八、重定向错误页面
+conf/web.xml在倒数第1行之前加如下内容：
+<error-page>
+     <error-code>401</error-code>
+     <location>/401.htm</location>
+</error-page>
+<error-page>
+     <error-code>404</error-code>
+     <location>/404.htm</location>
+</error-page>
+<error-page>
+     <error-code>500</error-code>
+     <location>/500.htm</location>
+</error-page>
+
+然后在webapps\manger目录中创建相应的401.html\404.htm\500.htm文件，错误返回页也可在应用中配置，应用中配置则只在当前应用生效。
+
+
+
+九、其他
+以下这个项可能不完全和安全相关，也单独列下吧。
+1、禁止使用root用户运行
+这个只针对类linux系统而言的，一旦有漏洞，被人注入上传木马，以什么样的用户运行就获取了什么权限。
+
+2、虚拟目录
+配置类似如下：
+<Host name="XXXXx" appBase="D:\webroot"
+unpackWARs="true" autoDeploy="true"
+xmlValidation="false" xmlNamespaceAware="false">
+<Context path="/" reloadable="true" docBase="D:\webroot\xxx\WebRoot\" />
+</Host>
+默认server.xml里一般只有appBase，没有docBase，两者的区别是：appBase这个目录下面的子目录将自动被部署为应用，且war文件将被自动解压缩并部署为应用。如果不想自动war部署，就把autoDeploy配置为false。默认为tomcat下的ROOT目录；docBase只是指向了你某个应用的虚拟目录，这个可以和appBase没有任何关系。这个可以拿apache httpd的默认目录DocumentRoot和虚拟主机VirtualHost对比。
+
+
+3、日志审核
+access log，新的版本里默认都是开启这个的：
+修改conf/server.xml，取消注释如下部分：
+<Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
+prefix="localhost_access_log." suffix=".txt" pattern="common" resolveHosts="false"/> 
+
+
+启用access_log后，重启tomcat，在tomcat_home/logs中可以看到访问日志。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1.将8080   改成其他，因为8080会有扫描
+略
+
+2.禁用tomcat不安全的http请求方式  例如put delete
+web.xml(url下禁用的请求方式)
+<security-constraint>  
+        <web-resource-collection>  
+            <url-pattern>/*</url-pattern>  
+            <http-method>PUT</http-method>  
+            <http-method>DELETE</http-method>  
+            <http-method>HEAD</http-method>  
+            <http-method>OPTIONS</http-method>  
+            <http-method>TRACE</http-method>  
+        </web-resource-collection>  
+        <auth-constraint>  
+        </auth-constraint>  
+    </security-constraint>  
+	
+WebDAV （Web-based Distributed Authoring and Versioning） 一种基于 HTTP 1.1协议的通信协议.它扩展了HTTP 1.1，在GET、POST、HEAD等几个HTTP标准方法以外添加了一些新的方法，使应用程序可直接对Web Server直接读写，并支持写文件锁定(Locking)及解锁(Unlock)，还可以支持文件的版本控制。
+      
+HTTP/1.1协议中共定义了八种方法（有时也叫“动作”）来表明Request-URI指定的资源的不同操作方式：
+OPTIONS 返回服务器针对特定资源所支持的HTTP请求方法。也可以利用向Web服务器发送'*'的请求来测试服务器的功能性。
+HEAD 向服务器索要与GET请求相一致的响应，只不过响应体将不会被返回。这一方法可以在不必传输整个响应内容的情况下，就可以获取包含在响应消息头中的元信息。
+GET 向特定的资源发出请求。注意：GET方法不应当被用于产生“副作用”的操作中，例如在web app.中。其中一个原因是GET可能会被网络蜘蛛等随意访问。　
+POST 向指定资源提交数据进行处理请求（例如提交表单或者上传文件）。数据被包含在请求体中。POST请求可能会导致新的资源的建立和/或已有资源的修改。　
+PUT 向指定资源位置上传其最新内容。　
+DELETE 请求服务器删除Request-URI所标识的资源。　
+TRACE 回显服务器收到的请求，主要用于测试或诊断。　
+CONNECT HTTP/1.1协议中预留给能够将连接改为管道方式的代理服务器。　
+
+方法名称是区分大小写的。当某个请求所针对的资源不支持对应的请求方法的时候，服务器应当返回状态码405（Method Not Allowed）；当服务器不认识或者不支持对应的请求方法的时候，应当返回状态码501（Not Implemented）。　
+HTTP服务器至少应该实现GET和HEAD方法，其他方法都是可选的。当然，所有的方法支持的实现都应当符合下述的方法各自的语义定义。此外，除了上述方法，特定的HTTP服务器还能够扩展自定义的方法。
+
+http的访问中，一般常用的两个方法是：GET和POST。其实主要是针对DELETE等方法的禁用。有两种方式：
+一、修改应用中的web.xml：
+
+第一步：修改web-app协议
+
+Xml代码     
+
+<?xml version="1.0" encoding="UTF-8"?>  
+<web-app xmlns="http://java.sun.com/xml/ns/j2ee"     
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"     
+    xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd"     
+    version="2.4">  
+	
+	
+第二步：在应用程序的web.xml中添加如下的代码即可
+
+<security-constraint>     
+<web-resource-collection>     
+<url-pattern>/*</url-pattern>     
+<http-method>PUT</http-method>     
+<http-method>DELETE</http-method>     
+<http-method>HEAD</http-method>     
+<http-method>OPTIONS</http-method>     
+<http-method>TRACE</http-method>
+</web-resource-collection>     
+<auth-constraint>     
+</auth-constraint>     
+</security-constraint>     
+<login-config>     
+<auth-method>BASIC</auth-method>     
+</login-config>  
+
+
+二、修改tomcat中conf下的web.xml
+步骤同上。
+
+修改应用中的web.xml就只针对本应用起作用，修改tomcat中的web.xml就可以对启动在该tomcat下所有的应用起作用。
+
+在未限制DELETE等方法前(即未做上述web.xml的内容的添加之前)，测试http的DELETE方法的效果，方式如下：
+第一步：
+在Tomcat的web.xml 文件中配置org.apache.catalina.servlets.DefaultServlet的初始化参数
+<init-param>  
+    <param-name>readonly</param-name>  
+    <param-value>false</param-value>  
+</init-param>  
+
+readonly参数默认是true，即不允许delete和put操作，所以默认的通过XMLHttpRequest对象的put或者delete方法访问就会报告 http 403 forbidden 错误。
+
+
+第二步:
+从客户端通过 Ajax XMLHTTPRequest 发起 DELETE/PUT 请求,利用AJAX的方式调用DELETE,
+<script type="text/javascript">  
+function getXMLHTTPRequest(){  
+    if (XMLHttpRequest)    {  
+        return new XMLHttpRequest();  
+    } else {  
+        try{  
+            return new ActiveXObject('Msxml2.XMLHTTP');  
+        }catch(e){  
+            return new ActiveXObject('Microsoft.XMLHTTP');  
+        }  
+    }  
+}  
+var req = getXMLHTTPRequest();  
+req.open('DELETE','http://localhost:8080/yours_web/test.html',false);  
+req.send(null);  
+document.write(req.responseText);  
+  
+</script>  
+
+document.write(req.responseText);这一句既是调用了Ajax，也是将删除的test.html返回回来，如果删除成功，那么应该看到的是404的效果。
+
+
+
+
+
+ 
