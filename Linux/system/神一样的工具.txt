@@ -102,7 +102,7 @@ System State：系统状态
 # sysdig – i [chisel 名称 ]
 
 例如，我们可以检查“CPU”类目下关于 topprocs_cpu 凿子的信息：
-# sysdig -i topprocs_cpu
+# sysdig -c topprocs_cpu
 
 你可以通过 -c 标记和指定 chisel，让 Sysdig 来运行这个 chisel。
 # sysdig -c topprocs_net
