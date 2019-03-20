@@ -210,8 +210,8 @@ document.write(req.responseText);这一句既是调用了Ajax，也是将删除�
 
 
 测试：
-curl -X PUT http://192.168.2.64:8080/hello777.jsp%20 -d "HelloJSP"
-curl -X DELETE http://192.168.2.64:8080/test.log
-curl -v -X http://192.168.2.64:8080
+curl -X PUT http://192.168.2.64:8080/hello777.jsp%20 -d "HelloJSP"  ###会在ROOT下新建一个文件hello777.jsp   内容是HelloJSP   如果是shell脚本？？
+curl -X DELETE http://192.168.2.64:8080/test.log   删除ROOT目录下test.log
+curl -v -X OPTIONS http://192.168.2.64:8080
 
  
