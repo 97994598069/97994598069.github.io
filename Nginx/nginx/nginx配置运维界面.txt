@@ -49,7 +49,7 @@ location / {
         proxy_set_header Host $host;
 #        allow 1.2.3.4;           ##新增，发版前打开，发版测试完关闭 （IP为公司出口IP）
 #        deny all;                      ##新增，发版前打开，发版测试完关闭
-#        error_page 403 http://update.abc.com/$1;  ##新增，发版前打开，发版测试完关闭 （可一直打开着，无影响）
+#        error_page 403 http://update.abc.com;  ##新增，发版前打开，发版测试完关闭 （可一直打开着，无影响）
         }
 
 
