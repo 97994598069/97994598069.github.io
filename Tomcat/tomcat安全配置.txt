@@ -101,31 +101,6 @@ prefix="localhost_access_log." suffix=".txt" pattern="common" resolveHosts="fals
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 1.将8080   改成其他，因为8080会有扫描
 略
 
@@ -164,7 +139,7 @@ http的访问中，一般常用的两个方法是：GET和POST。其实主要是
 
 第一步：修改web-app协议
 
-Xml代码     
+web.xml代码     
 
 <?xml version="1.0" encoding="UTF-8"?>  
 <web-app xmlns="http://java.sun.com/xml/ns/j2ee"     
