@@ -1,0 +1,4 @@
+前后端分离：
+
+1.创建bucket
+2.域名管理--->绑定域名---->基础设置--->跨域设置(来源:*; 允许的Methods:可以选择所有；允许Headers:*； 暴露Headers: etag x-oss-reauest-id； 缓存时间600)
