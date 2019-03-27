@@ -29,8 +29,8 @@ echo '*/30 * * * * ntpdate cn.pool.ntp.org && hwclock -w && hwclock --systohc >/
 systemctl restart crond
 
 3. 调整文件描述符大小
-echo -e "* soft nofile 65535 \n* hard nofile 65535 \n* soft nproc 65535 \n* hard nproc 65535" >> /etc/security/limits.conf
-ulimit -SHn 65535 && ulimit -s 65535
+echo -e "* soft nofile 65536 \n* hard nofile 65536 \n* soft nproc 65536 \n* hard nproc 65536" >> /etc/security/limits.conf
+ulimit -SHn 65536 && ulimit -s 65536
 
 4.锁定文件关键系统
 chattr +i /etc/passwd 
