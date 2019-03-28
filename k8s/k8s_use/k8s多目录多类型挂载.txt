@@ -1,0 +1,47 @@
+[root@iZ2zeb5yqs7wxoc01dxb7jZ usercenter]# cat authserver-jycloud-rc.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: authserver-jycloud
+spec:
+  type: NodePort
+  ports:
+  - port: 8773
+    nodePort: 8773
+  selector:
+    app: authserver-jycloud
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: authserver-jycloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authserver-jycloud
+  template:
+    metadata:
+      labels:
+        app: authserver-jycloud
+    spec:
+      containers:
+      - name: authserver-jycloud
+        image: 192.168.1.108:5000/com.ciip.cloud.core.usercenter/authserver:V1.0.6
+        ports:
+        - containerPort: 8773
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'prod'
+        volumeMounts:
+        - mountPath: /service
+          name: service
+        - mountPath: /tmp/assimp2json
+          name: ssimp2json
+      volumes:
+      - hostPath:
+          path: /service
+        name: service
+      - hostPath:
+          path: /usr/local/assimp2json    
+        name: ssimp2json
