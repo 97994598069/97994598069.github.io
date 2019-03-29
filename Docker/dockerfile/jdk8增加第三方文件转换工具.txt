@@ -1,0 +1,13 @@
+FROM 192.168.1.108:5000/base/centos:7.4.1708
+RUN mkdir  /usr/local/src/jdk8 \
+    && mkdir /usr/local/src/assimp2json
+ADD timezone /etc/timezone
+ADD jdk8 /usr/local/src/jdk8
+ADD assimp2json /usr/local/src/assimp2json
+ENV TIME_ZONE Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/${TIME_ZONE} /etc/localtime \
+    && ln -s /usr/local/src/assimp2json/build/assimp2json /usr/local/sbin/ \
+    && ln -s /usr/local/src/assimp2json/build/assimp/code/libassimp* /usr/local/lib
+ENV JAVA_HOME /usr/local/src/jdk8
+ENV CLASSPATH ./:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+ENV PATH $JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
