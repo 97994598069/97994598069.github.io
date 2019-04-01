@@ -1,0 +1,418 @@
+配置kafka集群
+
+
+172.10.10.41
+172.10.10.42
+172.10.10.43
+
+
+cp zookeeper.properties zookeeper.properties_bak
+cp server.properties server.properties_bak 
+
+echo "" >./zookeeper.properties
+echo "" >./server.properties
+
+vi zookeeper.properties
+dataDir=/data/zookeeper
+clientPort=2181
+maxClientCnxns=0
+tickTime=2000
+initLimit=20
+syncLimit=10
+server.1=172.10.10.41:2888:3888
+server.2=172.10.10.42:2888:3888
+server.3=172.10.10.43:2888:3888
+
+
+vi server.properties
+broker.id=1   ##更改，三个节点不能有相同
+host.name=172.10.10.41     ##更改本机
+listeners=PLAINTEXT://172.10.10.41:9092  #更改本机
+log.dirs=/data/kafka-logs
+log.retention.check.interval.ms=300000
+log.retention.hours=1
+log.segment.bytes=1073741824
+num.io.threads=4
+default.replication.factor=2
+num.network.threads=3
+num.partitions=30
+num.recovery.threads.per.data.dir=1
+port=9092
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+socket.send.buffer.bytes=102400
+zookeeper.connect=172.10.10.41:2181,172.10.10.42:2181,172.10.10.43:2181
+zookeeper.connection.timeout.ms=10000
+fetch.message.max.bytes=52428700
+replica.fetch.max.bytes=52428700 
+
+
+scp -rp ./kafka root@172.10.10.42:/usr/local/
+scp -rp ./kafka root@172.10.10.43:/usr/local/
+
+
+
+三台机子上创建目录
+mkdir -p /data/zookeeper
+vim /data/zookeeper/myid  分别对应的zookeeperd的配置文件中server标识，且不能有相同
+
+
+三台机子上分别运行zookeeper
+./bin/zookeeper-server-start.sh -daemon ./config/zookeeper.properties
+
+查看是否正常:
+[root@localhost kafka]# netstat -unptl |grep java
+tcp6       0      0 :::2181                 :::*                    LISTEN      2510/java           
+tcp6       0      0 172.10.10.43:3888       :::*                    LISTEN      2510/java           
+tcp6       0      0 :::41914                :::*                    LISTEN      2510/java     
+
+
+三台机子再分别运行kafka
+./bin/kafka-server-start.sh -daemon ./config/server.properties
+
+查看是否运行正常
+[root@localhost kafka]# netstat -lntp|grep java
+tcp6       0      0 172.10.10.41:9092       :::*                    LISTEN      18548/java          
+tcp6       0      0 :::2181                 :::*                    LISTEN      18245/java          
+tcp6       0      0 :::42729                :::*                    LISTEN      18548/java          
+tcp6       0      0 :::32939                :::*                    LISTEN      18245/java          
+tcp6       0      0 172.10.10.41:3888       :::*                    LISTEN      18245/java  
+
+
+测试kafka：
+在ELK01上
+[root@localhost bin]# ./kafka-console-producer.sh --broker-list 172.10.10.41:9092 --topic test
+>test zcg
+>
+
+
+在ELK02上
+[root@localhost bin]# ./kafka-console-consumer.sh --bootstrap-server 172.10.10.43:9092 --topic test --from-beginning
+test zcg  
+
+测试正常
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+应用服务器安装filebeat 并且测试
+1.安装nginx 略
+httpd段配置logformat
+    log_format main_json '{"@timestamp":"$time_local",'
+        '"N_client_ip": "$remote_addr",'
+        '"N_request": "$request",'
+        '"N_request_time": "$request_time",'
+        '"N_status": "$status",'
+        '"N_bytes": "$body_bytes_sent",'
+        '"N_user_agent": "$http_user_agent",'
+        '"N_x_forwarded": "$http_x_forwarded_for",'
+        '"N_referer": "$http_referer"'
+'}';
+access_log /var/log/nginx/access.log main_json;
+
+
+[root@web ~]# rpm --import https://packages.elastic.co/GPG-KEY-elasticsearch
+
+2）设置yum仓库
+[root@web ~]# cat /etc/yum.repos.d/elastic.repo
+[elastic-6.x]
+name=Elastic repository for 6.x packages
+baseurl=https://artifacts.elastic.co/packages/6.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-m
+
+
+yum -y install filebeat 
+
+cp filebeat.yml  filebeat_org.yml 
+
+vi filebeat.yml
+[root@localhost filebeat]# cat filebeat.yml 
+filebeat.prospectors:
+- input_type: log
+  paths:
+    -  /var/log/nginx/access.log
+  json.keys_under_root: true
+  json.add_error_key: true
+  json.message_key: log
+  json.overwrite_keys: true  ##必须有，kibana拿到日志但是不能生成标准索引
+output.kafka:   
+  hosts: ["172.10.10.41:9092"]   ###不知道为什么写入三个的时候会报错（dial tcp: address 172.10.10.41:9092,172.10.10.42:9092,172.10.10.43:9092: too many colons in address）原因未知
+  topic: 'nginx'   
+
+启动systemctl start filebeat
+
+查看日志不报错OK
+tail -f /var/log/filebeat/filebeat
+
+
+坑：
+上述配置完后重启nginx然后刷新界面然后查看filebeat的日志会发现报错
+2019-03-29T13:23:14.391+0800	ERROR	jsontransform/jsonhelper.go:53	JSON: Won't overwrite @timestamp because of parsing error: parsing time "1553836988.539" as "2006-01-02T15:04:05Z07:00": cannot parse "836988.539" as "-"
+
+然后将nginx的日志格式改一下就好:
+    log_format main_json '{"@timestamp":"$time_iso8601",'   ##将时间戳改为这个可以http://www.cnphp.info/nginx-embedded-variables-lasted-version.html
+        '"N_client_ip": "$remote_addr",'
+        '"N_request": "$request",'
+        '"N_request_time": "$request_time",'
+        '"N_status": "$status",'
+        '"N_bytes": "$body_bytes_sent",'
+        '"N_user_agent": "$http_user_agent",'
+        '"N_x_forwarded": "$http_x_forwarded_for",'
+        '"N_referer": "$http_referer"'
+'}';
+access_log /var/log/nginx/access.log main_json;
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+安装elasticsearch
+ELK01 ELK02 ELK03 
+
+ELK02上
+1）导⼊入KEY
+[root@web ~]# rpm --import https://packages.elastic.co/GPG-KEY-elasticsearch
+
+2）设置yum仓库
+[root@web ~]# cat /etc/yum.repos.d/elastic.repo
+[elastic-6.x]
+name=Elastic repository for 6.x packages
+baseurl=https://artifacts.elastic.co/packages/6.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-m
+
+
+1）安装
+[root@web ~]# yum install elasticsearch -y 
+
+2）修改配置⽂文件
+[root@web ~]# sed -i '/^#network.host:/c\network.host: 0.0.0.0' /etc/elasticsearch/elasticsearch.yml
+[root@web ~]# sed -i '/^#http.port:/s/#//' /etc/elasticsearch/elasticsearch.yml
+
+3）将服务添加到 systemctl服务队列列 并启动
+[root@web ~]# /bin/systemctl daemon-reload
+[root@web ~]# systemctl start elasticsearch.service
+
+[root@localhost log]# systemctl status elasticsearch
+● elasticsearch.service - Elasticsearch
+   Loaded: loaded (/usr/lib/systemd/system/elasticsearch.service; disabled; vendor preset: disabled)
+   Active: failed (Result: exit-code) since 二 2019-03-26 11:04:27 CST; 3s ago
+     Docs: http://www.elastic.co
+  Process: 80016 ExecStart=/usr/share/elasticsearch/bin/elasticsearch -p ${PID_DIR}/elasticsearch.pid --quiet (code=exited, status=1/FAILURE)
+ Main PID: 80016 (code=exited, status=1/FAILURE)
+
+3月 26 11:04:27 localhost.localdomain systemd[1]: Started Elasticsearch.
+3月 26 11:04:27 localhost.localdomain elasticsearch[80016]: which: no java in (/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin)
+3月 26 11:04:27 localhost.localdomain elasticsearch[80016]: could not find java; set JAVA_HOME or ensure java is in PATH
+3月 26 11:04:27 localhost.localdomain systemd[1]: elasticsearch.service: main process exited, code=exited, status=1/FAILURE
+3月 26 11:04:27 localhost.localdomain systemd[1]: Unit elasticsearch.service entered failed state.
+3月 26 11:04:27 localhost.localdomain systemd[1]: elasticsearch.service failed.
+
+找不到java  但是java配置是没有问题，可以在elasticsearch中指定java路径
+vi /etc/sysconfig/elasticsearch
+# Elasticsearch Java path
+JAVA_HOME=/usr/local/jdk
+
+systemctl restart elasticsearch.service
+
+
+ 
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+安装Logstash
+ELK02上
+cd /usr/local
+wget https://artifacts.elastic.co/downloads/logstash/logstash-6.4.2.tar.gz
+tar xf logstash-6.4.2.tar.gz
+cp –rp logstash-6.4.2 /usr/local/logstash
+
+测试logstash
+ /usr/local/logstash/bin/logstash -e "input{stdin {}} output{ stdout {}}"
+ Sending Logstash logs to /usr/local/logstash/logs which is now configured via log4j2.properties
+[2019-03-26T13:41:46,334][INFO ][logstash.setting.writabledirectory] Creating directory {:setting=>"path.queue", :path=>"/usr/local/logstash/data/queue"}
+[2019-03-26T13:41:46,345][INFO ][logstash.setting.writabledirectory] Creating directory {:setting=>"path.dead_letter_queue", :path=>"/usr/local/logstash/data/dead_letter_queue"}
+[2019-03-26T13:41:46,649][WARN ][logstash.config.source.multilocal] Ignoring the 'pipelines.yml' file because modules or command line options are specified
+[2019-03-26T13:41:46,702][INFO ][logstash.agent           ] No persistent UUID file found. Generating new UUID {:uuid=>"d097d272-a054-4e02-b990-d27f7f7fab9d", :path=>"/usr/local/logstash/data/uuid"}
+[2019-03-26T13:41:47,199][INFO ][logstash.runner          ] Starting Logstash {"logstash.version"=>"6.4.2"}
+[2019-03-26T13:41:48,804][INFO ][logstash.pipeline        ] Starting pipeline {:pipeline_id=>"main", "pipeline.workers"=>2, "pipeline.batch.size"=>125, "pipeline.batch.delay"=>50}
+[2019-03-26T13:41:48,909][INFO ][logstash.pipeline        ] Pipeline started successfully {:pipeline_id=>"main", :thread=>"#<Thread:0x7a9a0367 run>"}
+The stdin plugin is now waiting for input:
+[2019-03-26T13:41:48,970][INFO ][logstash.agent           ] Pipelines running {:count=>1, :running_pipelines=>[:main], :non_running_pipelines=>[]}
+[2019-03-26T13:41:49,187][INFO ][logstash.agent           ] Successfully started Logstash API endpoint {:port=>9600}
+
+
+
+配置logstash
+cd /usr/local/logstash/config
+mv logstash-sample.conf logstash-sample
+vi nginx.conf 
+[root@localhost config]# cat nginx.conf 
+input {
+  kafka {
+    type => "kafka"
+    bootstrap_servers => "172.10.10.41:9092"    #####一开始定义的是172.10.10.41:2181 172.10.10.42:2181  172.10.10.43:2181   不报错但是es抓不到索引，很奇怪
+    topics => "nginx"
+    group_id => "logstash"
+    consumer_threads => 2
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["http://172.10.10.43:9200"]
+    index => "nginx-%{+YYYY.MM.dd}"
+  }
+}
+
+启动
+cd /tmp; nohup /usr/local/logstash/bin/logstash -f /usr/local/logstash/config/*.conf & 启动较慢
+
+
+[root@localhost local]# tail -f nohup.out 
+Sending Logstash logs to /usr/local/logstash/logs which is now configured via log4j2.properties
+[2019-03-26T13:46:33,306][WARN ][logstash.config.source.multilocal] Ignoring the 'pipelines.yml' file because modules or command line options are specified
+[2019-03-26T13:46:33,875][INFO ][logstash.runner          ] Starting Logstash {"logstash.version"=>"6.4.2"}
+[2019-03-26T13:46:33,956][INFO ][logstash.config.source.local.configpathloader] No config files found in path {:path=>"/usr/local/logstash/conf.d/logstash_to_elasticsearch.conf"}
+[2019-03-26T13:46:33,965][ERROR][logstash.config.sourceloader] No configuration found in the configured sources.
+[2019-03-26T13:46:34,222][INFO ][logstash.agent           ] Successfully started Logstash API endpoint {:port=>9600}
+
+
+[root@localhost local]# netstat -unptl |grep 9600
+tcp6       0      0 127.0.0.1:9600          :::*                    LISTEN      31984/java 
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+安装kafka
+ELK04
+
+
+1）导⼊入KEY
+[root@web ~]# rpm --import https://packages.elastic.co/GPG-KEY-elasticsearch
+
+2）设置yum仓库
+[root@web ~]# cat /etc/yum.repos.d/elastic.repo
+[elastic-6.x]
+name=Elastic repository for 6.x packages
+baseurl=https://artifacts.elastic.co/packages/6.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-m
+
+
+安装Kibana
+1）安装
+[root@web ~]# yum install kibana -y
+
+2）配置
+[root@web ~]# egrep -v "#|^$" /etc/kibana/kibana.yml
+server.port: 5601
+server.host: "0.0.0.0"
+elasticsearch.host: http://192.168.2.193:9200
+
+3）设置服务管理理及启动
+[root@web ~]# /bin/systemctl daemon-reload
+[root@web ~]# systemctl restart kibana
+
+[root@localhost etc]# netstat -unptl |grep 5601
+tcp        0      0 0.0.0.0:5601            0.0.0.0:*               LISTEN      35410/node     
+
+4）测试
+浏览器器输⼊入 http://IP:5601
+
+kibana汉化:
+下载包https://github.com/anbai-inc/Kibana_Hanization/
+按照文档README.md来实现汉化
+
+
+
+##############################################################################################################################################
+排查1.kibana 显示不到索引 
+检查es上索引是否正常
+curl http://172.10.10.43:9200/_cat/indices
+
+可以进行删除，然后刷新nginx界面查看是否会创建新的索引
+删除索引：
+curl -XDELETE http://172.10.10.43:9200/logstash-2018.11.01   ##指定通配符
+
+若创建则服务正常
+
+############################################################################################################
+
+
+
+
+
+
+备注:
+1. 上述是filebeat----->kafka---->logstash----->elasticsearch----->kibana    ##但是kibana一直拿不到索引，很奇怪
+
+2. 如果不走kafka正常
+filbeat--->logstash--->elasticsearch--->kibana  正常
+
+需要修改
+filebeat:
+  paths:
+    - /var/log/nginx/access.log
+    #- c:\programdata\elasticsearch\logs\*
+  json.keys_under_root: true
+  json.overwrite_keys: true
+ 
+注释掉elasticsearch的output
+#----------------------------- Logstash output --------------------------------
+output.logstash:
+  # The Logstash hosts
+  hosts: ["172.10.10.42:9600"]
+
+  # Optional SSL. By default is off.
+  # List of root certificates for HTTPS server verifications
+  #ssl.certificate_authorities: ["/etc/pki/root/ca.pem"]
+
+  # Certificate for SSL client authentication
+  #ssl.certificate: "/etc/pki/client/cert.pem"
+
+  # Client Certificate Key
+  #ssl.key: "/etc/pki/client/cert.key"
+
+
+  
+logstash:
+[root@localhost config]# cat nginx.conf 
+input {
+  beats {
+    port => 9600
+  }
+}
+output {
+  elasticsearch {
+    hosts => ["http://172.10.10.43:9200"]
+    index => "www.test.com-nginx-%{+YYYY.MM.dd}"
+  }
+}
+
+
+
+创建饼图
+
+1.kibana---->可视化---->选择饼图---->分割图标---->选择重要条件
+
+
+
+
+
+
+
+
+
+
+
+
