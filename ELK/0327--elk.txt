@@ -267,7 +267,7 @@ input {
 
 output {
   elasticsearch {
-    hosts => ["http://172.10.10.43:9200"]
+    hosts => ["http://172.10.10.43:9200"] ##写入es集群hosts => ["http://192.168.2.11:9200","http://192.168.2.10:9200","http://192.168.2.12:9200"]  ##http可以不要
     index => "nginx-%{+YYYY.MM.dd}"
   }
 }
