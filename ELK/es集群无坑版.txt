@@ -1,0 +1,337 @@
+下载  
+https://www.elastic.co/cn/downloads/past-releases/elasticsearch-6-7-0
+
+这里使用最新版：Elasticsearch 6.7.0
+
+[admin@localhost logs]$ cd /usr/local/src/
+
+tar xf elasticsearch-6.7.0.tar.gz 
+
+mv elasticsearch-6.7.0 elasticsearch
+
+##因为elasticsearch不能使用root启动
+
+useradd admin 
+
+chown -R admin:admin elasticsearch
+
+su admin 
+cd /usr/local/src/elasticsearch/bin
+./elasticsearch -d  ##后台启动
+
+查看启动日志
+tail -f ../logs/elasticsearch.log
+
+查看端口
+nestat -unptl |grep 9200
+
+修改配置文件如下：
+[root@localhost elasticsearch]# grep -v -E "^#|^$" ./config/elasticsearch.yml 
+cluster.name: elk-es
+node.name: 192.168.2.10
+path.data: /home/elasticsearch/data
+path.logs: /home/elasticsearch/data
+network.host: 0.0.0.0
+http.port: 9200
+discovery.zen.ping.unicast.hosts: ["192.168.2.11", "192.168.2.12", "192.168.2.10"]
+discovery.zen.minimum_master_nodes: 2
+gateway.recover_after_nodes: 2
+
+
+chown -R admin:admin /home/elasticsearch/
+
+
+重启es:
+kill $pid 
+su admin 
+cd /usr/local/src/elasticsearch/bin
+./elasticsearch -d  ##后台启动
+
+
+检查集群：
+a）查询集群状态方法
+[admin@localhost bin]$ curl -XGET 'http://192.168.2.11:9200/_cat/nodes'
+192.168.2.11 29 51 1 0.01 0.06 0.06 mdi * 192.168.2.11
+192.168.2.10 28 45 1 0.14 0.08 0.06 mdi - 192.168.2.10
+192.168.2.12 27 45 1 0.01 0.04 0.05 mdi - 192.168.2.12    #带*号表示该节点是master主节点
+
+
+[admin@localhost bin]$ curl -XGET 'http://192.168.2.11:9200/_cat/nodes?v'    ###后面添加 ?v ,表示详细显示
+ip           heap.percent ram.percent cpu load_1m load_5m load_15m node.role master name
+192.168.2.11           29          51   0    0.01    0.05     0.06 mdi       *      192.168.2.11
+192.168.2.10           28          45   0    0.08    0.07     0.05 mdi       -      192.168.2.10
+192.168.2.12           27          45   0    0.01    0.04     0.05 mdi       -      192.168.2.12
+
+
+查询集群中的master
+[admin@localhost bin]$ curl -XGET 'http://192.168.2.11:9200/_cluster/state/master_node?pretty'
+{
+  "cluster_name" : "elk-es",
+  "cluster_uuid" : "oxGiyfPITIq0zg5xfnvi0A",
+  "master_node" : "RX8kp9pWT-aBaAm3BhdbLg"
+}
+或者
+[admin@localhost bin]$ curl -XGET 'http://192.168.2.11:9200/_cat/master?v'
+id                     host         ip           node
+RX8kp9pWT-aBaAm3BhdbLg 192.168.2.11 192.168.2.11 192.168.2.11
+
+
+查询集群的健康状态（一共三种状态：green、yellow，red；其中green表示健康。）
+[admin@localhost bin]$ curl -XGET 'http://192.168.2.11:9200/_cat/health?v'
+epoch      timestamp cluster status node.total node.data shards pri relo init unassign pending_tasks max_task_wait_time active_shards_percent
+1554197481 09:31:21  elk-es  green           3         3      0   0    0    0        0             0                  -                100.0%
+或者
+[admin@localhost bin]$ curl -XGET 'http://192.168.2.11:9200/_cluster/health?pretty'
+{
+  "cluster_name" : "elk-es",
+  "status" : "green",
+  "timed_out" : false,
+  "number_of_nodes" : 3,
+  "number_of_data_nodes" : 3,
+  "active_primary_shards" : 0,
+  "active_shards" : 0,
+  "relocating_shards" : 0,
+  "initializing_shards" : 0,
+  "unassigned_shards" : 0,
+  "delayed_unassigned_shards" : 0,
+  "number_of_pending_tasks" : 0,
+  "number_of_in_flight_fetch" : 0,
+  "task_max_waiting_in_queue_millis" : 0,
+  "active_shards_percent_as_number" : 100.0
+}
+
+
+[admin@localhost bin]$ curl -XGET 'http://192.168.2.11:9200/_cluster/state/nodes?pretty'
+{
+  "cluster_name" : "elk-es",
+  "cluster_uuid" : "oxGiyfPITIq0zg5xfnvi0A",
+  "nodes" : {
+    "RX8kp9pWT-aBaAm3BhdbLg" : {
+      "name" : "192.168.2.11",
+      "ephemeral_id" : "34FOFB9ARB-dA8g9cTJsSg",
+      "transport_address" : "192.168.2.11:9300",
+      "attributes" : {
+        "ml.machine_memory" : "7653031936",
+        "xpack.installed" : "true",
+        "ml.max_open_jobs" : "20",
+        "ml.enabled" : "true"
+      }
+    },
+    "gB2M4yelSDmag-3Sgb55GQ" : {
+      "name" : "192.168.2.10",
+      "ephemeral_id" : "fmeftbaxTxaf55cH_MfwXQ",
+      "transport_address" : "192.168.2.10:9300",
+      "attributes" : {
+        "ml.machine_memory" : "7652970496",
+        "ml.max_open_jobs" : "20",
+        "xpack.installed" : "true",
+        "ml.enabled" : "true"
+      }
+    },
+    "CUsLtVapQzaxfiB8kcgj0A" : {
+      "name" : "192.168.2.12",
+      "ephemeral_id" : "wq_9hN_CRgmhGYJURIm5Ug",
+      "transport_address" : "192.168.2.12:9300",
+      "attributes" : {
+        "ml.machine_memory" : "7653040128",
+        "ml.max_open_jobs" : "20",
+        "xpack.installed" : "true",
+        "ml.enabled" : "true"
+      }
+    }
+  }
+}
+
+
+###失败
+插入数据测试：
+curl -X PUT '192.168.2.11:9200/accounts/person/1' -d'
+{
+  "user": "张三",
+  "title": "工程师",
+  "desc": "数据库管理"
+}' 
+
+
+curl -X PUT '192.168.2.11:9200/accounts/person/1' -d '
+{
+  "user": "赵四",
+  "title": "设计师",
+  "desc": "UI设计"
+}' 
+
+###失败
+
+
+
+
+++++++++++++++++++++++++++++++++++++
+
+安装分词器
+下载zip包
+https://github.com/medcl/elasticsearch-analysis-ik/releases
+
+cd /usr/local/src/elasticsearch/plugins
+mdkir ik
+cd ik 
+上传并解压zip包，
+chown -R admin:admin /usr/local/src/elasticsearch/plugins/ik
+
+测试 IK
+curl -H 'Content-Type:application/json' 'http://localhost:9200/index/_analyze?pretty=true' -d'
+{ "analyzer": "ik_smart", "text": "中华人民共和国万岁万岁万万岁"}'
+
+[root@localhost plugins]# curl -H 'Content-Type:application/json' 'http://localhost:9200/index/_analyze?pretty=true' -d'
+> { "analyzer": "ik_smart", "text": "中华人民共和国万岁万岁万万岁"}'
+{
+  "tokens" : [
+    {
+      "token" : "中华人民共和国",
+      "start_offset" : 0,
+      "end_offset" : 7,
+      "type" : "CN_WORD",
+      "position" : 0
+    },
+    {
+      "token" : "万岁",
+      "start_offset" : 7,
+      "end_offset" : 9,
+      "type" : "CN_WORD",
+      "position" : 1
+    },
+    {
+      "token" : "万岁",
+      "start_offset" : 9,
+      "end_offset" : 11,
+      "type" : "CN_WORD",
+      "position" : 2
+    },
+    {
+      "token" : "万万岁",
+      "start_offset" : 11,
+      "end_offset" : 14,
+      "type" : "CN_WORD",
+      "position" : 3
+    }
+  ]
+}
+
+可以看出。我们实现了简单的中文分词
+
+
+
+但是我们想要一些特定的分词功能呢？比如说自己定义的一些名词，不想让分词器拆分怎么办呢？比如说这里的筱筱，我就不想让他拆分开怎么办呢？
+[root@localhost plugins]# curl -H 'Content-Type: application/json'  -XGET 'localhost:9200/_analyze?pretty' -d '{"analyzer":"ik_smart","text":"筱筱的公众号"}'
+{
+  "tokens" : [
+    {
+      "token" : "筱",
+      "start_offset" : 0,
+      "end_offset" : 1,
+      "type" : "CN_CHAR",
+      "position" : 0
+    },
+    {
+      "token" : "筱",
+      "start_offset" : 1,
+      "end_offset" : 2,
+      "type" : "CN_CHAR",
+      "position" : 1
+    },
+    {
+      "token" : "的",
+      "start_offset" : 2,
+      "end_offset" : 3,
+      "type" : "CN_CHAR",
+      "position" : 2
+    },
+    {
+      "token" : "公众",
+      "start_offset" : 3,
+      "end_offset" : 5,
+      "type" : "CN_WORD",
+      "position" : 3
+    },
+    {
+      "token" : "号",
+      "start_offset" : 5,
+      "end_offset" : 6,
+      "type" : "CN_CHAR",
+      "position" : 4
+    }
+  ]
+}
+
+遇到这种情况，我们可以使用analysis-ik 支持自定义词库；增加自定义词库。
+analysis-ik自定义词库
+进入ES安装目录下的config/analysis-ik目录。
+
+cd /usr/local/src/elasticsearch/plugins/ik/config
+[root@localhost config]# su admin -c "vi my.dic"
+[root@localhost config]# cat my.dic 
+<!-- 进入编辑模式，输入自定义词汇 -->
+筱筱
+
+修改IKAnalyzer.cfg.xml配置文件
+cd /usr/local/src/elasticsearch/plugins/ik/config
+vim IKAnalyzer.cfg.xml
+
+文件内容如下,将新建的my.dic文件放入ext_dict下。
+<entry key="ext_dict">my.dic</entry>
+
+重启es:
+cd /usr/local/src/elasticsearch/bin
+su admin -c "./elasticsearch -d"
+
+[root@localhost bin]# netstat -unptl |grep java
+tcp6       0      0 :::9200                 :::*                    LISTEN      120237/java         
+tcp6       0      0 :::9300                 :::*                    LISTEN      120237/java     
+
+再次测试：
+[root@localhost config]# curl -H 'Content-Type: application/json'  -XGET 'localhost:9200/_analyze?pretty' -d '{"analyzer":"ik_smart","text":"筱筱的公众号"}'
+{
+  "tokens" : [
+    {
+      "token" : "筱筱",
+      "start_offset" : 0,
+      "end_offset" : 2,
+      "type" : "CN_WORD",
+      "position" : 0
+    },
+    {
+      "token" : "的",
+      "start_offset" : 2,
+      "end_offset" : 3,
+      "type" : "CN_CHAR",
+      "position" : 1
+    },
+    {
+      "token" : "公众",
+      "start_offset" : 3,
+      "end_offset" : 5,
+      "type" : "CN_WORD",
+      "position" : 2
+    },
+    {
+      "token" : "号",
+      "start_offset" : 5,
+      "end_offset" : 6,
+      "type" : "CN_CHAR",
+      "position" : 3
+    }
+  ]
+}
+
+分词器生效
+
+
+
+
+
+
+
+
+
+
+
+
