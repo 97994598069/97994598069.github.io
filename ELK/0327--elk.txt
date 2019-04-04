@@ -274,6 +274,9 @@ output {
 
 启动
 cd /tmp; nohup /usr/local/logstash/bin/logstash -f /usr/local/logstash/config/*.conf & 启动较慢
+或者如下：
+    ./filebeat -e -c filebeat.yml -d "publish"
+
 
 
 [root@localhost local]# tail -f nohup.out 
