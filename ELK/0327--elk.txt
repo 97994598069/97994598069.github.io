@@ -106,6 +106,7 @@ httpd段配置logformat
         '"N_user_agent": "$http_user_agent",'
         '"N_x_forwarded": "$http_x_forwarded_for",'
         '"N_referer": "$http_referer"'
+        '"N_server_name": "$server_name"'
 '}';
 access_log /var/log/nginx/access.log main_json;
 
