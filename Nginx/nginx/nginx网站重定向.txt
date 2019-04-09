@@ -12,3 +12,26 @@ server {
 ##将ss.cdf.com转发到www.abc.net
 
 		
+或者如下：
+[root@ecs-ca24 vhost]# cat www.citt.com.conf 
+server {
+    listen 80;
+    server_name www.citt.com citt.com www.citt.net ciit.net;
+    #if ($host = 'www.citt.net') {  
+    #  rewrite ^/(.*)$ http://www.citt.com/$1 permanent;  
+    #} 
+    #if ($host = 'citt.net') {  
+    #  rewrite ^/(.*)$ http://www.citt.com/$1 permanent;  
+    #} 
+    #if ($host = 'citt.com') {  
+    #  rewrite ^/(.*)$ http://www.citt.com/$1 permanent;  
+    #} 
+    if ($host != 'www.citt.com') {
+       rewrite ^/(.*)$ http://www.citt.com/$1 permanent;
+    }
+    access_log logs/www.citt.com_access.log;
+    error_log logs/www.citt.com_error.log;
+    root /mnt/www/www.citt.com/dist;
+    index index.html;
+    
+}
