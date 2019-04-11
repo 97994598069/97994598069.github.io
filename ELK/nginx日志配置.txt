@@ -12,23 +12,24 @@ nginx.conf 的http下的第一行，配置新的log-format;若有其他则移动
 为什么要放到第一行：因为我们这边已经配置好了server，如果不放到第一行，则有可能会生效
 
 http {
-    log_format json  '{"@timestamp":"$time_local",'
-                       '""$server_name"_host": "$server_addr",'
-                       '""$server_name"_client_ip": "$remote_addr",'
-                       '""$server_name"_size": "$body_bytes_sent",'
-                       '""$server_name"_responsetime": "$request_time",'
-                       '""$server_name"_upstreamtime": "$upstream_response_time",'
-                       '""$server_name"_upstreamhost": "$upstream_addr",'
-                       '""$server_name"_http_host": "$host",'
-                       '""$server_name"_url": "$uri",'
-                       '""$server_name"_domain": "$host",'
-                       '""$server_name"_xff": "$http_x_forwarded_for",'
-                       '""$server_name"_referer": "$http_referer",'
-                       '""$server_name"_user_agent": "$http_user_agent",'
-                       '""$server_name"_request": "$request",'
-                       '""$server_name"_status": "$status",'
+    log_format json  '{"@timestamp": "$time_local",'
+                       '"$server_name-host": "$server_addr",'      
+                       '"$server_name-client_ip": "$remote_addr",
+                       '"$server_name-size": "$body_bytes_sent",'
+                       '"$server_name-responsetime": "$request_time",'
+                       '"$server_name-upstreamtime": "$upstream_response_time",'
+                       '"$server_name-upstreamhost": "$upstream_addr",'
+                       '"$server_name-http_host": "$host",'
+                       '"$server_name-url": "$uri",'
+                       '"$server_name-domain": "$host",'
+                       '"$server_name-xff": "$http_x_forwarded_for",'
+                       '"$server_name-referer": "$http_referer",'
+                       '"$server_name-user_agent": "$http_user_agent",'
+                       '"$server_name-request": "$request",'
+                       '"$server_name-status": "$status"'
     '}';     
     access_log  /var/log/nginx/access.log json;
+###备注：$server_name一定不能加双引号,否则filebeat报错，$server_name-host 一定不能写成$server_name_host 否则报错
 
 	
 ##由于我要每个server生成一个单独的log日志，我这里使用内置变量$server_name做不同的标识，这样传输到kibana后就会从这里区分开是哪一个server
