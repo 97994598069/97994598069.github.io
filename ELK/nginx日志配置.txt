@@ -1,0 +1,141 @@
+背景：
+搭建EFK    (elasticsearch + filebeat + kibana)
+
+收集nginx日志，多个server项目
+
+目标:
+每个server 配置一个日志路经，同样，每个项目一个索引，分别传输到kiaba做展示
+
+配置nginx格式：  （没有使用filebeat，感觉不友好，因为所有server都只能走一个filebeat索引，即使传输到kibana做展示也是不友好的）
+
+nginx.conf 的http下的第一行，配置新的log-format;若有其他则移动至新的log-format下面,原先的若不使用可以删除
+为什么要放到第一行：因为我们这边已经配置好了server，如果不放到第一行，则有可能会生效
+
+http {
+    log_format json  '{"@timestamp":"$time_local",'
+                       '""$server_name"_host": "$server_addr",'
+                       '""$server_name"_client_ip": "$remote_addr",'
+                       '""$server_name"_size": "$body_bytes_sent",'
+                       '""$server_name"_responsetime": "$request_time",'
+                       '""$server_name"_upstreamtime": "$upstream_response_time",'
+                       '""$server_name"_upstreamhost": "$upstream_addr",'
+                       '""$server_name"_http_host": "$host",'
+                       '""$server_name"_url": "$uri",'
+                       '""$server_name"_domain": "$host",'
+                       '""$server_name"_xff": "$http_x_forwarded_for",'
+                       '""$server_name"_referer": "$http_referer",'
+                       '""$server_name"_user_agent": "$http_user_agent",'
+                       '""$server_name"_request": "$request",'
+                       '""$server_name"_status": "$status",'
+    '}';     
+    access_log  /var/log/nginx/access.log json;
+
+	
+##由于我要每个server生成一个单独的log日志，我这里使用内置变量$server_name做不同的标识，这样传输到kibana后就会从这里区分开是哪一个server
+
+	
+配置server：
+因为项目是做的前后端分离，即（tomcat跑后台，nodejs跑前台，然后使用nginx做代理）
+
+[root@_i conf.d]# cat www.jd.com.conf 
+upstream ycg_app {
+        server 127.0.0.1:3002;
+    }
+
+server {
+        listen       80;
+        server_name  www.jd.com ycg.jd.net jd.com;
+        access_log /var/log/nginx/jd_access.log json;   ##指定日志模板以及路径
+        error_log /var/log/nginx/jd_error.log;
+
+        if ($http_user_agent ~ ApacheBench|webBench|Java/) {
+           return 404;
+        }
+
+        if ($http_user_agent ~ "WinHttp|WebZIP|FetchURL|node-superagent|java/|FeedDemon|Jullo|JikeSpider|Indy Library|Alexa Toolbar|AskTbFXTV|AhrefsBot|CrawlDaddy|Java|Feedly|Apache-HttpAsyncClient|UniversalFeedParser|ApacheBench|Microsoft URL Control|Swiftbot|ZmEu|oBot|jaunty|Python-urllib|lightDeckReports Bot|YYSpider|DigExt|HttpClient|MJ12bot|heritrix|EasouSpider|Ezooms|BOT/0.1|YandexBot|FlightDeckReports|Linguee Bot|^$" ) {  
+               return 404;               
+        }  
+
+        if ($request_method !~ ^(GET|HEAD|POST)$) {  
+                return 404; 
+        }
+
+location / {
+        proxy_pass http://ycg_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+}
+
+
+
+[root@_i conf.d]# cat www.je.net.conf
+upstream node_app {
+        server 127.0.0.1:3000;
+    }
+
+upstream baike {
+        server 127.0.0.1:8080;
+        }
+server {
+        listen       80;
+        server_name  www.je.net je.net baike.cm.com;
+        access_log /var/log/nginx/baike_access.log json;
+        error_log /var/log/nginx/baike_error.log;
+
+
+         if ($host = 'baike.cm.com' ) {  
+                rewrite ^/(.*)$ http://www.je.net/$1 permanent;  
+        }  
+         if ($host = 'je.net' ) {  
+                rewrite ^/(.*)$ http://www.je.net/$1 permanent;  
+        }  
+    
+         if ($http_user_agent ~ ApacheBench|webBench|Java/) {
+                 return 404;
+        }
+
+         if ($http_user_agent ~ "WinHttp|WebZIP|FetchURL|node-superagent|java/|FeedDemon|Jullo|JikeSpider|Indy Library|Alexa Toolbar|AskTbFXTV|AhrefsBot|CrawlDaddy|Java|Feedly|Apache-HttpAsyncClient|UniversalFeedParser|ApacheBench|Microsoft URL Control|Swiftbot|ZmEu|oBot|jaunty|Python-urllib|lightDeckReports Bot|YYSpider|DigExt|HttpClient|MJ12bot|heritrix|EasouSpider|Ezooms|BOT/0.1|YandexBot|FlightDeckReports|Linguee Bot|^$" ) {
+               return 404;
+        }
+
+         if ($request_method !~ ^(GET|HEAD|POST)$) {
+                return 404;
+        }
+
+location / {
+        proxy_pass http://node_app;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+
+}
+	
+server {
+	listen       80;
+        server_name  api.baike.cm.com;
+location / {
+
+        proxy_pass http://baike;
+        proxy_redirect    off;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $host;
+        }
+
+}
+
+###备注，若是有多个server.conf里有多个server则最好将access_log定义在如上位置，如果定义在外围则会产生多个$server_name,也就是传输到kibana后会很乱；；最好如上，如果下面需要可以单独定义access_log路径
+
+
+
+这样在日志目录则会生成响应的日志文件，若之前就存在，则需要删除或者将之前的重命名然后重新加载nginx nginx -s reload  重新生成文件
+
+
+
+
