@@ -1,0 +1,49 @@
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.4.3.zip
+
+unzip 
+
+mv elasticsearch-6.4.3 elasticsearch
+
+
+
+wget https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-6.4.1-linux-x86_64.tar.gz
+
+tar 
+
+mv 
+
+
+wget https://artifacts.elastic.co/downloads/kibana/kibana-6.4.3-linux-x86_64.tar.gz
+tar 
+
+mv 
+
+
+https://blog.csdn.net/kjh2007abc/article/details/85000766
+
+https://blog.51cto.com/xiaozhagn/2306527
+
+
+##filebeat可以配置多个yml 来指定各自的索引
+/usr/local/src/filebeat/filebeat -c /usr/local/src/filebeat/conf.d/filebeat_baike.yml &
+/usr/local/src/filebeat/filebeat -c /usr/local/src/filebeat/conf.d/filebeat_jyj.yml &
+/usr/local/src/filebeat/filebeat -c /usr/local/src/filebeat/conf.d/filebeat_ycg.yml &
+
+三个yml示例：
+
+
+
+[root@_i filebeat]# jobs
+[1]   Running                 /usr/local/src/filebeat/filebeat -c /usr/local/src/filebeat/conf.d/filebeat_baike.yml &
+[2]-  Running                 /usr/local/src/filebeat/filebeat -c /usr/local/src/filebeat/conf.d/filebeat_jyj.yml &
+[3]+  Running                 /usr/local/src/filebeat/filebeat -c /usr/local/src/filebeat/conf.d/filebeat_ycg.yml &
+
+
+nginx的日志配置见：
+nginx日志配置
+
+但是因为没有走logstash所以在kibana上却不能添加坐标图： 
+报错如下：
+No Compatible Fields: The "baike-*" index pattern does not contain any of the following field types: geo_point  
+ 
+解决：
