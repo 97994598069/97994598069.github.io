@@ -1,0 +1,78 @@
+背景:
+运维工程师一枚，肯定是需要远程工作的；网络工程师给开的VPN不能使用，只能自己想办法
+
+目的:通过firewalld将跳板机的644端口(ssh端口)转发到外网，能够在家登陆跳板机以达到运维工作的目的
+
+
+1.已知映射外网的服务器一台；做的静态映射5601端口：
+内网地址：192.168.2.11  映射的外网地址：182.5.15.2
+
+2.跳板机地址：192.168.2.188
+
+登陆有外网的服务器：
+systemctl restart firewalld  ##启动防火墙
+
+
+##放开本地服务器上已经运行的服务:
+firewall-cmd --zone=public --add-port=5601/tcp --permanent
+firewall-cmd --zone=public --add-port=80/tcp --permanent
+firewall-cmd --zone=public --add-port=644/tcp --permanent
+firewall-cmd --add-port=9200-9500/tcp --permanent
+ 
+
+##打开firewalld的nat转发功能
+firewall-cmd --permanent --zone=public --add-masquerade
+
+# 开放 DNS 使用的 53 端口，UDP
+# 必须，否则其他机器无法进行域名解析   ###如果需要则开启
+firewall-cmd --zone=public --add-port=80/tcp --permanent
+
+
+##重启防火墙
+systemctl restart firewalld 
+
+
+# 检查是否允许 NAT 转发    ##yes正常
+firewall-cmd --query-masquerade
+
+
+# 禁止防火墙 NAT 转发  如果需要
+firewall-cmd --remove-masquerade
+
+
+##配置转发   将外网的5601端口转发到跳板机的644端口
+firewall-cmd --zone=public --add-forward-port=port=5601:proto=tcp:toport=644:toaddr=192.168.2.188
+
+
+
+
+
+相关知识梳理：
+开启 NAT 转发之后，只要本机可以上网，不论是单网卡还是多网卡，局域网内的其他机器可以将默认网关设置为已开启 NAT 转发的服务器 IP ，即可实现上网。
+# 开启 NAT 转发
+firewall-cmd --permanent --zone=public --add-masquerade
+
+# 开放 DNS 使用的 53 端口，UDP
+# 必须，否则其他机器无法进行域名解析
+firewall-cmd --zone=public --add-port=80/tcp --permanent
+
+# 检查是否允许 NAT 转发
+firewall-cmd --query-masquerade
+# 禁止防火墙 NAT 转发
+firewall-cmd --remove-masquerade
+
+
+
+端口转发可以将指定地址访问指定的端口时，将流量转发至指定地址的指定端口。转发的目的如果不指定 ip 的话就默认为本机，如果指定了 ip 却没指定端口，则默认使用来源端口。
+# 将80端口的流量转发至8080
+firewall-cmd --add-forward-port=port=80:proto=tcp:toport=8080
+
+# 将80端口的流量转发至192.168.0.1
+firewall-cmd --add-forward-port=proto=80:proto=tcp:toaddr=192.168.0.1
+
+# 将80端口的流量转发至192.168.0.1的8080端口
+firewall-cmd --add-forward-port=proto=80:proto=tcp:toaddr=192.168.0.1:toport=8080
+
+
+
+
