@@ -45,6 +45,9 @@ firewall-cmd --zone=public --add-forward-port=port=5601:proto=tcp:toport=644:toa
 
 
 
+###在跳板机上接收来自这个IP的所有流量
+firewall-cmd --add-rich-rule="rule family="ipv4" source address="192.168.2.10" accept"
+
 
 
 相关知识梳理：
