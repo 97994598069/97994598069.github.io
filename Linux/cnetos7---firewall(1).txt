@@ -8,14 +8,14 @@ centos7版本对防火墙进行 加强,不再使用原来的iptables,启用firew
     4.停止防火墙
         systemctl stop firewalld.service
     5.禁止防火墙开机启动
-        
-		systemctl disable firewalld.service
+         systemctl disable firewalld.service
 		
     6.删除
-        firewall-cmd --zone=public --remove-port=80/tcp --permanent
-		
-	7.查看运行状态
-		firewall-cmd --state
+       firewall-cmd --zone=public --remove-port=80/tcp --permanent
+	
+		 
+     7.查看运行状态
+	firewall-cmd --state
 	
 	8.将80端口的流量转发至8080
 	firewall-cmd --add-forward-port=port=80:proto=tcp:toport=8080
@@ -73,6 +73,14 @@ centos7以下版本
 
 
 firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='149.56.106.215' reject"
+
+指定IP断：
+##表示允许192.168.2.0/24网段的主机访问22端口 。
+firewall-cmd --zone=drop --add-rich-rule="rule family="ipv4" source address="192.168.2.0/24" port protocol="tcp" port="22" accept"
+
+
+##表示禁止192.168.2.0/24网段的主机访问22端口 。
+firewall-cmd --zone=drop --add-rich-rule="rule family="ipv4" source address="192.168.2.0/24" port protocol="tcp" port="22" reject"
 
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
