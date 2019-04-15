@@ -1,0 +1,115 @@
+为什么要使用文件服务器？
+1.主要用于服务器集群架构中，比如使用nginx+tomcat做集群与负载均衡时，如果将文件直接上传到tomcat上，那么由于有多个tomcat，假设A上传图片到了tomcat1上，那么分配到其他tomcat的用户就访问不到了，而文件服务器就可以解决集群环境下图片的访问问题。
+
+2.通过Nginx的一些配置也能提高线上图片的访问速度，并且线上文件服务器通常会单独使用一台云主机与应用服务器相隔离，这样也能缓解应用服务器图片访问及上传下载的压力。
+
+
+
+vsftpd安装
+安装命令：yum -y install vsftpd
+可通过 rpm -qa| grep vsftpd 命令检查是否已经安装vsftpd
+默认配置文件在 /etc/vsftpd/vsftpd.conf
+创建虚拟用户：
+# 在根目录或者用户目录下创建ftp文件夹，这里选择在根目录
+mkdir /ftpfile
+# 添加用户
+useradd ftpuser -d /ftpfile -s /sbin/nologin
+# 修改ftpfile文件夹权限
+chown -R ftpuser.ftpuser /ftpfile
+# 重设ftpuser密码
+passwd ftpuser
+
+
+配置
+cd /etc/vsftpd
+# 创建文件chroot_list
+vim chroot_list
+# 添加内容：ftpuser，保存退出
+vim /etc/selinux/config
+# 修改SELINUX=disabled
+setenforce 0
+
+
+修改主配置
+修改主配置文件：vim /etc/vsftpd/vsftpd.conf
+1.搜索banner找到如下注释，取消ftpd_banner注释，新增加三行配置
+# You may fully customise the login banner string:
+ftpd_banner=Welcome to silly FTP service.
+local_root=/ftpfile
+anon_root=/ftpfile
+use_localtime=yes
+
+2.继续搜索chroot_list，取消如下两行配置的注释
+chroot_list_enable=YES
+# (default follows)
+chroot_list_file=/etc/vsftpd/chroot_list
+
+
+3.搜索anon，将如下的配置项值修改为NO
+# Allow anonymous FTP? (Beware - allowed by default if you comment this out).
+anonymous_enable=NO
+
+
+4.在最底端添加被动传输的端口，最大和最小端口值，在ftp上传文件传输时需要使用的，虽然采用默认的端口范围也可以，但是防火墙的设置就不能太严格，所以线上环境为了安全考虑建议加上端口配置，方便防火墙配置。
+tcp_wrappers=YES
+# 添加端口配置
+pasv_min_port=61001
+pasv_max_port=62000
+
+
+防火墙配置
+vim /etc/sysconfig/iptables
+# 添加vsftpd的端口配置
+-A INPUT -p TCP --dport 61001:62000 -j ACCEPT
+-A OUTPUT -p TCP --sport 61001:62000 -j ACCEPT
+-A INPUT -p TCP --dport 20 -j ACCEPT
+-A OUTPUT -p TCP --sport 20 -j ACCEPT
+-A INPUT -p TCP --dport 21 -j ACCEPT
+-A OUTPUT -p TCP --sport 21 -j ACCEPT
+
+
+启动服务
+重启防火墙：service iptables restart
+启动vsftpd：service vsftpd start
+在/ftpfile目录上传一些测试文件及目录，方便验证查看。
+
+验证
+在windows下验证：打开浏览器，以ftp协议访问，如：ftp://192.168.0.108/，访问时会弹出窗口让我们输入ftp的用户名和密码，输入正确的帐号后看到如图界面则代表访问成功。
+
+
+在linux下的验证：输入命令 ftp ip 连接服务器，需要输入ftp的用户和密码，通过ls命令或者dir命令查看文件服务器的文件列表，输入exit退出。
+
+通过ftp客户端软件验证：例如cuteftp、filezilla、viperftp、flashftp、leapftp等进行连接ftp服务器，进行文件上传、下载验证。
+
+
+
+
+文件服务器搭建
+server {
+ listen 80;
+ autoindex on;
+ server_name img.silly.com;
+ access_log /usr/local/nginx/logs/access.log combined;
+ index index.html index.htm index.jsp index.php;
+ location / {
+ root /ftpfile/;
+ add_header Access-Control-Allow-Origin *;
+ }
+}
+
+
+环境验证
+启动nginx，即执行命令：${nginx}/sbin/nginx，打开浏览器，访问自己上传的任意一张图片，如：http://img.silly.com/mountain.jpg，访问ok则说明环境搭建成功。
+
+
+我们在Java项目开发中会使用apache的一些ftp开源包，然后我们用里面的工具进行上传图片的时候，会调用ftp服务，将图片上传到ftp服务器上，这时候我们就能拿到上传图片的文件名，而图片服务器对应的二级域名我们可以在项目中配置，所以上传图片的完整URL就能拿到了，那么前端就可以通过域名url展示图片了。
+
+
+
+
+
+
+
+
+
+
