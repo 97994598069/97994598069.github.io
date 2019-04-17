@@ -1,0 +1,163 @@
+[root@k8s01 jycloud_use]# kubectl get pod -l app=nginx
+kubectl get指令的作用，就是从k8s里面获取（GET）指定的API对象。可以看到，在这里我加上了一个-l参数，即获取所有匹配app:nginx标签的pod，需要注意的是，在命令行中，所有key-value格式的参数，都使用"="而非":"表示。
+
+
+kubectl describe pod nginx
+从该命令返回的结果中，可以清楚的看到这个pod的详细信息，比如它的IP地址，等等，其中，有一部分需要特别关注，就是Events(事件):
+在k8s执行的过程中，对API对象的所有重要操作，都会被记录在这个对象的Events里，并且显示在kubectl describe指令返回的结果中
+
+
+kubectl get service nginx -o yaml
+获取yaml
+
+
+pod是k8s项目的原子调度单位，是k8s项目中最小的api对象
+
+
+NameSpace做隔离，  Cgroups做限制   rootfs做文件系统
+
+
+容器的本质就是进程，k8s就是操作系统
+
+
+
+
+war包和web服务器tomcat
+
+我们现在有一个java web应用的war包，它需要被放在tomcat的webapps项目下运行起来
+一.使用docker来做这件事情，如何处理呢？
+1种方法是：
+把war包直接放在tomcat镜像的webapps目录下，做成一个新的镜像运行起来，可是，这时候，如果你需要新的war包的内容，或者需要升级tomcat镜像，就需要重新制作一个新的发布镜像，很麻烦
+
+2.另外一种方法：
+你压根不管war包，永远只发布一个tomcat容器，不过这个容器的webapps目录，就必须声明一个hostpath类型的volume，从而把宿主机上的war包挂载进tomcat容器当中运行起来。不过，这样你就必须解决一个问题，即：如果让每一台宿主机，都预先准备好这个储存有war包的目录呢？这样来看，你只能独立维护一套分布式储存系统了
+
+实际上有了pod之后，这样的问题就很容易解决了，我们可以把war包和tomcat分别做成镜像，然后把他们作为一个pod里的两个容器，组合在一起，这个pod的配置文件如下：
+apiVersion: v1
+kind: Pod
+metadata:
+  name: javaweb-2
+spec:
+  initContainers:
+  - image: geektime/sample:v2
+    name: war
+    command: ["cp", "/sample.war", "/app"]
+    volumeMounts:
+    - mountPath: /app
+      name: app-volume
+  containers:
+  - image: geektime/tomcat:7.0
+    name: tomcat
+    command: ["sh","-c","/root/apache-tomcat-7.0.42-v2/bin/start.sh"]
+    volumeMounts:
+    - mountPath: /root/apache-tomcat-7.0.42-v2/webapps
+      name: app-volume
+    ports:
+    - containerPort: 8080
+      hostPort: 8001 
+  volumes:
+  - name: app-volume
+    emptyDir: {}
+
+	
+在这个pod中，我们定义了两个容器，在第一个容器的使用的镜像是geektime/sample:v2,这个镜像里只有一个war包（sample.war）放在根目录下，而第二个容器则使用的是一个标准的tomcat镜像
+
+不过，你可以注意到了，war包容器的类型不再是一个普通的容器，而是一个Init Container类型的容器
+
+在pod中，所有Init Container定义的容器，都会比spec.containers定义的用户容器先启动。并且，Init Container容器会按顺序逐一执行启动，而直到他们都启动并且退出了，用户容器才会启动
+
+
+所以，这个Init Contaniner类型的war包容器启动后，我执行了一句cp /sample.war /app   把应用的war包拷贝到/app目录下，然后退出。
+而这个/app目录，就挂载了一个名叫app-volume的volume
+
+接下来就很关键了，tomcat容器，同样生命了挂载app-volume到自己的webapps目录下。
+
+所以等tomcat容器启动时，它的webapps目录下就一定会存在sample.war文件;这个文件正式war包容器启动时，拷贝到这个volume里面的，而这个volume是被这两个容器共享的
+
+像这样，我们就用一种组合方式，解决了，war包与tomcat容器之间耦合关系的问题
+
+
+
+实际上，这个所谓的组合操作，正是容器设计模式里最常用的一种模式，它的名字叫sidecar；顾名思义，sidecar指的就是我们可以在一个pod中，启动一个辅助容器，来完成一些独立于主进程（主容器）之外的工作
+
+
+比如，在我们的这个应用pod中，tomcat容器时我们要使用的主容器，而war包容器的存在，只是为了给它提供一个war包而已，所以，我们用Init Container的方式优先运行war包容器，扮演了一个sidecar的角色
+
+应用思考:（龚文的前端项目nodejs；使用Init container容器将项目打包好的zip，运行（可以推到harbor上）。然后制作nodejs的基础镜像并且安装好pm2 、cnpm等命令；但是第一次怎么安装项目呢，做文件存在判断？还是制作镜像的时候直接就是搞定的？每次都执行安装命令？）
+
+
+
+
+
+第二个例子，则是容器的日志收集
+比如我现在有一个应用，需要不断地把日志文件输出到容器的/var/log目录中
+
+这时，我就可以把一个pod里的volume挂载到应用容器的/var/log目录中 
+
+然后，我在这个pod里同时运行一个sidecar容器，它也声明挂载同一个volume到自己的/var/log目录上
+
+
+这样，接下来sidecar容器就只需要做一件事儿，那就是不断地从自己的/var/log目录里读取日志文件，转发到MongoDB或者es中储存起来，这样一个最基本的日志收集工作就完成了
+
+跟第一个例子一样，这个例子中的sidecar的主要工作也是使用共享的volume来完成对文件的操作
+
+
+
+但不要忘记，pod的另一个重要特性是，它的所有容器都共享同一个Network NameSpace，这就使得很多与pod网络相关的配置和管理。也都可以交给sidecar完成，而完全无须干涉用户容器，这里最典型的例子莫过于Istio这个微服务治理项目了。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
