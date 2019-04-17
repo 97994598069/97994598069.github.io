@@ -1,0 +1,383 @@
+deployment看似简单，但实际上，它实现了k8s项目中一个非常重要的功能：pod的"水平扩展/收缩"。这个功能是从paas时代开始，一个平台级项目就必须具体的编排能力
+
+
+举个例子，如果你更新了deployment的pod模板，比如修改了镜像版本，那么deployment就需要遵循一种叫作"滚动更新"的方式，来升级现有的容器。而这个能力的实现，依赖的是k8s项目中的一个非常重要的概念（API对象）：ReplicaSet
+
+ReplicaSet的结构非常简单，我们可以通过yaml文件查看一下:
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: nginx-set
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+从这个yaml文件中，我们可以看到一个replicaSet对象，其实就是由副本数目的定义和一个pod模板组成的，不难发现，它的定义其实是deployment的一个子集
+
+
+更重要的是，Deploymenet控制器实际操纵的，正是这样的replicaSet对象，而不是pod对象
+
+
+对于一个deployment所管理的pod，它的ownerRerference是谁？答案就是ReplocaSet
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+可以看到，这就是我们常用的nginx-deployment,它定义pod副本个数是3(spec.replicas=3)
+
+
+那么具体的实现上，这个Deployment与replicaSet，以及pod的关系是怎么样的呢？
+Deployment---->ReplocaSet------>pod1 pod2 ...
+
+通过上述结构，可以看到，一个定义了replicas=3的Deployment，与它的ReplicaSet以及Pod的关系，实际上是一种层层控制的关系
+
+
+其中,ReplicaSet负责通过"控制器模式"，保证系统中pod的个数永远等于指定的个数(比如3个)、这也正是Deployment只允许容器的restartPolicy=Always的主要原因:只有在容器能保证自己始终是running状态的前提下，ReplicaSet调整Pod的个数才有意义
+
+
+而在此基础上，Deployment同样通过"控制器模式"，来操作replicaSet的个数和属性，进而实现"水平扩展/收缩"和"滚动更新"这两个编排动作
+
+或者通过指令来进行水平扩展:
+$ kubectl scale deployment nginx-deployment --replicas=4
+deployment.apps/nginx-deployment scaled
+
+
+
+滚动更新：
+首先，创建个nginx-deployment  ###--record参数的作用，是记录下你每次操作所执行的命令，以方便后面查看
+$ kubectl create -f nginx-deployment.yaml --record
+
+
+然后，我们来检查一下，nginx-deployment创建后的状态信息:
+$ kubectl get deployments
+NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3         0         0            0           1s
+在返回结果中，可以看到四个状态字段:
+1.DESIRED: 用户期望的Pod副本个数（spec.replicas的值）
+2.CURRENT：当前处于Running状态的Pod的个数
+3.UP-TO-DATE: 当前处于最新版本的pod的个数，所谓最新版本指的是Pod的Spec部分与Deployment里pod模板里定义的完全一致
+4.AVAILABLE：当前已经可用的Pod的个数，即:既是Running状态，又是最新版本，并且已经处于Ready（健康检查正确）状态的Pod的个数
+
+可以看到，只有这个AVAILABLE字段，描述的才是用户所期望的最终状态
+
+
+而k8s项目还为我们提供了一条指令，让我们可以实时查看Deployment对象的状态变化，这个指令就是kubectl rollout status:
+$ kubectl rollout status deployment/nginx-deployment
+Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+deployment.apps/nginx-deployment successfully rolled out
+
+
+在这个返回结果中，2 out of 3 new replicas have been updated.意味着已经有2个pod进入了up-to-date状态
+
+完成后：
+$ kubectl get rs
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-3167673210   3         3         3       20s
+
+如上，在用户提交了一个Deployment对象后，Deployment Controller就会立即创建一个Pod副本个数为3的ReplicaSet。这个ReplicaSet的名字。则是由Deployment的名字和一个随机字符串共同组成；这个随机字符串叫做pod-template-hash，在我们这个例子里就是3167673210，ReplicaSet会把这个随机字符串加在它所控制的所有pod的标签里，从而保证这些pod不会与集群里的其他pod混淆
+
+而replicaSet的DESIRED 、CURRENT和READY字段的含义，和Deployment中是一致的，所以相比之下，Deployment只是ReplicaSet的基础上，添加了UP-TO-Date这个跟版本有关的状态字段
+这个时候，如果我们修改了DeployMent的Pod模板，"滚动更新"就会被自动触发
+
+修改Deployment有很多方法，比如，我们可以直接使用kubectl edit指令编辑Etcd里的API对象
+$ kubectl edit deployment/nginx-deployment
+... 
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.9.1 # 1.7.9 -> 1.9.1
+        ports:
+        - containerPort: 80
+...
+deployment.extensions/nginx-deployment edited
+
+备注：kubectl edit并不神秘，它不过是把API对象的内容下载到了本地文件，让你修改完成后再提交上去
+
+kubectl edit指令编辑完成后，保存退出，k8s就会立即触发"滚动更新"的过程，可以通过kubectl rollout status指令查看nginx-deployment的状态变化:
+$ kubectl rollout status deployment/nginx-deployment
+Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+deployment.extensions/nginx-deployment successfully rolled out
+
+
+这事，可以通过查看deployment的Events查看这个滚动更新的流程:
+$ kubectl describe deployment nginx-deployment
+...
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+...
+  Normal  ScalingReplicaSet  24s   deployment-controller  Scaled up replica set nginx-deployment-1764197365 to 1
+  Normal  ScalingReplicaSet  22s   deployment-controller  Scaled down replica set nginx-deployment-3167673210 to 2
+  Normal  ScalingReplicaSet  22s   deployment-controller  Scaled up replica set nginx-deployment-1764197365 to 2
+  Normal  ScalingReplicaSet  19s   deployment-controller  Scaled down replica set nginx-deployment-3167673210 to 1
+  Normal  ScalingReplicaSet  19s   deployment-controller  Scaled up replica set nginx-deployment-1764197365 to 3
+  Normal  ScalingReplicaSet  14s   deployment-controller  Scaled down replica set nginx-deployment-3167673210 to 0
+可以看到，首先，当你修改了deployment里的pod定义之后，deployment Controller会使用这个修改后的Pod模板，创建一个新的ReplicaSet（hash=1764197365）,这个新的replicaSetde 初始pod副本数是：0
+
+
+然后再Age=24s的位置，Deployment Conntroller开始讲这个新的ReplicaSet所控制的Pod副本数从0变成1，即“水平扩展”出一个副本
+
+紧接着，在Age=22s的位置，Deployment Controller又将旧的ReplicaSet（hash=3167673210）所控制的旧pod副本数减少一个，即:"水平收缩"成两个副本
+
+如此交替进行，新ReplicaSet管理的pod副本数，从0个变成1个，再变成2个，最后变成3个。而旧的ReplicaSet管理的Pod副本数则从3个变成2个，再变成1个，最后变成0个。这样，就完成了这一组Pod的版本升级过程
+
+像这样，将一个集群中正在运行的多个pod版本，交替地逐一升级的过程，就是“滚动更新”
+
+
+在这个“滚动更新”过程完成之后，你可以查看一下新、旧两个replicaSet的最终状态:
+$ kubectl get rs
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-1764197365   3         3         3       6s
+nginx-deployment-3167673210   0         0         0       30s
+
+其中，旧ReplocaSet（hash=3167673210）已经被水平收缩成了0个副本
+
+
+这种“滚动更新”的好处是显而易见的：
+比如在升级刚开始的时候，集群只有1个新版本的Pod，如果这时，新版本pod有问题启动不起来，那么“滚动更新”就会终止，从而允许开发和运维人员介入，而在这个过程中，由于应用本身还有两个旧版本的Pod在线，所以服务并不会受太大的影响
+
+当然，这也就要求你一定要使用Pod的Health Check机制检查应用的运行状态，而不是简单地依赖于容器的Running状态，要不然的话，虽然容器已经变成了Running了，但是服务很有可能尚未启动，"滚动更新"的效果也就达不到了
+
+
+而为了进一步保证服务的连续性，Deployment Controller还会确保，在任何时间窗口内，只有指定比例的Pod处于离线状态，同时也会确保，在任何时间窗口内，只有指定比例的新Pod被创建出来，这两个比例的值都是可以配置的，默认都是DESIRED值的25%
+
+所以，在上面这个deployment的例子中，它有3个pod副本，那么控制器在“滚动更新”的过程中永远都会确保至少2个pod处于可用状态，至多只有4个pod同时存在于集群中，这个策略，是Deployment对象的一个字段，名叫RollingUpdateStrategy,如下:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+...
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+
+在上述RollingUpdateStrategy的配置中，maxSurge指定的是除了DeSIRED数量之外，在一次“滚动”中，Deployment控制器还可以创建多少个新的pod；而maxUnavailable指的是，在一次"滚动"中，Deployment控制器可以删除多个旧pod
+
+同时，这两个配置还可以用前面我们介绍的百分比形式来表示，比如：maxUnavailable=50%，指的是我们最多可以一次删除“50%*DESIRED数量”个pod
+
+
+Deployment的控制器，实际上控制的是ReplicaSet的数目，以及每个ReplicaSet的属性
+而一个应用的版本，对应的正是一个ReplicaSet，这个版本应用的Pod数量，则由ReplicaSet通过它自己的控制器（ReplicaSet Controller）来保证
+
+通过这样的多个ReplicaSet对象，k8s项目就实现了对多个“应用版本”的描述
+
+
+
+
+
+deployment对应用进行版本控制的具体原理:
+kubectl set image指令: 直接修改nginx-deployment所使用的镜像，这个命令的好处就是，可以不用镜像kubectl edit那样需要打开编辑器
+
+错误示例:  ##镜像名字错误
+$ kubectl set image deployment/nginx-deployment nginx=nginx:1.91
+deployment.extensions/nginx-deployment image updated
+
+因为上述镜像在docker Hub中并不存在;所以该滚动更新被触发后，会立即报错并停止:
+$ kubectl get rs
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-1764197365   2         2         2       24s
+nginx-deployment-3167673210   0         0         0       35s
+nginx-deployment-2156724341   2         2         0       7s
+
+通过这个返回结果，可以看到，新版本的ReplicaSet（hash=2156724341）的"水平扩展"已经停止。而且此时，它已经创建了两个Pod，但是它们丢没有进入READY状态，这当然是因为这链各个Pod都拉取不到有效的镜像
+
+与此同时，旧版本的ReplicaSet（hash=1764197365）的"水平收缩"，也自动停止了。此时已经有一个旧pod被删除，还剩下两个旧pod
+
+那么问题来了，我们如何让这个Deployment的3个pod，都回滚到以前的旧版本呢？
+我们只需要执行一条kubectl rollout undo命令，就能把整个Deployment回滚到上一个版本:
+$ kubectl rollout undo deployment/nginx-deployment
+deployment.extensions/nginx-deployment
+
+很容易想到，在具体操作上，Deployment的控制器，其实就是让这个旧ReplicaSet(hash=1764197365)再次扩展成3个Pod，而让新的ReplicaSet（hash=2156724341）重新“收缩”到0个pod
+
+
+
+再进一步地，如果我想回滚到更早之前的版本，要怎么办呢？
+首先，我们需要使用kubectl rollout history命令，查看每次Deployment变更对应的版本。而由于我们在创建这个Deployment的时候，指定了-record参数，所以我们创建这些版本时执行的kubectl命令，都会被记录下来，这个操作的输出如下所示：
+$ kubectl rollout history deployment/nginx-deployment
+deployments "nginx-deployment"
+REVISION    CHANGE-CAUSE
+1           kubectl create -f nginx-deployment.yaml --record
+2           kubectl edit deployment/nginx-deployment
+3           kubectl set image deployment/nginx-deployment nginx=nginx:1.91
+
+
+可以看到，前面执行的创建和更新操作，分别对应了版本1和版本2，而那次失败的更新操作，则对应的是版本3
+
+
+
+当然，还可以通过这个kubectl rollout history指令，看到每个版本对应的Deployment的API对象的细节:
+$ kubectl rollout history deployment/nginx-deployment --revision=2
+
+
+然后，我们就可以再kubectl rollout undo命令行最后，加上要回滚到的指定版本的版本号，就可以回滚到指定版本了：
+$ kubectl rollout undo deployment/nginx-deployment --to-revision=2
+deployment.extensions/nginx-deployment
+
+这样，deployment controller还会按照“滚动更新”的方式，完成对Deployment的降级操作
+
+不过，这样我们对deployment进行的每一次更新操作，都会生成一个新的ReplicaSet对象，很浪费资源；所以，k8s还提供了一个指令，使得我们对Deployment的多次更新操作，最后只生成一个ReplicaSet；具体做法是，在更新Deployment前，你要先执行一条kubectl rollout pause指令，它的用法如下：
+$ kubectl rollout pause deployment/nginx-deployment
+deployment.extensions/nginx-deployment paused
+
+这个指令的作用，是让这个deployment进入一个“暂停”状态
+
+
+所以接下来，你就可以随意使用kubectl edit或者kubectl set image 指令，修改这个deployment的内容了
+
+
+
+由于此时Deployment正处于"暂停"状态，所以我们对Deployment的所有修改，都不会触发新的“滚动更新”。也不会创建新的ReplicaSet;而等到我们对Deployment修改操作都完成之后，只需要再执行一条kubectl rollout resume指令，就可以把这个deployment"恢复"回来；如下:
+$ kubectl rollout resume deploy/nginx-deployment
+deployment.extensions/nginx-deployment resumed
+
+
+而这个kubectl rollout resume指令执行之前，在kubectl rollout pause指令之后的这段时间里，我们对Deployment进行的所有修改，最后只会触发一次"滚动更新"
+
+当然，我们可以通过检查replicaSet状态的变化，来验证下kubectl rollout pause和kubectl rollout resume 指令的执行效果：
+$ kubectl get rs
+NAME               DESIRED   CURRENT   READY     AGE
+nginx-1764197365   0         0         0         2m
+nginx-3196763511   3         3         3         28s
+
+最后返回的结果是，只有一个hash=nginx-3196763511的replicaSet被创建了出来
+
+不过，即使你像上面这样小心翼翼地控制了ReplicaSet的生成数量，随着应用版本的不断增加，k8s中还是会为同一个Deployment保存很多很多不同的replicaSet
+
+那么我们应该如何控制这些“历史”RelicaSet的数量呢？
+很简单，Deployment对象有一个字段，叫作spec.revisionHistorylimit，就是k8s为Deployment保留的“历史版本”个数，所以，如果把它设置为0，你就再也不能做回滚操作了
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		
+
+
+
+

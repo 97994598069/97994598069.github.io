@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+
+上述，deployment定义的编排非常简单，即：确保携带了app=nginx标签的pod的个数，永远等于spec.replicas指定的个数，即2个
+
+这就意味着，如果在这个集群中，携带app=nginx标签的pod的个数大于2的时候，就会有旧的pod被删除；反之，就会有新的pod被创建
+
+但是究竟是k8s项目中的哪个组件，在执行这些操作呢？
+kube-controller-manager组件，实际上这个组件，就是一系列控制器的集合；可以查看k8s项目的pkg/controller目录：
+$ cd kubernetes/pkg/controller/
+$ ls -d */              
+deployment/             job/                    podautoscaler/          
+cloud/                  disruption/             namespace/              
+replicaset/             serviceaccount/         volume/
+cronjob/                garbagecollector/       nodelifecycle/          replication/            statefulset/            daemon/
+...
+
+这个目录下面的每一个控制器，都以独有的方式负责某种编排功能，而我们的deployment,正是这些控制器中的一种
+
+
+实际上，这些控制器之所以被统一放在pkg/controller目录下，就是因为他们都遵循k8s项目中的一个通用编排模式，即:控制循环（control loop）
+
+
+在具体实现中，实际状态往往来自于k8s集群本身
+比如，kubelet通过心跳汇报的容器状态和节点状态，或者监控系统中保存的应用监控数据，或者控制器主动收集的它自己感兴趣的信息，这些都是很常见的实际状态的来源
+
+
+而期望状态，一般来自于用户提交的yaml文件：
+比如，deployment对象中replicas字段的值，很明显，这些信息往往都保存再etcd中
+
+接下来，以Deployment为例，简单描述下它对控制器模型的实现:
+1.Deploymnet控制器从etcd中获取到所有携带了"app:nginx"标签的pod，然后统计它们的数量，这就是实际状态
+2.Deploymnet对象的Replicas字段的值就是期望状态
+3.Deployment控制器将两个状态做比较，然后根据比较结果，确定是创建pod，还是删除已有的pod
+
+可以看到，一个k8s对象的主要编排逻辑，实际上是在第三步的对比阶段完成的
+
+这个操作通常被叫做调谐（reconcile）,这个调谐的过程，则被称为"reconcile Loop"（调谐循环）或者"sync Loop"（同步循环）
+
+调谐的最终结果，往往都是被控制对象的某种写操作；比如，增加pod，删除已有的pod,或者更新pod的某个字段，这也是k8s项目"面向API对象编程"的一个直观体现
+
+其实，这个控制器对象本身，负责定义被管理对象的期望状态，比如deployment里的replicas=2这个字段
+
+
+可以看到deployment这个template字段里的内容，跟一个标准的Pod对象的API定义，丝毫不差。而所有被这个Deployment管理的pod实例，其实都是根据这个template字段的内容创建出来的
+
+像deployment定义的template字段，在k8s项目中有一个专有的名字，叫作PodTemplate（Pod模板）
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		

@@ -1,0 +1,250 @@
+pod是k8s项目中的最小编排单位，将这个设计落实到API对象上，容器(container)就成了pod属性里的一个普通字段：
+但是哪些属性属于Pod对象，而又有哪些属性数据container呢？
+
+要彻底理解这个问题，就一定要牢记，pod扮演的是传统部署环境里的"虚拟机"的角色。这样的设计，是为了使用户从传统环境（虚拟机环境）向k8s的迁移，更加平滑
+
+比如，凡是调度、网络、储存以及安全相关的属性，基本上是pod级别的；这些属性的共同特征是，它们描述的是"机器"这个整体，而不是里面运行的"程序"，
+
+
+pod中几个重要字段的含义和用法:
+1) NodeSelector: 是一个供用户将pod与Node进行绑定的字段，用法如下所示:
+
+apiVersion: v1
+kind: Pod
+...
+spec:
+ nodeSelector:
+   disktype: ssd
+
+##给node打标签
+kubectl label nodes kube-node node=kube-node   
+
+这个的一个yml配置，意味着，这个pod永远只能运行在携带了，disktype: ssd标签（label）的节点上；否则，它将调度失败
+
+
+2) NodeName: 一旦pod的字段被赋值，k8s项目就会被认为这个pod已经经过了调度，调度的结果就是赋值的节点名字，所以，这个字段一般由调度器负责设置，但用户也可以设置它来"骗过"调度器，当然这个做法一般是在测试或者调试的时候才会用到
+
+
+
+3.HostAliases: 定义了pod的hosts文件，（比如/etc/hosts）里的内容，用法如下:
+apiVersion: v1
+kind: Pod
+...
+spec:
+  hostAliases:
+  - ip: "10.1.2.3"
+    hostnames:
+    - "foo.remote"
+    - "bar.remote"
+...
+
+
+在这个pod的yaml文件中，我设置了一组ip和hostname的数据，这样，这个pod启动后，/etc/hosts文件的内容将如下所示:
+cat /etc/hosts
+# Kubernetes-managed hosts file.
+127.0.0.1 localhost
+...
+10.244.135.10 hostaliases-pod
+10.1.2.3 foo.remote
+10.1.2.3 bar.remote
+
+其中，最下面的两行记录，是通过hostaliases字段为pod设置的，需要指出的是，在k8s项目中，如果要设置hosts文件里的内容，一定要通过这种方式，否则，如果直接修改了hosts文件的话，在pod被删除重建之后，kubelet会自动覆盖被修改的内容
+
+
+除了上述跟"机器"相关的配置外，可能会发现;凡是跟容器的Linux Namespace相关的属性，也一定是pod级别的，这个原因也很容易理解：Pod的设计，就是要让它里面的容器尽可能多地共享Linux Namespace,仅保留必要的隔离和限制能力。这样，pod模拟出的效果就跟虚拟机里面的关系非常类似了
+
+如下：这里我定义了一个shareProcessNamespace=true
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  shareProcessNamespace: true
+  containers:
+  - name: nginx
+    image: nginx
+  - name: shell
+    image: busybox
+    stdin: true
+    tty: true
+
+这就意味着这个pod里的容器要共享Pid Namespace 
+
+而在这个yaml文件中，我还定义了两个容器，一个是nginx容器，一个是开启了tty和stdin的shell容器
+
+
+这个pod被创建后，就可以使用shell容器的tty跟这个容器进行交互了：
+$ kubectl create -f nginx.yaml
+
+
+使用kubectl attach命令，连接到shell容器的tty上：
+$ kubectl attach -it nginx -c shell
+
+
+这样，就可以再shell容器里执行ps指令，查看所有正在运行的进程：
+$ kubectl attach -it nginx -c shell
+/ # ps ax
+PID   USER     TIME  COMMAND
+    1 root      0:00 /pause
+    8 root      0:00 nginx: master process nginx -g daemon off;
+   14 101       0:00 nginx: worker process
+   15 root      0:00 sh
+   21 root      0:00 ps ax
+
+可以看到，在这个容器里，我们不仅可以看到它本身的ps指令，还可以看到nginx容器的进程以及Infra容器的/pause进程，这就意味着，整个pod里的每个容器的进程，对于所有容器来说都是可见的：它们共享了同一个PID Namespace 
+
+类似地，凡是pod中的容器要共享宿主机的NameSpace，也一定是pod级别的定义，比如：
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  hostNetwork: true
+  hostIPC: true
+  hostPID: true
+  containers:
+  - name: nginx
+    image: nginx
+  - name: shell
+    image: busybox
+    stdin: true
+    tty: true
+
+在这个pod中，我定义了共享宿主机的network、IPC和PID Namespace，这就意味着，这个pod里的所有容器，会直接使用宿主机的网络，直接和宿主机进行IPC通信，看到宿主机里正在运行的所有进程
+
+
+
+4.ImagePullPolicy字段，它定义了镜像拉取的策略，而它之所以是一个container级别的属性，是因为容器镜像本来就是container定义的一部分：
+
+imagepullpolicy的默认值是always，即每次创建Pod都重新拉取一次镜像，另外，当容器的镜像是类似于nginx或者nginx:latest这样的名字时，ImagePullPolicy也会被认为Always
+
+而如果它的值被定义为Never或者ifnotPresent，则意味着，Pod永远不会主动拉取这个镜像，或者只在宿主机上不存在这个镜像时才拉取
+
+
+其次是Lifecycle字段，它定义的是Container Lifecyle Hooks，顾明思议，container Lifecycle Hooks的作用，是在容器状态发生变化时触发一系列钩子：
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-demo
+spec:
+  containers:
+  - name: lifecycle-demo-container
+    image: nginx
+    lifecycle:
+      postStart:
+        exec:
+          command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
+      preStop:
+        exec:
+          command: ["/usr/sbin/nginx","-s","quit"]
+这是一个来自k8s官方文档的pod的YAML文件，它其实非常简单，只是定义了一个nginx镜像的容器，不过，这个YAML文件的容器（containers）部分，你会看到这个容器分别设置了一个postStart和preStop参数，这是什么意思呢？
+
+postStart：它指的是，在容器启动后，立即执行一个指定的操作，需要明确的是，PostStart定义的操作，虽然是在Docker容器ENTRYPOINT执行之后，但它并不严格保证顺序，也就是说，在postStart启动时，ENTRYPOINT有可能还没有结束
+
+当然，如果postStart执行超时或者错误，k8s会在该pod的Events中报出该容器启动失败的错误信息，导致Pod也处于失败的状态
+
+
+而类似地，preStop发生的时机，则是容器被杀死之前（比如，收到SIGKILL信号），而需要明确的是，preStop操作的执行，是同步的，所以，它会阻塞当前的容器杀死流程，直到这个Hook定义操作完成之后，才允许容器被杀死，这跟postStart不一样
+
+
+所以，在上述示例中，容器成功启动之后，在/usr/share/message里写入了一句"欢迎信息"（即postStart定义的操作）。而在容器被删除之前，我们则会先调用了nginx的退出指令（即prestop定义的操作），从而实现了容器的“优雅退出”
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+pod对象在k8s中的生命周期
+Pod生命周期的变化，主要体现在Pod API对象的status部分，这是它除了Metadata和Spec之外的第三个重要字段，其中pod.status.phase,就是Pod的当前状态，它有如下几种情况：
+1.Pending，这个状态意味着，Pod的yaml文件已经提交给了k8s，API对象已经被创建并保存再Etcd中，当时这个pod里有些容器因为某种原因而不能被顺利创建，比如调度不成功
+
+2.Running，这个状态下，Pod已经调度成功，跟一个具体的节点绑定，它包含的容器都已经创建成功，并且至少有一个正在运行中
+
+3.Succeeded, 这个状态意味着，Pod里的所有容器都正常运行完毕，并且已经退出，这种情况在运行一次性任务时最为常见
+
+4.Failed，这个状态下，Pod里至少有一个容器以不正常的状态（非0的返回码）退出，这个状态的出现意味着你得想办法Debug这个容器的应用，比如查看Pod的Event和日志
+
+5.unknown, 这是一个异常状态，意味着，pod的状态不能持续地被kubectl汇报给kube-apiserver，这很有可能是主从节点（master和kubectl）间的通信出现了问题
+
+更进一步地，Pod对象的Status字段，还可以再细分出一组Conditions，这些细分状态的值包括：PodScheduled、Ready、initalized以及unschedulable。它们主要用于描述造成当前status的具体原因是什么
+
+比如，pod当前的status是pending，对应的Condition是Unschedulable，这就意味着它的调度出现了问题；而其中ready这个细分状态值得我们关注:它意味着Pod不仅已经正常启动（Running状态）。而且已经可以对外提供服务了，这两者之间（Running和Ready）是有区别的：
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   
+ 
