@@ -1,0 +1,371 @@
+如何对StatefulSet进行"滚动更新"（rolling update）?
+很简单，只要修改StatefulSet的pod模板，就会自动触发“滚动更新”:
+$ kubectl patch statefulset mysql --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"mysql:5.7.23"}]'
+statefulset.apps/mysql patched
+
+在这里，我使用了kubectl patch命令，它的意思是，以“补丁”的方式（JSON格式的）修改一个API对象的指定字段，也就是我在后面指定的“spec/template/spec/containers/0/image”
+
+这样，StatefulSet Controller就会按照与Pod编号相反的顺序，从最后一个pod开始，逐一更新这个StatefulSet管理的每个pod，而如果更新发生了错误，这次“滚动更新就会停止”。此外,StatefulSet的“滚动更新”还允许我们进行更精细的控制，比如金丝雀发布（Canary Deploy）或者灰度发布，这意味着应用的多个实例中被指定的一部分不会被更新到最新的版本
+
+这个字段，正是StatefulSet的spec.updateStategy.rollingUpdate的parition字段
+
+比如，现在我将前面这个StatefulSet的parition字段设置为2:
+$ kubectl patch statefulset mysql -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":2}}}}'
+statefulset.apps/mysql patched
+
+
+其中，kubectl patch命令后面的参数（JSON格式），就是parition字段在API对象里的路径，所以，上述操作等同于直接使用kubectl edit命令，打开这个对象，把parition字段修改为2
+
+
+这样，我局制定了当POD模板发生变化的时候，比如mysql镜像更新到5.7.23，那么只有序号大于或者等于2的pod会被更新到这个版本，并且，如果你删除或者重启了序号小于2的pod，等它再次启动后，也会保持原先的5.7.2版本，绝不会被升级到5.7.23版本
+
+
+StatefulSet可以说是k8s项目中最为复杂的编排对象
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+Daemon Pod
+
+DaemonSet的作用就是让你再k8s集群里，运行一个Daemon Pod，所以这个Pod有如下三个特征:
+1.这个pod运行在k8s集群里的每一个节点(Node)上
+2.每个节点上只有一个这样的Pod实例
+3.当有新的节点加入k8s集群后，该Pod会自动地在新节点上被创建出来，而当旧节点被删除后，它上面的Pod也响应地会被回收掉
+
+
+这个机制听起来很简单，但Daemon Pod的意义确实是非常重要的：
+1.各种网络插件的agent组件，都必须运行在每一个节点上，用来处理这个节点上的容器网络
+2.各种存储插件的Agent组件，也必须运行在每一个节点上，用来在这个节点上挂载远程存储目录，操作容器的volume目录
+3.各种监控组件和日志组件也必须运行在每一个节点上，负责这个节点上的监控信息和日志收集
+
+更重要的是，跟其他编排对象不一样，DaemonSet开始运行的时机，很多时候比整个k8s集群出现的时机都要早;很奇怪，但是如果这个daemonSet正是一个网络插件的Agent呢？这个时候，整个k8s集群里还没有可用的容器网络，所有worker节点状态都是NotReady(NetworkReady=false).这种情况下，普通的pod肯定不能运行在这个集群上，所以，这页就意味着DaemonSet的设计，必须要有某种过人之处才行
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd-elasticsearch
+  namespace: kube-system
+  labels:
+    k8s-app: fluentd-logging
+spec:
+  selector:
+    matchLabels:
+      name: fluentd-elasticsearch
+  template:
+    metadata:
+      labels:
+        name: fluentd-elasticsearch
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: fluentd-elasticsearch
+        image: k8s.gcr.io/fluentd-elasticsearch:1.20
+        resources:
+          limits:
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+这个DaemonSet，管理的是一个fluentd-es镜像的pod,这个镜像的功能非常实用:通过flueentd将Docker容器里的日志转发到es中
+
+可以看到，daemonSet跟Deployment非常相似，只不过是没有replicas字段；它也使用selector选择管理所有携带了name=fluentd-es标签的pod
+
+而这些pod模板，也是用template字段定义的，在这个字段中，定义了一个使用fluented-es:1.20镜像的容器，而且这个容器挂载了两个hostPath类型的volume,分别对应宿主机的/var/log目录和/var/lib/docker/containers目录
+
+显然，fluentd启动之后，它会从这两个目录搜着日志信息，并转发给es保存，这样，我们通过es就可以很方便地检索这些日志了
+
+需要注意的是，Docker容器里应用的日志，默认会保存再宿主机上/var/lib/docker/containers、{{.容器ID}}/{{.容器ID}}-json.log 文件里，所以这个目录正是fluentd的搜集目标
+
+那么，DaemonSet又是如何保证每个Node上有且只有一个被管理的Pod呢？
+显然，这是一个典型的“控制器模型”能够处理的问题
+
+Daemon Controller，首先从Etcd里获取所有的Node列表，然后遍历所有的Node，这时，就可以很容易地去检查，当前这个Node上是不是有一个携带了name=fluentd-es标签的pod在运行
+
+而检查的结果可能有三种情况:
+1.没有这种pod，那么就意味着要在这个Node上创建这样一个Pod
+2.有这种pod，但是数量大于1，那就说明要把多余的pod从这个Node上删除掉
+3.正好只有一个这种Pod，那说明这个节点是正常的
+
+其中，删除节点（Node）上多余的Pod非常简单，直接调用k8s API就可以了
+
+但是，如何在指定Node是哪个创建新Pod呢？
+1.可以使用nodeSelector  选择node的名字即可：      ###在k8s项目里，nodeSelector其实已经是一个将要被废弃的字段了
+nodeSelector:
+    name: <Node 名字 >
+
+
+2.nodeAffinity
+apiVersion: v1
+kind: Pod
+metadata:
+  name: with-node-affinity
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: metadata.name
+            operator: In
+            values:
+            - node-geektime
+在这个pod里，声明了一个spec.affinity字段，然后定义了一个nodeAffinity。其中，spec.affinity字段，是pod里跟调度相关的一个字段
+
+这里，定义的nodeAffinity的含义是:
+1.requiredDuringSchedulingIgnoredDuringExecution:它的意思是说，这个nodeAffinity必须在每次调度的时候与于考虑，同时这也意味着你可以设置在某些情况下考虑这个nodeAffinity
+2.这个Pod,将来只允许运行在“metadata.name”是“node-geektime”的节点上
+
+在这里，nodeAffinity的含义，可以支持更加丰富的语法，比如operator：In(即：部分匹配；如果你定义operator:Equal，就是完全匹配)。这也正是nodeAffinity会取代nodeSelectory的原因之一
+
+备注：其实在大多数时候，这些Operator语义没啥用处
+
+所以，我们的DaemonSet Controller会在创建pod的时候，自动在这个pod的API对象里，加上这样一个nodeAffinity定义，其中，需要绑定的节点名字，正是当前正在遍历的这个Node
+
+当然，DaemonSet并不需要修改用户提交的Yaml文件里的Pod模板，而是在向k8s发起请求之前，直接修改根据模板生成的Pod对象
+
+此外，DaemonSet还会给这个pod自动加上另外一个调度相关的字段，叫做tolerations。这个字段意味着，这个pod，会“容忍”某些Node的“污点”
+
+而DaemonSet自动加上的toleration字段：
+apiVersion: v1
+kind: Pod
+metadata:
+  name: with-toleration
+spec:
+  tolerations:
+  - key: node.kubernetes.io/unschedulable
+    operator: Exists
+    effect: NoSchedule
+
+这个Toleration的含义是：“容忍”所有被标记为unschedulable“污点”的Node；“容忍”的效果时允许调度
+
+
+在正常情况下，被标记了unschedulable污点的Node,是不会有任何pod被调度上去的（effect:NoSchedule）。可是，DaemonSet自动地给被管理的Pod加上了这个特殊的Toleration，就使得这些Pod可以忽略这个限制，继而保证每个节点上都会调度一个pod，当然，如果这个节点有故障的话，这个pod可能会启动失败，而daemonSet则会始终尝试下去，知道Pod启动成功
+
+
+这时，你应该可以猜测到daemonSet的过人之处：其实就是依靠Toleration实现的
+
+假如当前DaemonSet管理的，是一个网络插件的Agent Pod，那么你就必须在这个DaemonSet的yaml文件里，给它的pod模板加上一个能够“容忍”node.k8s.io/network-unavailable"污点"的Toleration：
+...
+template:
+    metadata:
+      labels:
+        name: network-plugin-agent
+    spec:
+      tolerations:
+      - key: node.kubernetes.io/network-unavailable
+        operator: Exists
+        effect: NoSchedule
+在k8s项目中，当一个节点的网络插件尚未安装时，这个节点就会被自动加上名为”node.k8s.io/network-unavailable"污点"
+
+而通过这样一个Toleration,调度器在调度这个pod的时候，就会忽略当前节点上的“污点”，从而成功地将网络插件的Agent组件调度到这台机器上启动起来
+
+这种机制，正是我们在部署k8s集群的时候，能够先部署k8s本身、再部署网络插件的根本原因：因为当时我们所创建的weave的yaml，实际上就是一个DaemonSet
+
+
+至此，通过上面这些内容，可以看出，DaemonSet其实是一个非常简单的控制器，在它的控制循环中，只需要遍历所有节点，然后根据节点上是否有被管理Pod情况，来决定是否要创建或者删除一个Pod
+
+
+只不过，在创建每个pod的时候，DaemonSet会自动给这个pod加上一个nodeAffinity,从而保证这个pod只会在指定节点上启动，同时，它还会自动给这个pod加上Toleration，从而忽略节点unschedulable污点
+
+当然，也可以在pod模板里加上更多种类Toleration，从而利用DaemonSet实现自己的目的。比如，在这个fluentd-es DaemonSet里，我就给它加上了这样的Toleration:
+tolerations:
+- key: node-role.kubernetes.io/master
+  effect: NoSchedule
+
+这是因为在默认情况下，k8s集群不允许用户在master节点部署Pod。因为Master节点默认携带了一个叫作：”node.k8s.io/network-unavailable"污点"。所以，为了能在，master节点上部署DaemonSet的Pod，我就必须让这个pod容忍这个污点
+
+
+DaemonSet的使用方法：
+备注：在k8s v1.11之前，由于调度器尚不完善，DaemonSet是由Daemonset Controller自行调度的，那它会直接设置Pod的spec.nodename字段，这样就可以跳过调度器了，但是，这样的做法很快就会被废除
+
+首先，创建这个DaemonSet对象：
+$ kubectl create -f fluentd-elasticsearch.yaml
+
+需要注意的是，在DaemonSet上，我们一般都应该加上resources字段，来限制它的CPU和内存使用，防止它占用过多的宿主机资源
+
+而创建成功后，就能看到，如果有N个节点，就会有N个fluentd-es pod在运行，比如：
+$ kubectl get pod -n kube-system -l name=fluentd-elasticsearch
+NAME                          READY     STATUS    RESTARTS   AGE
+fluentd-elasticsearch-dqfv9   1/1       Running   0          53m
+fluentd-elasticsearch-pf9z5   1/1       Running   0          53m
+
+而如果你此时通过kubectl get 查看一下k8s集群里的DaemonSet对象：
+$ kubectl get ds -n kube-system fluentd-elasticsearch
+NAME                    DESIRED   CURRENT   READY     UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+fluentd-elasticsearch   2         2         2         2            2           <none>          1h
+备注：k8s里较长的API对象都有短名字，比如DaemonSet对应的是ds，Deployment对应的是deploy
+
+
+就会发现，DaemonSet和Deployment一样，也有DESIRED、CURRENT等多个状态字段，这页就意味着，DaemonSet可以像Deployment那样，进行版本管理，这个版本，可以使用kubectl rollout history看到：
+$ kubectl rollout history daemonset fluentd-elasticsearch -n kube-system
+daemonsets "fluentd-elasticsearch"
+REVISION  CHANGE-CAUSE
+1         <none>
+
+接下来，我们来把这个DaemonSet的容器镜像版本到V2.2.0:
+$ kubectl set image ds/fluentd-elasticsearch fluentd-elasticsearch=k8s.gcr.io/fluentd-elasticsearch:v2.2.0 --record -n=kube-system
+
+这个kubectl set image命令里，第一个fluentd-es是DaemonSet的名字，第二个fluentd-es是容器的名字
+
+
+这时候，我们可以使用kubectl rollout status命令看到这个“滚动更新”的过程，如下所示：
+$ kubectl rollout status ds/fluentd-elasticsearch -n kube-system
+Waiting for daemon set "fluentd-elasticsearch" rollout to finish: 0 out of 2 new pods have been updated...
+Waiting for daemon set "fluentd-elasticsearch" rollout to finish: 0 out of 2 new pods have been updated...
+Waiting for daemon set "fluentd-elasticsearch" rollout to finish: 1 of 2 updated pods are available...
+daemon set "fluentd-elasticsearch" successfully rolled out
+
+注意，由于这一次我在升级命令后面加上了-record参数，所以这次升级使用到的指令就会自动出现在DaemonSet的rollout history 里面：
+$ kubectl rollout history daemonset fluentd-elasticsearch -n kube-system
+daemonsets "fluentd-elasticsearch"
+REVISION  CHANGE-CAUSE
+1         <none>
+2         kubectl set image ds/fluentd-elasticsearch fluentd-elasticsearch=k8s.gcr.io/fluentd-elasticsearch:v2.2.0 --namespace=kube-system --record=true
+
+
+有了版本号，你也可以像Deployment一样,将DaemonSet回滚到某个指定的历史版本了
+
+
+Deployment管理这些版本，靠的是“一个版本对应一个ReplicaSet对象”。可是DaemonSet控制器操作的直接就是pod，不可能有RelicaSet这样的对象参数其中，那么这些版本又是如何维护的呢？
+一切皆对象，在k8s项目中，任何你觉得需要记录下来的状态，都可以被用API对象的方式实现，当然，“版本”也不例外
+
+在k8s v1.7之后添加了一个API对象，名叫controllerRevision,专门用来记录某种controller对象版本。比如，可以通过如下命令查看fluentd-es对应的ControllerRevison:
+$ kubectl get controllerrevision -n kube-system -l name=fluentd-elasticsearch
+NAME                               CONTROLLER                             REVISION   AGE
+fluentd-elasticsearch-64dc6799c9   daemonset.apps/fluentd-elasticsearch   2          1h
+
+
+而如果你使用kubectl describe 查看这个ControllerRevision对象：
+$ kubectl describe controllerrevision fluentd-elasticsearch-64dc6799c9 -n kube-system
+Name:         fluentd-elasticsearch-64dc6799c9
+Namespace:    kube-system
+Labels:       controller-revision-hash=2087235575
+              name=fluentd-elasticsearch
+Annotations:  deprecated.daemonset.template.generation=2
+              kubernetes.io/change-cause=kubectl set image ds/fluentd-elasticsearch fluentd-elasticsearch=k8s.gcr.io/fluentd-elasticsearch:v2.2.0 --record=true --namespace=kube-system
+API Version:  apps/v1
+Data:
+  Spec:
+    Template:
+      $ Patch:  replace
+      Metadata:
+        Creation Timestamp:  <nil>
+        Labels:
+          Name:  fluentd-elasticsearch
+      Spec:
+        Containers:
+          Image:              k8s.gcr.io/fluentd-elasticsearch:v2.2.0
+          Image Pull Policy:  IfNotPresent
+          Name:               fluentd-elasticsearch
+...
+Revision:                  2
+Events:                    <none>
+
+就会看到，这个ControllerRevision对象，实际上是在Data字段保存了该版本对应的完整的DaemonSet的API对象，并且，在Annotation字段保存了创建这个对象所使用的kubectl命令
+
+接下来，可以尝试将这个DaemonSet回滚到Revision=1时状态:
+$ kubectl rollout undo daemonset fluentd-elasticsearch --to-revision=1 -n kube-system
+daemonset.extensions/fluentd-elasticsearch rolled back
+
+这个kubectl rollout undo 操作，实际上相当于读取到了Revision=1的ControllerRevision对象保存的Data字段。而这个Data字段里保存的信息，就是Revision=1时这个DaemonSet的完整APi对象
+
+所以，现在DaemonSet Controller就可以使用这个历史API对象，对现有的DaemonSet做一次PATCH操作（等价于执行一次kubectl apply -f "旧的DaemonSet对象"），从而把这个DaemonSet更新到一个旧版本
+
+这也是为什么，在执行完这次回滚完成后，DaemonSet的Revision并不会从Revision=2退回到1，而是会增加成Revision=3,这是因为，一个新的ControllerRevision被创建了出来
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
