@@ -495,8 +495,9 @@ pod "mysql-client" deleted
 就会发现，从StatefulSet为我们新创建的mysql-3上，同样可以读取到哦之前插入的记录，也就是说，我们的数据备份和恢复，都是有效的
 
 
-
-
+如何对StatefulSet进行“滚动更新”：
+$ kubectl patch statefulset mysql --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"mysql:5.7.23"}]'
+statefulset.apps/mysql patched
 
 
 
