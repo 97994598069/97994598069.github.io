@@ -208,22 +208,15 @@ Request ID: 32191f7ea07cb6bb44a1f43b8299415c
 
 这样，任何匹配失败的请求，就都会被转发到这个名叫nginx-default-backend的service，所以，你就可以通过部署一个专门的pod来为用户返回自定义的404页面了
 
-
-
-
-
-
-
-
-
-
-
-
-
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 每个服务都使用指定clusterIP的模式，例如config，如果需要连接config则就指定congfig的ClusterIP:port来链接，  
 
-有web界面的肯定是有域名的，就使用ingress，指定外网地址和端口；配置好域名解析；然后在ingress的yaml里配置好域名和代理的service的名字与service的端口
+有web界面的肯定是有域名的，就使用ingress，指定外网地址（比如说ecs的外网地址？）和端口；配置好域名解析；然后在ingress的yaml里配置好域名和代理的service的名字与service的端口
+
+有web界面的：ingress--->service---->pod  （访问nginx里配置的域名，然后被转发到其代理的service:port继而再被转发到后端的pod）
+无web界面的：service--->pod（没有web界面的直接使用service：port来调用）
+
 		  
 		  
 		  
