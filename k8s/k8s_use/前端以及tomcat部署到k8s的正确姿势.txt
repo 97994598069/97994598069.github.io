@@ -1,0 +1,42 @@
+[root@k8s01 base]# cat nginx.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-2
+spec:
+  initContainers:
+  - image: 192.168.2.45:5000/base/index:V4
+    name: index
+    command: ["cp", "/index.html", "/mnt"]
+    volumeMounts:
+    - mountPath: /mnt
+      name: app-volume
+  containers:
+  - image: 192.168.2.45:5000/base/nginx:V1
+    name: nginx
+    volumeMounts:
+    - mountPath: /usr/share/nginx/html
+      name: app-volume
+    ports:
+    - containerPort: 80
+      hostPort: 8001 
+  volumes:
+  - name: app-volume
+    emptyDir: {}
+	
+
+inidex:V4的yaml
+[root@k8s01 base]# cat Dockerfile 
+FROM 192.168.2.45:5000/base/centos:7.4.1708
+ADD index.html /index.html
+
+
+[root@k8s01 base]# curl http://192.168.2.42:8001
+k8s_test01
+
+
+同理：
+如果是部署tomcat的时候
+可以将war包在pom里打成镜像，利用initContainer和container相结合地跑起来
+
+但是nodejs呢？
