@@ -1,0 +1,239 @@
+将service暴露给外界的三种方法，其中有一个叫做LoadBalancer类型的service，它会为你在你的Cloud Provider（比如：Google Cloud或者OpenStack）里创建一个与该Service对应的负载均衡服务
+
+
+但是也可以感受到，由于每个service都要有一个负载均衡服务，所以这个实际上既浪费成本又高，作为用户，我其实更希望看到k8s为我内置一个全局的负载均衡器，然后，通过访问我的URL，把请求转发给不同的后端Service
+
+这种全局的，为了代理不同后端Service而设置的负载均衡服务，就是k8s里的Ingress服务
+
+所以，Ingress的功能其实很容易理解，所谓Ingress就是service的service
+
+举个例子，假如在现在有这样一个站点：https://cafe.example.com  其中，https://cafe.example.com/coffee对应的是“咖啡点餐系统”。
+而，http://cafe.example/tea，对应的则是“茶水点餐系统”。这两个系统，分别由名叫coffice和tea这样两个Deployment来提供服务
+
+
+那么现在，我如何能够使用k8s的Ingress来创建一个统一的负载均衡器，从而实现当用户访问不同的域名时，能够访问到不同的Deployment呢？
+如下:
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: cafe-ingress
+spec:
+  tls:
+  - hosts:
+    - cafe.example.com
+    secretName: cafe-secret
+  rules:
+  - host: cafe.example.com
+    http:
+      paths:
+      - path: /tea
+        backend:
+          serviceName: tea-svc
+          servicePort: 80
+      - path: /coffee
+        backend:
+          serviceName: coffee-svc
+          servicePort: 80
+
+在上面这个名叫cafe-ingress.yaml文件中，最值得我们关注的，是rules字段，在k8s里，这个字段叫做ingressRule
+
+IngressRule的key就叫做：host。它必须是一个标准的域名格式（Full Qualified Domain Name）的字符串，而不能是IP地址
+
+而host字段定义的值，就是这个ingress的入口，这页就意味着，当用户访问cafe.example.com的时候，实际上访问到的是这个ingress对象，这样k8s就能使用IngressRule来对你的请求进行下一步转发
+
+而接下来，IngressRule规则的定义，则依赖于path字段，可以简单理解为，这里的每一个path都对应一个后端service。所以在我们的例子里，我定义了两个path，它们分别对应coffice和tea这两个Deployment的service（即：coffice-svc和tea-svc）	
+
+通过上面的讲解不难看到，所谓Ingress对象，其实就是k8s项目对“反向代理”的一种抽象
+
+一个ingress对象的主要内容，实际上就是一个“反向代理”服务（比如nginx）的配置文件的描述，而这个代理服务对应的转发规则，就是IngressRule
+
+这就是为什么在每条IngressRule里，需要有一个host字段来作为这条IngressRule的入口，然后还需要有一系列path字段来声明具体的转发策略。这其实跟nginx HAproxy等项目的配置文件的写法是一致的
+
+而有了Ingress这样的一个统一的抽象，k8s的用户就无需关心ingress的具体部署细节了
+
+在实际的使用中，你只需要从社区里选择一个具体的Ingress Controller，把它部署在k8s集群里即可
+
+然后，这个Ingress Controller会根据你定义的ingress对象，提供对应的代理能力，目前，业界最常用的各种反向代理项目，比如nginx、haproxy、envoy、traefik等都已经为k8s专门维护了对应的Ingress Controller 
+
+
+nginx Ingress Controller：
+部署：
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/mandatory.yaml
+
+其中，mandatory.yaml这个文件里，正是nginx官方维护的Ingress Controller的定义:
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nginx-configuration
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-ingress-controller
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/part-of: ingress-nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+      annotations:
+        ...
+    spec:
+      serviceAccountName: nginx-ingress-serviceaccount
+      containers:
+        - name: nginx-ingress-controller
+          image: quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.20.0
+          args:
+            - /nginx-ingress-controller
+            - --configmap=$(POD_NAMESPACE)/nginx-configuration
+            - --publish-service=$(POD_NAMESPACE)/ingress-nginx
+            - --annotations-prefix=nginx.ingress.kubernetes.io
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+            # www-data -> 33
+            runAsUser: 33
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+            - name: http
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+
+可以看到，这个service的唯一工作，就是将所有携带ingress-nginx标签的pod的80和443端口暴露出去
+而如果你是公有云的环境，需要创建的就是LoadBalancer类型的Service了
+
+上述操作完成后，一定要记录下这个service的访问入口，即：宿主机的地址和nodeport的端口；如下:
+kubectl get svc -n ingress-nginx
+NAME            TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx   NodePort   10.105.72.96   <none>        80:30044/TCP,443:31453/TCP   3h
+
+为了方便后面使用，我们把上述访问入口设置为环境变量:
+$ IC_IP=10.168.0.2 # 任意一台宿主机的地址
+$ IC_HTTPS_PORT=31453 # NodePort 端口
+
+
+在Ingress Controller和它所需要的Service部署完成后，就可以使用它
+
+
+首先，我们需要在集群里部署我们的应用pod和她们对应的service,如下:
+kubectl create -f cafe.yaml
+
+然后，我们需要创建Ingress所需要的SSL证书（tls.crt）和秘钥（tls.key），这些信息都是通过Secret对象定义好的，如下:
+kubectl create -f cafe-secret.yaml
+
+进一步完成之后，我们就可以创建一开始定义的ingress对象了:
+kubectl create -f cafe-ingress.yaml
+
+
+这时候，我们就可以查一下这个ingres对象的信息:
+kubectl get ingress
+NAME           HOSTS              ADDRESS   PORTS     AGE
+cafe-ingress   cafe.example.com             80, 443   2h
+
+$ kubectl describe ingress cafe-ingress
+Name:             cafe-ingress
+Namespace:        default
+Address:          
+Default backend:  default-http-backend:80 (<none>)
+TLS:
+  cafe-secret terminates cafe.example.com
+Rules:
+  Host              Path  Backends
+  ----              ----  --------
+  cafe.example.com  
+                    /tea      tea-svc:80 (<none>)
+                    /coffee   coffee-svc:80 (<none>)
+Annotations:
+Events:
+  Type    Reason  Age   From                      Message
+  ----    ------  ----  ----                      -------
+  Normal  CREATE  4m    nginx-ingress-controller  Ingress default/cafe-ingress
+
+可以看到，这个ingress对象最核心的部分，正是Rules字段，其中，我们定义的host是cafe.example.com，它有两条转发规则（path），分别转发给tea-svc和coffice-svc 
+
+当然，在Ingress的yaml文件里，可以定义多个Host，比如，restaurant.example、movie.example.等等，来为更多的域名提供负载均衡服务
+
+接下来，我们就可以通过这个Ingress的地址和端口，访问到我们前面部署的应用了，比如，当我们访问https://cafe.example.com:443/coffee时，应该是coffice这个Deployment负责响应我的请求:
+curl --resolve cafe.example.com:$IC_HTTPS_PORT:$IC_IP https://cafe.example.com:$IC_HTTPS_PORT/coffee --insecureServer address: 10.244.1.56:80
+Server name: coffee-7dbb5795f6-vglbv
+Date: 03/Nov/2018:03:55:32 +0000
+URI: /coffee
+Request ID: e487e672673195c573147134167cf898
+
+我们可以看到，访问这个URL得到的返回信息是:server name:coffee-7dbb5795f6-vglbv。这正是coffice这个deployment的名字
+
+而当我访问http://cafe.example.com:443/tea的时候，则应该是tea这个deployment负责响应我的请求（Server name: tea-7d57856c44-lwbnp）如下:
+curl --resolve cafe.example.com:$IC_HTTPS_PORT:$IC_IP https://cafe.example.com:$IC_HTTPS_PORT/tea --insecure
+Server address: 10.244.1.58:80
+Server name: tea-7d57856c44-lwbnp
+Date: 03/Nov/2018:03:55:52 +0000
+URI: /tea
+Request ID: 32191f7ea07cb6bb44a1f43b8299415c
+
+可以看到，nginx Ingress Controller为我们创建的nginx负载均衡器，已经成功地将请求转发给了对应的后端service
+
+以上，就是k8s里Ingress的设计思想和使用方法了
+
+
+不过，可能会有一个疑问，如果我的请求没有匹配到任何一条IngressRule,那么会发生什么呢？
+首先，既然nginx ingress Controller是用nginx实现的，那么它当然会为你返回一个nginx的404页面
+
+不过，Ingress Controller也允许你通过pod启动命令里的-default-backend-service参数，设置一条默认规则，如果：-default-backend-service=nginx-default-backend 
+
+这样，任何匹配失败的请求，就都会被转发到这个名叫nginx-default-backend的service，所以，你就可以通过部署一个专门的pod来为用户返回自定义的404页面了
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+每个服务都使用指定clusterIP的模式，例如config，如果需要连接config则就指定congfig的ClusterIP:port来链接，  
+
+有web界面的肯定是有域名的，就使用ingress，指定外网地址和端口；配置好域名解析；然后在ingress的yaml里配置好域名和代理的service的名字与service的端口
+		  
+		  
+		  
+		  
+		  
+		  
+		  
+		  
+		  
+		  
+		  
+		  
+		  
