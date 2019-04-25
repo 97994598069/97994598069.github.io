@@ -39,3 +39,16 @@ server{
 
     }
 }
+
+ location ~/*.php$ {
+    return 403;
+ }
+
+##以php结尾的，禁止访问
+
+ location ^~/FCKeditor/ {
+     return 403;
+ }
+##/FCKeditor/目录的禁止访问
+
+
