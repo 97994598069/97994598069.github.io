@@ -40,3 +40,7 @@ k8s_test01
 可以将war包在pom里打成镜像，利用initContainer和container相结合地跑起来
 
 但是nodejs呢？
+同样，制作nodejs的基础镜像
+两个注意点:
+1.因为前端项目需要安装，所以需要将项目在本地安装完，然后删除项目，只留下安装后的目录；再进行ADD或者COPY
+2.同上需要前端每次将配置文件打包成docker镜像，然后使用initContainer来进行部署上线
