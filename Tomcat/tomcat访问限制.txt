@@ -1,0 +1,58 @@
+目标：只有指定的主机或IP地址才可以访问部署在Tomcat下的应用。
+实现所需参数：RemoteHostValve 和RemoteAddrValve
+              前者用于限制主机名，后者用于限制IP地址。
+			  
+实现过程：
+一、全局设置，对Tomcat下所有应用生效
+server.xml中的<Host>和</Host>间添加如下代码：
+
+限制主机IP地址：
+<Valve className="org.apache.catalina.valves.RemoteAddrValve" 
+allow="192.168.1.*" deny=""/> 
+注：上述代码表示对Tomcat下所有应用仅允许192.168.1.*网段的主机访问；
+
+
+限制主机域名：
+<Valve className="org.apache.catalina.valves.RemoteHostValve"  
+allow="*.abc.com" deny=""/>  
+注：上述代码表示对Tomcat下所有应用仅允许*.abc.com名称的主机访问；
+
+备注:上述两种方式可以单独使用，也可以是混合使用。
+
+
+示例如下：
+1、只允许192.168.1.10访问：
+<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="192.168.1.10" deny=""/>/ 
+
+
+2、只允许192.168.1.*网段访问：
+<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="192.168.1.*" deny=""/>
+
+
+3、只允许192.168.1.10、192.168.1.30访问：
+<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="192.168.1.10,192.168.1.30" deny=""/> 
+
+
+4、根据主机域名进行限制：
+<Valve className="org.apache.catalina.valves.RemoteHostValve" allow="abc.com" deny=""/> 
+
+
+5、根据主机IP和域名进行限制：
+<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="192.168.1.10,192.168.1.30,192.168.2.*" deny=""/>  
+<Valve className="org.apache.catalina.valves.RemoteHostValve" allow="www.abc.com,*.aaa.com" deny=""/> 
+
+
+
+
+二、局部设置，仅对具体的应用生效
+server.xml中的<Context>和</Context>间添加如下代码：
+<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="192.168.1.*" deny=""/>
+上述代码表示对Tomcat下定义的单个应用仅允许192.168.1.*网段的主机访问；
+局部设置与全局设置方法类似，这里不再赘述！
+
+
+
+
+
+
+
