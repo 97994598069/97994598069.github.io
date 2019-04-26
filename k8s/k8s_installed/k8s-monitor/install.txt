@@ -28,3 +28,8 @@ $ vim config.toml
 < enabled = false
 ---
 > enabled = true
+
+
+
+这个可以事先配置好k8s-ui界面
+之前应该是没有cpu和内存等等的折线图这些的监控的；但是添加完就可以看到了
