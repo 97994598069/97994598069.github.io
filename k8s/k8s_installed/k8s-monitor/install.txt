@@ -1,0 +1,30 @@
+必须先安装kube-dns并验证成功
+
+kubectl apply -f ./InfluxDB.yaml
+kubectl apply -f ./heapster_role.yaml
+kubectl apply -f ./Heapster.yaml
+kubectl apply -f ./Grafana.yaml
+
+
+
+访问地址：
+http://mastserIP:30108    
+
+
+
+备注：
+如果想在k8s-ui有展示则:
+配置Influxdb
+influxdb 官方建议使用命令行或 HTTP API 接口来查询数据库，从 v1.1.0 版本开始默认关闭 admin UI，将在后续版本中移除 admin UI 插件。
+开启镜像中 admin UI的办法如下：先导出镜像中的 influxdb 配置文件，开启插件后，再将配置文件内容写入 ConfigMap，最后挂载到镜像中，达到覆盖原始配置的目的。
+
+$ #在镜像所在的宿主机上，导出镜像中的influxdb配置文件
+$ docker run --rm --entrypoint 'cat' -ti heapster-influxdb-amd64:v1.1.1 /etc/config.toml >config.toml.orig   ##注意镜像改成自己yaml里的
+$ cp config.toml.orig config.toml
+
+$ # 修改：启用 admin 接口
+$ vim config.toml
+修改第35行
+< enabled = false
+---
+> enabled = true
