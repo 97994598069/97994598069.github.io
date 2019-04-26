@@ -1055,6 +1055,10 @@ kubectl describe pods/kubernetes-dashboard-77bd6c79b-sc5wb --namespace="kube-sys
 访问以下链接（1.8.0访问 https://masterip:6443/ui 无法访问）：
 https://MasterIP:6443/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
 ### MasterIP：kubernetes集群master节点ip
+
+##获取令牌token：
+kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin-user | awk '{print $1}')
+
   
 7)此时若出现如下问题 则:
 
