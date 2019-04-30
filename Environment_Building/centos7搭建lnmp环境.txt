@@ -148,6 +148,8 @@ GRANT all privileges ON *.* TO 'xuxu'@'%' identified by '000000' WITH GRANT OPTI
 
 安装PHP-FPM
 yum install libmcrypt libmcrypt-devel mhash mhash-devel libxml2 libxml2-devel bzip2 bzip2-devel
+##不知道为什么安装上这些就可以正常
+yum install -y php php-devel php-fpm php-mysql php-common php-devel php-gd libjpeg* php-imap php-ldap php-odbc php-pear php-xml php-xmlrpc php-mbstring php-mcrypt php-bcmath php-mhash libmcrypt libmcrypt-devel
 wget http://cn2.php.net/get/php-5.6.38.tar.bz2/from/this/mirror
 cp mirror php-5.6.38.tar.bz2
 tar xvf php-5.6.38.tar.bz2 -C /usr/local/src
