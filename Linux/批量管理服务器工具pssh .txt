@@ -93,3 +93,29 @@ root@$ip:3411
 
 [root@deploy ~]# pssh -h host_list02 -i "uptime"
 [1] 16:45:34 [SUCCESS] root@$ip:3411
+
+##备注
+如果目标服务器更改了端口，此时需要重新打通，但是会报错；如下：
+[root@deploy ~]# ssh-copy-id 192.168.2.181 -p 22
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/id_rsa.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+
+/usr/bin/ssh-copy-id: ERROR: @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ERROR: @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+ERROR: @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ERROR: IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+ERROR: Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+ERROR: It is also possible that a host key has just been changed.
+ERROR: The fingerprint for the ECDSA key sent by the remote host is
+ERROR: SHA256:WZhnThU0yLQe9d/ibx5B/h6B7eVh77E60PxdGMmbAmQ.
+ERROR: Please contact your system administrator.
+ERROR: Add correct host key in /root/.ssh/known_hosts to get rid of this message.
+ERROR: Offending ECDSA key in /root/.ssh/known_hosts:20
+ERROR: ECDSA host key for 192.168.2.181 has changed and you have requested strict checking.
+ERROR: Host key verification failed.
+
+此时需要先清除老的公钥信息
+ssh-keygen -R 192.168.2.181
+
+然后重新进行授权
+[root@deploy ~]# ssh-copy-id 192.168.2.181 -p 22
