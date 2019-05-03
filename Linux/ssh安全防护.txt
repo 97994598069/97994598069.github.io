@@ -1,0 +1,87 @@
+CentOS7自带的SSH服务是OpenSSH中的一个独立守护进程SSHD。由于使用telnet在网络中是明文传输所以用其管理服务器是非常不安全的不安全，SSH协议族可以用来对服务器的管理以及在计算机之间传送文件。
+
+一、配置文件
+服务器配置文件 /etc/ssh/sshd_config
+日志文件 /var/log/secure
+
+
+二、配置文件详解
+Port    22                  #默认端口
+ListenAddress IP            #监听服务器端的IP，ss -ntl 查看22端口绑定的iP地址
+LoginGraceTime 2m           #登录时不输入密码时超时时间
+HostKey                   # HostKey本地服务端的公钥路径
+UseDNS no                   #禁止将IP逆向解析为主机名，然后比对正向解析的结果，防止客户端欺骗
+PermitRootLogin yes         #是否允许root使用SSH远程登录
+MaxAuthTries 6              #密码错误的次数6/2=3(MAN帮助中写明要除2)次后断开连接
+MaxSessions 10              #最大的会话连接数(连接未登录的会话最大值，默认拒绝旧的连接未登录的会话)
+StrictModes yes             #检查用户家目录中ssh相关的配置文件是否正确
+PubkeyAuthentication yes    #是否使用基于key验证登录
+AuthorizedKeysFile      .ssh/authorized_keys    #key验证登录的客户端公钥路径
+PasswordAuthentication yes  #是否允许使用密码登录
+PermitEmptyPasswords no     #用户使用空口令登录
+GatewayPorts no             #启用网关功能，开启后可以将建立的SSH隧道(端口转发)共享出去
+ClientAliveCountMax 3       #探测3次客户端是否为空闲会话，↓3*10分钟后断开连接
+ClientAliveInterval 10      #空闲会话时长，每10分钟探测一次
+MaxStartups 10:30:100       #start:rate:full；当连接但为进行认证的用户超过10个，drop30%(rate/full)的连接当连接但未登录的连接达到100个后，新建立的连接将被拒绝
+Banner /path/file           #认证前输出的登录提示信息，指定文件路径
+GSSAPIAuthentication no 
+AllowUsers username         #白名单，如果白名单有用户只有白名单的用户可以登陆
+DenyUsers                  #黑名单，被拒绝的用户，如果即允许又拒绝则拒绝生效
+AllowGroups                 #组白名单
+DenyGroups                  #组黑名单
+
+
+三、免密登录(基于KEY验证登录)
+在客户端成功密钥对，然后将公钥复制到要免密登录的服务器即可。
+注：名称只能为 authorized_keys ，添加多个公钥信息可以直接追加>> .ssh/authorized_keys
+ssh-keygen -t rsa -p “1234”                     #创建密钥对，-t类型为rsa，-p私钥密码为1234
+ssh-copy-id -i ~/.ssh/id_rsa.pub IP     #-i指定公钥路径后将公钥复制到远程IP ~/.ssh/authorized_keys
+
+
+四、常见故障
+提示 ssh_exchange_identification: Connection closed by remote host
+多数情况为配置文件出错，可以使用 sshd -T对配置文件进行逐一检查
+提示：server refused our key 免密登录被拒绝
+使用免密登录 公钥文件的权限不正确所以会拒绝登录，检查客户端复制到服务端的公钥信息文件权限是否正确
+
+
+五、优化加速
+服务器端修改配置文件中一下两项进行修改
+vim /etc/ssh/sshd_conf
+UseDNS no               
+GSSAPIAuthentication no
+UseDNS 会对客户端进行DNS反向解析，然后在比对正向解析的结果查看是否一致。
+GSSAPIAuthentication大多数情况下使用密码验证或者秘钥验证所以关闭GSSAPI验证即可
+
+
+六、日志分析
+查看方式
+手动查看日志文件 /var/log/secure
+systemctl查看日志文件systemctl status sshd
+
+常见警告
+提示：Authentication refused：bad ownership or modes for diectory
+ssh连接的用户的家目录下.ssh目录所有者或者权限不正确(正确为700)，sshd会发出警告但依然允许登录
+
+
+七、安全相关
+- DOS
+SSH也可能成为DOS攻击的对象，例如恶意用户连接SSH但不输入密码进行验证，由于设置了MaxStartups会导致正常用户无法进行登录。针对此情况建议：
+修改默认端口
+MaxStartups调大一些例如 MaxStartups 100:30:1000
+LoginGraceTime 10 调整连接超时未10秒
+MaxSessions 10 设置连接但未登录的用户最大值为10
+
+
+- 其他优化
+限制可登录用户
+设定空闲会话超时时长
+充分利用防火墙设置ssh访问策略
+仅监听指定IP的ssh
+禁止使用空口令登录
+禁止使用root直接进行登录
+做好日志分析
+加强用户登录的密码口令
+
+
+
