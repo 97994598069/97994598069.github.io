@@ -155,6 +155,8 @@ Status of node 'rabbit@sh-op-mq01' ...
 查看当前用户列表
 # rabbitmqctl  list_users
 
+给用户一个访问权限：
+rabbitmqctl  set_permissions -p / jzm '.*' '.*' '.*'
 
 2）用户角色
 按照个人理解，用户角色可分为五类，超级管理员, 监控者, 策略制定者, 普通管理者以及其他。
