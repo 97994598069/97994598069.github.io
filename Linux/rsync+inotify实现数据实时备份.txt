@@ -1,0 +1,164 @@
+备份机:
+192.168.2.68
+
+配置:
+yum -y install rsync
+useradd rsync -s /sbin/nologin -M
+mkdir /home/backup
+
+vim /etc/rsyncd.conf
+uid = rsync
+gid = rsync
+use chroot = no
+read only = no 
+list = no
+max connections = 20
+log file = /var/log/rsyncd.log
+pidfile = /var/run/rsyncd.pid
+lock file = /var/run/rsync.lock
+secrets file = /etc/rsync.passwd
+transfer logging = yes
+timeout = 600
+ignore nonreadable = yes
+dont compress   = *.gz *.tgz *.zip *.z *.Z *.rpm *.deb *.bz2 
+
+[backup]
+path = /home/backup
+ignore errors
+comment = backup
+auth users = rsync
+
+
+创建虚拟用户认证文件并设置权限
+echo "rsync:Bjjy.123_%" >/etc/rsync.passwd
+chmod 600 /etc/rsync.passwd
+
+
+启动rsync服务并查看端口是否开启
+rsync --daemon
+
+netstat -antp|grep 873
+tcp        0      0 0.0.0.0:873     0.0.0.0:*       LISTEN      12313/rsync       
+tcp6       0      0 :::873          :::*           LISTEN      12313/rsync 
+
+
+
+
+
+
+
+数据端:
+在数据服务器安装Rsync客户端并创建密码文件
+yum -y install rsync
+useradd rsync -s /sbin/nologin -M
+
+echo "Bjjy.123_%"> /etc/passwd.txt
+chmod 600 /etc/passwd.txt
+
+
+测试服务正常:
+rsync -avz /server/www/ user1@192.168.2.68::backup --password-file=/etc/passwd.txt
+
+ 
+安装inotify-tools配合rsync实现数据实时备份
+查看服务器内核是否支持inotify
+[root@localhost ~]# 
+[root@localhost ~]# ll /proc/sys/fs/inotify
+total 0
+-rw-r--r--. 1 root root 0 Mar  4 16:56 max_queued_events
+-rw-r--r--. 1 root root 0 Mar  4 16:56 max_user_instances
+-rw-r--r--. 1 root root 0 Mar  4 16:56 max_user_watches
+
+
+下载源码包并安装inotify-tools
+yum -y install make gcc gcc-c++
+wget --no-check-certificate https://github.com/downloads/rvoicilas/inotify-tools/inotify-tools-3.14.tar.gz
+tar -xf inotify-tools-3.14.tar.gz
+cd inotify-tools-3.14
+./configure --prefix=/usr/local/inotify
+make && make install
+
+
+修改inotify默认参数（inotify默认内核参数值太小）
+1）查看系统默认参数
+sysctl -a | grep max_queued_events
+fs.inotify.max_queued_events = 16384    监控队列大小，如果值太小，会出错
+
+sysctl -a | grep max_user_watches
+fs.inotify.max_user_watches = 8192       同时同一用户可以监控的目录数量
+
+sysctl -a | grep max_user_instances
+fs.inotify.max_user_instances = 128      每个用户创建inotify实例最大值
+
+
+2）修改后的参数（参数可根据需要适当调大）
+echo 65535 > /proc/sys/fs/inotify/max_user_instances
+echo 999999 > /proc/sys/fs/inotify/max_queued_events
+echo 8192000 > /proc/sys/fs/inotify/max_user_watches
+
+
+编写监控脚本并加载到后台执行
+[root@localhost scripts]# cat inotify.sh 
+#!/bin/bash
+IP=$(hostname -I |awk '{print $1}')
+host=192.168.2.68
+src=/server/$ip
+dst=backup
+user=rsync
+rsync_passfile=/etc/passwd.txt
+inotify_home=/usr/local/inotify
+ 
+if [ ! -e "$src" ] || [ ! -e "${rsync_passfile}" ] || [ ! -e "${inotify_home}/bin/inotifywait" ] || [ ! -e "/usr/bin/rsync" ];
+   then
+     echo "Please check whether there is a directory or file"
+   exit 9
+fi
+ 
+cd ${src}
+${inotify_home}/bin/inotifywait -mrq --format  '%Xe %w%f' -e modify,create,delete,attrib,close_write,move ./ | while read file
+do
+        INO_EVENT=$(echo $file | awk '{print $1}')
+        INO_FILE=$(echo $file | awk '{print $2}')
+        echo "-------------------------------$(date)------------------------------------"
+        echo $file
+        if [[ $INO_EVENT =~ 'CREATE' ]] || [[ $INO_EVENT =~ 'MODIFY' ]] || [[ $INO_EVENT =~ 'CLOSE_WRITE' ]] || [[ $INO_EVENT =~ 'MOVED_TO' ]]
+        then
+                echo 'CREATE or MODIFY or CLOSE_WRITE or MOVED_TO'
+                rsync -avzcR --password-file=${rsync_passfile} $(dirname ${INO_FILE}) ${user}@${host}::${dst}
+        fi
+        if [[ $INO_EVENT =~ 'DELETE' ]] || [[ $INO_EVENT =~ 'MOVED_FROM' ]]
+        then
+                echo 'DELETE or MOVED_FROM'
+                rsync -avzR --delete --password-file=${rsync_passfile} $(dirname ${INO_FILE}) ${user}@${host}::${dst}
+        fi
+        if [[ $INO_EVENT =~ 'ATTRIB' ]]
+        then
+                echo 'ATTRIB'
+                if [ ! -d "$INO_FILE" ]
+                then
+                        rsync -avzcR --password-file=${rsync_passfile} $(dirname ${INO_FILE}) ${user}@${host}::${dst}
+                fi
+        fi
+done
+
+
+mkdir -p /server/$ip
+chmod +x inotify.sh
+nohup ./inotify.sh &
+
+ps -aux|grep inotify
+
+
+设置定时任务，防止意外导致无法同步
+因为inotify只在启动时会监控目录，他没有启动期间的文件发生更改，他是不知道的，所以这里每2个小时做1次全量同步，防止各种意外遗漏，保证目录一致。
+crontab -e
+* */2 * * * rsync -avz --password-file=/etc/passwd.txt /server/www/ user1@192.168.115.130::backup
+
+
+
+实时同步测试
+1）在数据服务器端创建文件，看是否能够同步备份
+在数据服务器创建文件并查看
+略
+
+

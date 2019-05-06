@@ -1,0 +1,185 @@
+
+								kibana学习指南
+
+kibana 汉化
+
+汉化包下载
+https://github.com/anbai-inc/Kibana_Hanization/
+[root@web Kibana_Hanization-master]# python main.py /usr/share/kibana
+
+注意：此项目适用于Kibana 5.x-6.x的任意版本，汉化过程不可逆，汉化前请注意备份！ 汉化资源会慢慢更新完善，已汉化过的Kibana可以重复使用此项目汉化更新的资源。除一小部分资源外，大部分资源无需重启Kibana，刷新页面即可看到效果。
+注意：redfree@anbai.com Windows请自行安装Python2.7
+
+
+
+
+
+一、kibana 界面详解
+1）Discover
+你可以从Discover页面以交互方式浏览数据，你可以访问与所选索引模式匹配的每个索引中的每个文档，你可以提交搜索查询，过滤搜索结果以及查看文档数据，你还可以查看与搜索查询匹配的文档数量并获取字段值统计信息，如果为所选索引模式配置了时间字段，则文档随时间的分布将显示在页面顶部的直方图中。
+
+
+2）Visualize
+Visualize使你可以在Elasticsearch索引中创建数据的可视化，然后，你可以构建显示相关可视化的仪表盘。
+
+Kibana可视化基于Elasticsearch查询，通过使用一系列Elasticsearch聚合来提取和处理数据，你可以创建图表，向你显示你需要了解的趋势，峰值和骤降。
+
+你可以从通过Discover保存的搜索创建可视化，也可以从新的搜索查询开始。
+
+基础图形
+Line, Area and Bar charts  在X/Y图中比较两个不同的序列。
+Heat maps  使用矩阵的渐变单元格。
+Pie chart显示每个来源的占比。
+数据 
+Data table显示一个组合聚合的原始数据。
+Metric 显示单个数字。
+
+地图
+Coordinate map  把一个聚合结果关联到地理位置。
+
+时间序列
+Timelion 计算和合并来自多个时间序列数据集。
+Time Series Visual Builder 使用管道聚合显示时间序列数据。
+
+其他
+Tag cloud  显示标签云，每个标签的字体大小表示其重要性。
+Markdown widget 显示自由格式信息或说明。
+
+
+
+3）Dashboard
+Kibana仪表盘显示可视化和搜索的集合，你可以排列，调整大小和编辑仪表盘内容，然后保存仪表盘以便共享。
+
+
+4）Timelion
+Timelion是一个时间序列数据可视化工具，使你能够在单个可视化中组合完全独立的数据源，它由一种简单的表达式语言驱动，用于检索时间序列数据，执行计算以梳理复杂问题的答案，并可视化结果。
+
+
+5）APM
+应用性能监控(APM) 从应用程序内部收集深入的性能度量和错误。它允许您实时监视数以千计的应用程序的性能。
+入门
+可视化应用程序瓶颈
+使用APM UI
+
+
+6）Dev Tools
+Dev Tools页面包含你可以用于在Kibana中与你的的数据进行交互的开发工具。
+
+
+7）Monitoring
+查看监控数据
+
+
+8）Management
+许可证管理
+索引模式
+管理字段
+管理索引
+设置高级选项
+管理保存的对象
+安全
+观察者UI
+升级助手
+仅限Kibana仪表盘模式
+
+
+
+
+
+
+
+三、插件管理
+附加的功能在 Kibana 中是以插件的形式提供的。您可以利用 bin/kibana-plugin 命令来管理这些模块。您也可以手动安装这些插件，只需要将这些插件包放到 plugins 目录并解压到新的目录就可以了。
+
+
+
+[root@web kibana]# ./bin/kibana-plugin 
+
+  Usage: bin/kibana-plugin [command] [options]
+  
+  The Kibana plugin manager enables you to install and remove plugins that provide additional functionality to Kibana
+  
+  Commands:
+    list  [options]                 list installed plugins
+    install  [options] <plugin/url> install a plugin
+    remove  [options] <plugin>      remove a plugin
+    help  <command>                 get the help for a specific command
+
+
+1）插件
+2）插件安装
+bin/kibana-plugin install <package name or URL>
+
+当您指定的插件名没有带 URL，插件工具将会尝试去下载 Elastic 官方插件
+bin/kibana-plugin install x-pack
+
+您可以简单的指定插件名称来下载 Elastic 官方插件。也可以指定插件具体的 URL 来下载安装
+bin/kibana-plugin install https://artifacts.elastic.co/downloads/packs/x-pack/x-pack-6.0.0.zip
+
+在 install 命令后面通过 -d 或者 --plugin-dir 选项指定插件安装目录
+ bin/kibana-plugin install file:///some/local/path/x-pack.zip -d path/to/directory
+
+
+
+3）插件移除
+通过 remove 命令来删除插件：
+bin/kibana-plugin remove x-pack
+您也可以通过手动删除 plugins/ 目录下的插件子目录来手动删除插件
+
+注意
+删除插件之后将会在下一次 Kibana 启动的时候触发一次 “优化（optimize）” 动作，可能会使启动有点延迟。
+
+
+4）插件禁止
+使用如下命令来关闭插件：
+
+./bin/kibana --<plugin ID>.enabled=false 
+注意
+关闭或打开插件将会在下一次 Kibana 启动的时候触发一次 “优化（optimize）” 动作，可能会使启动有点延迟。
+您可以在 package.json 文件中通过 name 属性查看插件的 ID。
+
+
+5）配置插件管理器编辑
+默认情况下，插件管理器会为您的插件管理动作做出信息反馈。您可以通过添加 --quiet 和 --silent 选项为 install 和 remove 命令控制反馈信息的级别。使用 --quiet 选项屏蔽除错误信息以外的日志输出。使用 --silent 选项屏蔽所有输出。
+
+默认情况下，插件管理器安装插件不会超时。使用 --timeout 选项并添加一个时间来指定安装超时时间：
+
+设定30秒安装超时. 
+
+bin/kibana-plugin install --timeout 30s sample-plugin
+设定1分钟安装超时. 
+
+bin/kibana-plugin install --timeout 1m sample-plugin
+插件及自定义 Kibana 的配置编辑
+在 install 和 remove 命令中使用 -c 或者 --config 选项来指定启动 Kibana 的配置文件的路径。默认情况下，Kibana 使用 config/kibana.yml 配置文件。当您需要修改已安装好的插件配置时，使用 bin/kibana-plugin 命令来重启 Kibana 服务。当您使用自定义的配置文件时，每次使用 bin/kibana-plugin 命令必须指定配置文件的路径。
+
+插件管理器退出代码编辑
+0    成功
+64   未知命令或错误的参数
+74   I/O 错误
+70   其它错误
+
+
+
+
+
+
+
+
+四、kibana安全
+访问控制
+location /a {
+	allow 192.168.1.0/24;
+	deny all;
+	#return 404;
+	return http://www.jd.com;
+	}
+
+
+登陆验证
+
+location /c {
+	auth_basic "登陆验证";
+	auth_basic_user_file /etc/nginx/htpasswd;
+
+}
