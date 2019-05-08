@@ -1,0 +1,424 @@
+直接挂载 NFS 到 Pod 的方式
+三种方式：
+1.静态
+去 NFS 服务端机器（10.222.77.86）创建一个 /data/nfs0 目录作为远端共享文件存储目录
+
+mkdir -p /data/nfs0
+vim /etc/exports
+/data/nfs0 *(rw,sync,insecure,no_subtree_check,no_root_squash)
+
+使配置生效
+exportfs -r
+
+服务端查看下是否生效
+showmount -e localhost
+Export list for localhost:
+/data/nfs0  *
+
+备注:我们要挂载 NFS，那么需要先到 NFS 服务端创建好对应目录，否则将挂载不成功
+
+
+接下来，直接创建一个挂载该 NFS 路径的 Pod，yaml 如下：
+vim nfs-busybox.yaml
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: nfs-busybox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: nfs-busybox
+  template:
+    metadata:
+      labels:
+        name: nfs-busybox
+    spec:
+      containers:
+      - image: busybox
+        command:
+          - sh
+          - -c
+          - 'while true; do date > /mnt/index.html; hostname >> /mnt/index.html; sleep 10m; done'
+        imagePullPolicy: IfNotPresent
+        name: busybox
+        volumeMounts:
+          - name: nfs
+            mountPath: "/mnt"   ##pod本地
+      volumes:
+      - name: nfs
+        nfs:
+          path: /data/nfs0       ##nfs服务器要挂挂载的目录
+          server: 10.222.77.86   ##nfs服务器ip
+
+kubectl apply -f nfs-busybox.yaml
+deployment.apps/nfs-busybox created
+
+
+$ kubectl get pods -o wide
+NAME                           READY   STATUS    RESTARTS   AGE   IP           NODE            NOMINATED NODE
+nfs-busybox-5c98957964-g7mps   1/1     Running   0          2m    172.20.3.2   10.222.77.132   <none>
+
+##创建成功，这里提一下，如果不确认写的 yaml 文件是否有问题，可以加上 --validate 参数验证一下，如果不想验证就可加上 --validate=false。最后，进入容器内验证一下是否成功挂载吧！
+
+
+查看确定：
+kubectl exec -it nfs-busybox-5c98957964-g7mps /bin/sh
+/ $ df -h
+Filesystem                Size      Used Available Use% Mounted on
+overlay                  32.0G      2.4G     29.6G   7% /
+tmpfs                    64.0M         0     64.0M   0% /dev
+tmpfs                     1.1G         0      1.1G   0% /sys/fs/cgroup
+10.222.77.86:/data/nfs0  27.0G     10.8G     16.1G  40% /mnt
+......
+
+/ $ cat /mnt/index.html 
+Tue Nov  6 12:54:11 UTC 2018
+nfs-busybox-5c98957964-g7mps
+
+
+我们看到成功挂载到指定路径并生成了文件，NFS 服务端也验证一下吧！
+# NFS 服务器查看
+$ ll /data/nfs0/
+total 4
+-rw-r--r-- 1 root root 58 Nov  7 14:16 index.html
+
+
+
+2、PV & PVC 方式使用 NFS
+我们知道 k8s 提供了两种 API 资源方式：PersistentVolume 和 PersistentVolumeClaim 来解决 Pod 删除掉，挂载 volume 中的数据丢失的问题，PV 拥有独立与 Pod 的生命周期，即使 Pod 删除了，但 PV 还在，PV 上的数据依旧存在，而 PVC 则定义用户对存储资源 PV 的请求消耗。接下来，来演示下如何使用 PV & PVC 方式使用 NFS。同样，我们也需要去 NFS 服务端机器（10.222.77.86）创建一个 /data/nfs1 目录作为远端共享文件存储目录。
+
+mkdir -p /data/nfs1
+vim /etc/exports
+/data/nfs1 *(rw,sync,insecure,no_subtree_check,no_root_squash)
+
+exportfs -r
+
+showmount -e localhost
+Export list for localhost:
+/data/nfs1  *
+/data/nfs0  *
+/data/share 10.222.77.0/24
+
+然后，分别创建 PV 和 PVC，yaml 文件如下：
+vim nfs-pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  storageClassName: slow
+  nfs:
+    path: /data/nfs1
+    server: 10.222.77.86
+
+
+vim nfs-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: "slow"
+  resources:
+    requests:
+      storage: 1Gi
+备注:
+说明一下，这里 PV 定义了 accessModes 为 ReadWriteMany 即多次读写模式，NFS 是支持三种模式的 ReadWriteOnce、ReadOnlyMany、ReadWriteMany，详细可参考 这里 查看，实际使用中，按需配置，待会下边验证一下该类型是否支持多次读写。接下来，创建并验证一下 PV & PVC 是否成功。
+
+kubectl create -f nfs-pv.yaml 
+persistentvolume/nfs-pv created
+
+kubectl create -f nfs-pvc.yaml 
+persistentvolumeclaim/nfs-pvc created
+
+kubectl get pv
+NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
+nfs-pv   1Gi        RWX            Recycle          Bound    default/nfs-pvc   slow
+
+
+kubectl get pvc
+NAME      STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+nfs-pvc   Bound    nfs-pv   1Gi        RWX            slow           46s
+
+
+OK，成功创建，并处于 Bound 状态。接下来，创建一个挂载该 PVC 的 Pod，yaml 文件如下：
+vim nfs-busybox-pvc.yaml
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: nfs-busybox-pvc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: nfs-busybox-pvc
+  template:
+    metadata:
+      labels:
+        name: nfs-busybox-pvc
+    spec:
+      containers:
+      - image: busybox
+        command:
+          - sh
+          - -c
+          - 'while true; do date > /mnt/index.html; hostname >> /mnt/index.html; sleep 10m; done'
+        imagePullPolicy: IfNotPresent
+        name: busybox
+        volumeMounts:
+          - name: nfs
+            mountPath: "/mnt"
+      volumes:
+      - name: nfs
+        persistentVolumeClaim:
+          claimName: nfs-pvc
+这里就不多分析了，跟上边的 Deployment 类似，只是更换了挂载卷方式为 PVC。然后，创建一下该 Deployment。
+
+kubectl create -f nfs-busybox-pvc.yaml 
+deployment.apps/nfs-busybox-pvc created
+
+
+kubectl get pods
+NAME                               READY   STATUS    RESTARTS   AGE
+nfs-busybox-pvc-5d5597d976-8lkvs   1/1     Running   0          12s
+
+
+创建成功。接着，验证一下是否成功挂载吧。
+kubectl exec -it nfs-busybox-pvc-5d5597d976-8lkvs /bin/sh
+/ $ df -h
+Filesystem                Size      Used Available Use% Mounted on
+overlay                  32.0G      2.4G     29.6G   7% /
+tmpfs                    64.0M         0     64.0M   0% /dev
+tmpfs                     1.1G         0      1.1G   0% /sys/fs/cgroup
+10.222.77.86:/data/nfs1  27.0G     10.8G     16.1G  40% /mnt
+......
+
+/ $ cat /mnt/index.html 
+Tue Nov  6 13:28:36 UTC 2018
+nfs-busybox-pvc-5d5597d976-8lkvs
+
+最后，验证一下多次读写模式是否可行。
+# nfs-busybox-pvc 容器内操作
+/ $ echo "This message is from nfs-busybox-pvc." > /mnt/message.txt
+
+# NFS 服务端操作，nfs 端写入，客户端查看
+$ cat /data/nfs1/message.txt 
+This message is from nfs-busybox-pvc.
+$ echo "This message is from nfs-server." >> /data/nfs1/message.txt 
+
+# nfs-busybox-pvc 容器内操作
+/ $ cat /mnt/message.txt 
+This message is from nfs-busybox-pvc.
+This message is from nfs-server.
+
+
+3、动态
+StorageClasses 动态创建 PV 方式使用 NFSPV 支持 Static 静态请求，即提前准备好固定大小的资源。但是每次都需要管理员手动去创建对应的 PV资源，确实不方便。还好 PV 同时支持 Dynamic 动态请求，k8s 提供了 provisioner 来动态创建 PV，不仅大大节省了时间，而且还可以根据不同的 StorageClasses 封装不同类型的存储供 PVC 使用。接下来，我们演示下如何配置 NFS 类型的 StorageClasses 来动态创建 PV。
+k8s 默认内部 provisioner 支持列表中，是不支持 NFS 的，如果我们要使用该 provisioner 该怎么办呢？方案就是使用外部 provisioner
+
+在开始创建之前，我们还是需要去 NFS 服务端（10.222.77.86）创建一个 /data/nfs2 共享存储目录，后续动态创建的 PV 卷目录都在该目录下。
+mkdir -p /data/nfs2
+# 修改配置
+vim /etc/exports
+/data/nfs2 *(rw,sync,insecure,no_subtree_check,no_root_squash)
+
+# 使配置生效
+exportfs -r
+
+# 服务端查看下是否生效
+$ showmount -e localhost
+Export list for localhost:
+/data/nfs2  *
+/data/nfs1  *
+/data/nfs0  *
+
+$ git clone https://github.com/kubernetes-incubator/external-storage.git
+$ tree external-storage/nfs-client/deploy/
+external-storage/nfs-client/deploy/
+├── class.yaml
+├── deployment-arm.yaml
+├── deployment.yaml
+├── objects
+│   ├── README.md
+│   ├── class.yaml
+│   ├── clusterrole.yaml
+│   ├── clusterrolebinding.yaml
+│   ├── deployment-arm.yaml
+│   ├── deployment.yaml
+│   ├── role.yaml
+│   ├── rolebinding.yaml
+│   └── serviceaccount.yaml
+├── rbac.yaml
+├── test-claim.yaml
+└── test-pod.yaml
+
+我们用到的文件就在 external-storage/nfs-client/deploy/ 该目录下，然后修改 class.yaml 和 deployment.yaml，注意：这两个文件也可以不修改，使用默认值也可以，只不过生成的 provisioner 名称为 fuseim.pri/ifs，我们可以修改成自定义的名称，同时修改下 nfs-client-provisioner 镜像为国内可拉取镜像，以及 nfs 配置信息。
+
+# class.yaml 文件修改前后对比
+-  name: managed-nfs-storage
+-provisioner: fuseim.pri/ifs # or choose another name, must match deployment's env PROVISIONER_NAME'
++  name: my-nfs-storage-class
++provisioner: my-nfs-provisioner # or choose another name, must match deployment's env PROVISIONER_NAME'
+
+# deployment.yaml 文件修改前后对比
+-          image: quay.io/external_storage/nfs-client-provisioner:latest
++          image: jmgao1983/nfs-client-provisioner:latest
+           env:
+             - name: PROVISIONER_NAME
+-              value: fuseim.pri/ifs
++              value: my-nfs-provisioner
+             - name: NFS_SERVER
+-              value: 10.10.10.60
++              value: 10.222.77.86
+             - name: NFS_PATH
+-              value: /ifs/kubernetes
++              value: /data/nfs2
+
+           nfs:
+-            server: 10.10.10.60
+-            path: /ifs/kubernetes
++            server: 10.222.77.86
++            path: /data/nfs2
+
+提一下，这里的 rbac.yaml 当 k8s 开启了 rbac 认证时使用，默认是 default 命名空间，如果非 default，则需要修改为对应命名空间，这里我就是使用 default，就不用修改了。然后，创建一下这些资源。
+
+$ kubectl create -f class.yaml 
+storageclass.storage.k8s.io/my-nfs-storage-class created
+$ kubectl create -f rbac.yaml 
+clusterrole.rbac.authorization.k8s.io/nfs-client-provisioner-runner created
+clusterrolebinding.rbac.authorization.k8s.io/run-nfs-client-provisioner created
+role.rbac.authorization.k8s.io/leader-locking-nfs-client-provisioner created
+rolebinding.rbac.authorization.k8s.io/leader-locking-nfs-client-provisioner created
+$ kubectl create -f deployment.yaml 
+serviceaccount/nfs-client-provisioner created
+deployment.extensions/nfs-client-provisioner created
+
+创建完毕，查看下是否创建成功。
+$ kubectl get sc
+NAME                   PROVISIONER          AGE
+my-nfs-storage-class   my-nfs-provisioner   1m27s
+$ kubectl get pods 
+NAME                                     READY   STATUS    RESTARTS   AGE
+nfs-client-provisioner-6787dcc59-tgcc5   1/1     Running   0          2m19s
+
+
+最后，我们需要提供一下使用 my-nfs-storage-class 的 PVC 资源以及使用挂载该 PVC 资源的 Pod。PVC 的 yaml 文件如下：
+vim nfs-sc-pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: nfs-sc-pvc
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "my-nfs-storage-class"
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+
+创建一下，看下是否能够创建成功，是否能够动态创建 PV。
+$ kubectl create -f nfs-sc-pvc.yaml 
+persistentvolumeclaim/nfs-sc-pvc created
+
+$ kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                STORAGECLASS           REASON   AGE
+pvc-176dbc3b-e1d6-11e8-ac77-0800272ff396   1Gi        RWX            Delete           Bound    default/nfs-sc-pvc   my-nfs-storage-class            60s
+
+$ kubectl get pvc
+NAME         STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS           AGE
+nfs-sc-pvc   Bound    pvc-176dbc3b-e1d6-11e8-ac77-0800272ff396   1Gi        RWX            my-nfs-storage-class   15s
+
+
+可以看到，成功的动态创建了 PV，达到预期效果。NFS 服务端查看下是否已创建该 PV 对应的卷目录。
+# NFS 服务器上操作
+$ ll /data/nfs2/
+total 0
+drwxrwxrwx 2 root root 6 Nov  7 16:22 default-nfs-sc-pvc-pvc-176dbc3b-e1d6-11e8-ac77-0800272ff396
+
+
+自动创建了，非常方便了，有没有！最后创建挂载 PVC 的 Deployment，yaml 文件如下：
+$ vim nfs-busybox-sc-pvc.yaml
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: nfs-busybox-sc-pvc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: nfs-busybox-sc-pvc
+  template:
+    metadata:
+      labels:
+        name: nfs-busybox-sc-pvc
+    spec:
+      containers:
+      - image: busybox
+        command:
+          - sh
+          - -c
+          - 'while true; do date > /mnt/index.html; hostname >> /mnt/index.html; sleep 10m; done'
+        imagePullPolicy: IfNotPresent
+        name: busybox
+        volumeMounts:
+          - name: nfs
+            mountPath: "/mnt"
+      volumes:
+      - name: nfs
+        persistentVolumeClaim:
+          claimName: nfs-sc-pvc
+
+创建一下该 Deployment。
+$ kubectl create -f nfs-busybox-sc-pvc.yaml
+deployment.apps/nfs-busybox-sc-pvc created
+
+
+$ kubectl get pods
+NAME                                     READY   STATUS    RESTARTS   AGE
+nfs-busybox-sc-pvc-5f8d5b4b96-fwh6b      1/1     Running   0          7s
+nfs-client-provisioner-6787dcc59-tgcc5   1/1     Running   0          8m57s
+
+
+创建成功，最后验证一下是否成功挂载吧。
+$ kubectl exec -it nfs-busybox-sc-pvc-5f8d5b4b96-fwh6b /bin/sh
+/ $ df -h
+Filesystem                Size      Used Available Use% Mounted on
+overlay                  32.0G      2.4G     29.6G   8% /
+tmpfs                    64.0M         0     64.0M   0% /dev
+tmpfs                     1.1G         0      1.1G   0% /sys/fs/cgroup
+10.222.77.86:/data/nfs2/default-nfs-sc-pvc-pvc-176dbc3b-e1d6-11e8-ac77-0800272ff396
+                         27.0G     10.9G     16.1G  40% /mnt
+......
+
+/ $ cat /mnt/index.html 
+Tue Nov  6 15:14:04 UTC 2018
+nfs-busybox-sc-pvc-5f8d5b4b96-fwh6b
+
+# NFS 服务器端验证
+$ cat /data/nfs2/default-nfs-sc-pvc-pvc-176dbc3b-e1d6-11e8-ac77-0800272ff396/index.html 
+Tue Nov  6 15:14:04 UTC 2018
+nfs-busybox-sc-pvc-5f8d5b4b96-fwh6b
+
+
+最后，多提一点，上边动态创建 PV 方式，只能动态创建到 nfs-client-provisioner 指定挂载的目录里面，如果我们想根据不同的服务分别动态创建到不同的 NFS 共享目录里面的话，可以多创建几个 nfs-client-provisioner，每个 provisioner 指定挂载不同的 NFS 存储路径即可。
+
+
+
+
+
+
+
+
+
+
+
