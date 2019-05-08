@@ -46,3 +46,34 @@ k8s_test01
 2.同上需要前端每次将配置文件打包成docker镜像，然后使用initContainer来进行部署上线
 
 此时可以理解为:pod为一个虚拟机，上面跑了两个docker,第一个docker起来之后什么都不做就是将其镜像内部的文件挂载到“虚拟机上”之后给出任意一个运行完成的“”暗示即可（例如执行一句话，例如一个copy命令），然后第二个docker挂载这个文件，并且运行
+
+
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: javaweb-2
+spec:
+  initContainers:
+  - image: geektime/sample:v2
+    name: war
+    command: ["cp", "/sample.war", "/app"]
+    volumeMounts:
+    - mountPath: /app
+      name: app-volume
+  containers:
+  - image: geektime/tomcat:7.0
+    name: tomcat
+    command: ["sh","-c","/root/apache-tomcat-7.0.42-v2/bin/start.sh"]  ##如果Dockerfile里面已经有了启动命令则不需要，如果没有则需要运行运行命令
+    volumeMounts:
+    - mountPath: /root/apache-tomcat-7.0.42-v2/webapps
+      name: app-volume
+    ports:
+    - containerPort: 8080
+      hostPort: 8001 
+  volumes:
+  - name: app-volume
+    emptyDir: {}
+
+
