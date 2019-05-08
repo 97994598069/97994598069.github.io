@@ -1,0 +1,68 @@
+[root@k8s01 baike]# cat baike-jycloud-rc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: baike-jycloud
+spec:
+  type: NodePort
+  ports:
+  - port: 8774
+    nodePort: 8774
+  selector:
+    app: baike-jycloud
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: baike-jycloud
+spec:
+  minReadySeconds: 120  ## #滚动升级时120s后认为该pod就绪
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1   #滚动升级时会先启动1个pod
+      maxUnavailable: 1   #滚动升级时允许的最大Unavailable的pod个数
+  replicas: 3
+  selector:
+    matchLabels:
+      app: baike-jycloud
+  template:
+    metadata:
+      labels:
+        app: baike-jycloud
+    spec:
+	  terminationGracePeriodSeconds: 60  ####k8s将会给应用发送SIGTERM信号，可以用来正确、优雅地关闭应用,默认为30秒
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: baike-jycloud
+        image: 192.168.2.45:5000/com.ciip.cloud.core.jybk/jybk-service:V1.0.7
+        ports:
+        - containerPort: 8774
+        readinessProbe:
+          tcpSocket:
+            port: 8774
+          initialDelaySeconds: 2
+          periodSeconds: 1
+        livenessProbe:
+          tcpSocket:
+            port: 8774
+          initialDelaySeconds: 60
+          periodSeconds: 10
+
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'dev'
+        volumeMounts:
+        - mountPath: /service
+          name: baike-jycloud
+      volumes:
+      - name: baike-jycloud
+        hostPath:
+          path: /service
+          type: Directory
