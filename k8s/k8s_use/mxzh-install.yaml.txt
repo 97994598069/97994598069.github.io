@@ -1,0 +1,108 @@
+[root@k8s01 mxzh]# cat mxzh-install.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: mxzh-cloud
+spec:
+  type: NodePort
+  ports:
+  - port: 8776
+    nodePort: 8776
+  selector:
+    app: mxzh-cloud
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mxzh-cloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mxzh-cloud
+  template:
+    metadata:
+      labels:
+        app: mxzh-cloud
+    spec:
+      containers:
+      - name: mxzh-cloud
+        image: 192.168.2.45:5000/com.ciip.cloud.core.usercenter/model-service:V1.0.3
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8776
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - cd /service
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - cd /service
+          initialDelaySeconds: 100
+          periodSeconds: 10
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'dev'
+		  
+		  
+		  
+
+[root@k8s01 mxzh]# cat mxzh-install.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: mxzh-cloud
+spec:
+  type: NodePort
+  ports:
+  - port: 8776
+    nodePort: 8776
+  selector:
+    app: mxzh-cloud
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mxzh-cloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mxzh-cloud
+  template:
+    metadata:
+      labels:
+        app: mxzh-cloud
+    spec:
+      containers:
+      - name: mxzh-cloud
+        image: 192.168.2.45:5000/com.ciip.cloud.core.usercenter/model-service:V1.0.3
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8776
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - grep "Started" /service/resources/model/logs/info.log
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - grep "Started" /service/resources/model/logs/info.log
+          initialDelaySeconds: 100
+          periodSeconds: 5
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'dev'
