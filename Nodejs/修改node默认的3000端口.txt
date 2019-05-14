@@ -12,6 +12,9 @@ vi ./node_modules/nuxt/lib/core/nuxt.js
 启动项目：
 pm2 start ./node_modules/nuxt/bin/nuxt -i 2 --name bim -- start
 
+##或者启动的时候指定端口
+pm2 start ./node_modules/nuxt/bin/nuxt.js -i 2 --name jzm_dev -- start --port=3001
+
 pm2 list 查看项目启动是否正常
 [root@etcd1 jinyoujia-nuxt]# pm2 list
 ┌───────────┬────┬─────────┬─────────┬───────┬────────┬─────────┬────────┬──────┬───────────┬──────┬──────────┐
