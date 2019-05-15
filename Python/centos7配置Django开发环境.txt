@@ -1,3 +1,6 @@
+https://zhuanlan.zhihu.com/p/33759818
+
+
 不同方法
 sudo yum install epel-release
 
