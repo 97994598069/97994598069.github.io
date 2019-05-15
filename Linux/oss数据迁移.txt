@@ -1,0 +1,80 @@
+﻿使用工具：
+ossimport-2.3.4.zip
+
+下载链接：
+http://gosspublic.alicdn.com/ossimport/standalone/ossimport-2.2.1.zip?spm=a2c4e.11153940.blogcont123420.7.47d63cfe69a8XL&file=ossimport-2.2.1.zip
+
+
+解压加权限略：
+
+[root@localhost ossimport-2.3.4]# ll
+total 
+24
+drwxr-xr-x. 2 root root   27 Apr 17 10:52 
+bin
+drwxr-xr-x. 2 root root   47 Apr 13  2018 
+conf
+-rwxr-xr-x. 1 root root 1363 Apr 13  2018 
+console.bat
+-rwxr-xr-x. 1 root root 3611 Apr 13  2018 
+console.sh
+-rwxr-xr-x. 1 root root 1740 Apr 13  2018 
+import.bat
+-rwxr-xr-x. 1 root root 3998 Apr 13  2018 
+import.sh
+drwxr-xr-x. 2 root root    6 Apr 13  2018 
+logs
+-rwxr-xr-x. 1 root root 6298 Apr 13  2018 
+README.md
+
+
+
+配置：
+
+[root@localhost ossimport-2.3.4]# cat conf/local_job.cfg 
+
+需要配置的点：
+
+源配置：
+srcType=oss    ##定义源数据类型    这里示例的是oss到oss所以是oss
+
+srcAccessKey=             ###数据源的id 这里为了安全省略
+
+srcSecretKey=     ###数据源的key 这里为了安全省略
+
+srcDomain=http://oss-cn-beijing.aliyuncs.com   ###源
+endpoint
+srcBucket=     ###源bucket名字，这里为了安全省略
+
+#源前缀，默认为空，如果srcType=local，则此目录是本地目录，如果是其他类型，则是源Bucket里需要同步的Object的前缀,注意如果是本地目录，需要完整目录路径(以'/'进行分割并且以'/'结尾,例: c:/example/)
+
+srcPrefix=   ##因为咱们是oss到oss不配置
+
+
+
+目的配置：
+#目的 access 
+key
+destAccessKey=     ##数据源的id 这里为了安全省略
+
+destSecretKey=     ###数据源的key 这里为了安全省略
+
+destDomain=http://oss-cn-beijing.aliyuncs.com    ##目的
+endpoint
+destBucket=      ###这里为了安全省略
+
+其余可不动
+
+
+[root@localhost ossimport-2.3.4]# ./import.sh 
+
+
+
+运行完毕输入yes即可
+
+
+
+
+
+
+
