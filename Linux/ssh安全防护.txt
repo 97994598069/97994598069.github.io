@@ -96,3 +96,4 @@ vi /etc/ssh/sshd_config
 vi /etc/pam.d/sshd
 增加
 auth required pam_tally.so deny=3 unlock_time=5 
+auth required pam_tally2.so deny=20 unlock_time=3000000 even_deny_root root_unlock_time=100000000000000
