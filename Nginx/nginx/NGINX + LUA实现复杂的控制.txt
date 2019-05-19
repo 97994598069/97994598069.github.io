@@ -1,0 +1,245 @@
+第一个lua脚本
+ngx.say 是打印的打印输出的意思。。。
+location /echo {
+default_type text/plain;
+echo hello lua;
+}
+location /lua {
+default_type text/plain;
+content_by_lua 'ngx.say("hello world")';
+}
+
+
+用lua脚本做nginx的访问的限制...
+location @client{
+proxy_pass  http://www.ruifengyun.com;
+}
+location ~  /test {
+default_type  text/html;
+content_by_lua 'ngx.say("this is  ruifengyun.com!")';
+access_by_lua '
+if ngx.var.remote_addr == "10.2.20.110" then
+ngx.exit(ngx.HTTP_FORBIDDEN)
+end
+if ngx.var.remote_addr == "10.2.20.112" then
+ngx.exec("@client")
+end
+';
+}
+
+
+控制经过判断之后，才能访问
+location / {
+access_by_lua '
+local res = ngx.location.capture("/auth")
+if res.status == ngx.HTTP_OK then
+return
+end
+if res.status == ngx.HTTP_FORBIDDEN then
+ngx.exit(res.status)
+end
+ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+';
+# proxy_pass/fastcgi_pass/postgres_pass/...
+}
+
+
+
+使用lua做nginx的rewrite跳转
+这个是先判断 check-pam接口的return的内容是不是spam，是的话，转跳到其他的页面
+location / {
+rewrite_by_lua '
+local res = ngx.location.capture("/check-spam")
+if res.body == "spam" then
+ngx.redirect("/terms-of-use.html")
+end
+'; fastcgi_pass ...;
+}
+
+
+
+根据ip做不同的响应
+location / {
+content_by_lua '
+           myIP = ngx.req.get_headers()["X-Real-IP"]
+           if myIP == nil then
+               myIP = ngx.req.get_headers()["x_forwarded_for"]
+           end
+           if myIP == nil then
+               myIP = ngx.var.remote_addr
+           end
+           if myIP == "" then
+               ngx.exec("@client")
+           else
+               ngx.exec("@client_test")
+           end
+       ';
+}
+
+
+
+redirect的使用
+return ngx.redirect("/foo")
+return ngx.redirect("http://localhost:1984/foo", ngx.HTTP_MOVED_TEMPORARILY)
+return ngx.redirect("/foo", 301)
+
+返回302临时重定向 地址栏会显示跳转后的地址
+rewrite ^ /foo? redirect;  # nginx config
+return ngx.redirect('/foo');  -- lua code
+
+
+lua过滤post过来的参数
+location = /test {
+content_by_lua '
+ngx.req.read_body()
+local args = ngx.req.get_post_args()
+for key, val in pairs(args) do
+if type(val) == "table" then
+ngx.say(key, ": ", table.concat(val, ", "))
+else
+ngx.say(key, ": ", val)
+end
+end
+';
+}
+
+
+一个Lua的例子：
+#!/usr/bin/env lua
+ngx.say('aaaaaa </br>')
+local url = ngx.var.uri
+ngx.say('<br>',url,'<br/>')
+ngx.print('这次访问的header头是   ',ngx.req.raw_header())
+ngx.print('<meta http-equiv="content-type" content="text/html;charset=utf-8">')
+ngx.print('<h1> 这个是 h1 </h1>')
+ngx.print('这次访问的是 get 还是 post 呀   ',ngx.req.get_Method())
+local args = ngx.req.get_uri_args()
+ngx.print(args)
+local res = ngx.location.capture("/")
+ngx.print('<br>http code <br>‘,res.status)
+
+
+lua 调用mysql的例子
+worker_processes  2;
+error_log logs/error.log warn;
+events {
+worker_connections 1024;
+}
+http {
+  upstream backend {
+  drizzle_server 127.0.0.1:3306 protocol=mysql
+  dbname=ngx_test user=ngx_test password=ngx_test;
+  drizzle_keepalive max=10 overflow=ignore mode=single;
+}
+server {
+  listen 8080;
+  location @cats-by-name {
+    set_unescape_uri $name $arg_name;
+    set_quote_sql_str $name;
+    drizzle_query 'select * from cats where name=$name';
+    drizzle_pass backend;
+    rds_json on;
+ }
+ location @cats-by-id {
+  set_quote_sql_str $id $arg_id;
+  drizzle_query 'select * from cats where id=$id';
+  drizzle_pass backend;
+  rds_json on;
+ }
+ location = /cats {
+   access_by_lua '
+   if ngx.var.arg_name then
+   return ngx.exec("@cats-by-name")
+   end
+   if ngx.var.arg_id then
+    return ngx.exec("@cats-by-id")
+   end
+';
+  rds_json_ret 400 "expecting \"name\" or \"id\" query arguments";
+ }
+}
+}
+
+
+
+lua获取url中的参数
+location = /adder {
+    set_by_lua $res "
+            local a = tonumber(ngx.arg[1])
+                local b = tonumber(ngx.arg[2])
+                return a + b" $arg_a $arg_b;
+
+        echo $res;
+}
+
+
+ngx.req.set_uri
+nginx里面的配置是：
+location /test {
+       rewrite ^/test/(.*) /$1 break;
+       proxy_pass http://my_backend;
+   }
+   
+lua里面的配置是：
+location /test {
+       rewrite_by_lua '
+           local uri = ngx.re.sub(ngx.var.uri, "^/test/(.*)", "$1", "o")
+           ngx.req.set_uri(uri)
+       ';
+       proxy_pass http://my_backend;
+   }
+   
+我想大家看这个对照，已经知道是啥意思了.
+通过lua获取nginx的内置变量，通过这些变量做些逻辑的处理~
+Nginx提供了很多内置的变量,如:
+$arg_PARAMETER 这个变量包含在查询字符串时GET请求PARAMETER的值。
+$args 这个变量等于请求行中的参数。
+$binary_remote_addr 二进制码形式的客户端地址。
+$body_bytes_sent 传送页面的字节数
+$content_length 请求头中的Content-length字段。
+$content_type 请求头中的Content-Type字段。
+$cookie_COOKIE cookie COOKIE的值。
+$document_root 当前请求在root指令中指定的值。
+$document_uri 与$uri相同。
+$host 请求中的主机头字段，如果请求中的主机头不可用，则为服务器处理请求的服务器名称。
+$is_args 如果$args设置，值为"?"，否则为""。
+$limit_rate 这个变量可以限制连接速率。
+$nginx_version 当前运行的nginx版本号。
+$query_string 与$args相同。
+$remote_addr 客户端的IP地址。
+$remote_port 客户端的端口。
+$remote_user 已经经过Auth Basic Module验证的用户名。
+$request_filename 当前连接请求的文件路径，由root或alias指令与URI请求生成。
+$request_body 这个变量（0.7.58+）包含请求的主要信息。在使用proxy_pass或fastcgi_pass指令的location中比较有意义。
+$request_body_file 客户端请求主体信息的临时文件名。
+$request_completion 未知。
+$request_method 这个变量是客户端请求的动作，通常为GET或POST。包括0.8.20及之前的版本中，这个变量总为main request中的动作，如果当前请求是一个子请求，并不使用这个当前请求的动作。
+$request_uri 这个变量等于包含一些客户端请求参数的原始URI，它无法修改，请查看$uri更改或重写URI。
+$scheme 所用的协议，比如http或者是https，比如rewrite ^(.+)$ $scheme://example.com$1 redirect;
+$server_addr 服务器地址，在完成一次系统调用后可以确定这个值，如果要绕开系统调用，则必须在listen中指定地址并且使用bind参数。
+$server_name 服务器名称。
+$server_port 请求到达服务器的端口号。
+$server_protocol 请求使用的协议，通常是HTTP/1.0或HTTP/1.1。
+$uri 请求中的当前URI(不带请求参数，参数位于$args)，可以不同于浏览器传递的$request_uri的值，它可以通过内部重定向，或者使用index指令进行修改。
+
+
+另外： HTTP_X_FORWARDED_FOR是透过代理服务器取得客户端的真实IP地址，有些用此方法读取到的仍然是代理服务器的IP。还有一点需要注意的是：如果客户端没有通过代理服务器来访问，那么用 HTTP_X_FORWARDED_FOR 取到的值将是空的。
+
+
+函数版的访问
+location /lua1 {
+default_type 'text/plain';
+content_by_lua 'ngx.say("hello, lua")';
+}
+# 请求另外的url
+location /lua2 {
+content_by_lua '     
+　　local res = ngx.location.capture("/hello1")     
+　　ngx.say("data: " .. res.body)  
+';
+}
+
+
+
+
+
