@@ -1,0 +1,103 @@
+设置git
+git config --global user.name "Rose" 
+git config --global user.email 
+
+
+增加远程origin
+git remote add  origin <>
+
+
+第一次提交
+cd <project>
+git remote add origin “”
+git add .
+git commit -am  "处女提交"
+git push -u origin  master
+
+
+日常的提交
+git add .
+d:
+cd <project>
+git commit -am "test"
+git push 
+
+
+分支管理
+1.推送特定分支
+git push origin  NewUI
+
+2.查看当前分支
+git branch
+
+3.列出远程分支
+git branch -r
+
+4.列出所有分支
+git branch -a
+
+5.创建分支
+git branch branchName
+
+6.切换分支
+git checkout  AndroidStudio
+git checkout  master
+
+7.创建并切换到分支
+git checkout -b branchName
+
+
+
+灾难处理
+修复未提交文件中的错误(重置)
+如果你现在的工作目录(work tree)里搞的一团乱麻, 但是你现在还没有把它们提交; 你可以通过下面的命令, 让工作目录回到上次提交时的状态(last committed state):
+git reset --hard HEAD
+
+
+回退所有内容到上一个版本
+git reset HEAD^ 
+
+
+回溯到特定的commitid
+在.git/logs/head 里面找到我那个提交了用
+git reset  <commit id> --hard
+
+
+紧急热修复
+思路是找到上次的稳定版本,修改后推送到目标分支.这种修复方式是最快的
+# git checkout HEAD^1
+回滚到上一次release的commitID
+git checkout <commit ID>
+git commit -am "fix"
+git push origin HEAD:master
+
+
+撤销上一次提交
+(该操作非常凶险,所有这次提交的内容都会不见)
+git revert HEAD
+
+
+git log
+git log --stat -n 5 // 简单的列出了修改过的文件
+git log -p -n 5 // 详细的列出修改过的文件，及提交文件的对比
+git log --graph // ASCII 字符串表示的简单图形，形象地展示了每个提交所在的分支及其分化衍合情况
+git log --all --decorate --graph
+git log --pretty=oneline
+// 只显示哈希值和提交说明
+git log --pretty=oneline/short/full/fuller/format:""(格式等)
+git log --name-only // 仅在提交信息后显示已修改的文件清单
+git log --no-merges // 不显示merge的log
+:格式化日志
+git log  --pretty=format:" %cd %h - %s" --since=3.days
+
+
+
+
+
+
+
+
+
+
+
+
