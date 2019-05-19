@@ -84,4 +84,15 @@ MaxSessions 10 设置连接但未登录的用户最大值为10
 加强用户登录的密码口令
 
 
++++++++++++++++++++
 
+怎样禁止ssh使用root用户登录，并限制3次登录密码错误，锁定该账户5分钟 
+禁止root登录:
+vi /etc/ssh/sshd_config
+设置 PermitRootLogin no
+重启sshd服务
+
+3次登录密码错误，锁定账户5分钟：
+vi /etc/pam.d/sshd
+增加
+auth required pam_tally.so deny=3 unlock_time=5 
