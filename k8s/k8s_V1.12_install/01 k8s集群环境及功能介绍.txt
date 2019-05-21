@@ -1,0 +1,234 @@
+一、组件版本
+Kubernetes 1.12.3
+Docker 18.06.1-ce
+Etcd 3.3.10
+Flanneld 0.10.0
+
+插件：
+Coredns
+Dashboard
+Heapster (influxdb、grafana)
+Metrics-Server
+EFK (elasticsearch、fluentd、kibana)
+
+镜像仓库：
+docker registry
+harbor
+
+
+
+二、主要配置策略
+kube-apiserver：
+使用 keepalived 和 haproxy 实现 3 节点高可用；
+关闭非安全端口 8080 和匿名访问；
+在安全端口 6443 接收 https 请求；
+严格的认证和授权策略 (x509、token、RBAC)；
+开启 bootstrap token 认证，支持 kubelet TLS bootstrapping；
+使用 https 访问 kubelet、etcd，加密通信；
+
+
+kube-controller-manager：
+3 节点高可用；
+关闭非安全端口，在安全端口 10252 接收 https 请求；
+使用 kubeconfig 访问 apiserver 的安全端口；
+自动 approve kubelet 证书签名请求 (CSR)，证书过期后自动轮转；
+各 controller 使用自己的 ServiceAccount 访问 apiserver；
+
+
+kube-scheduler：
+3 节点高可用；
+使用 kubeconfig 访问 apiserver 的安全端口；
+
+
+kubelet：
+使用 kubeadm 动态创建 bootstrap token，而不是在 apiserver 中静态配置；
+使用 TLS bootstrap 机制自动生成 client 和 server 证书，过期后自动轮转；
+在 KubeletConfiguration 类型的 JSON 文件配置主要参数；
+关闭只读端口，在安全端口 10250 接收 https 请求，对请求进行认证和授权，拒绝匿名访问和非授权访问；
+使用 kubeconfig 访问 apiserver 的安全端口；
+
+
+kube-proxy：
+使用 kubeconfig 访问 apiserver 的安全端口；
+在 KubeProxyConfiguration 类型的 JSON 文件配置主要参数；
+使用 ipvs 代理模式；
+
+
+集群插件：
+DNS：使用功能、性能更好的 coredns；
+Dashboard：支持登录认证；
+Metric：heapster、metrics-server，使用 https 访问 kubelet 安全端口；
+Log：Elasticsearch、Fluend、Kibana；
+Registry 镜像库：docker-registry、harbor；
+
+
+三、系统初始化
+1、主机名修改 vi /etc/hostname
+2、本地hosts解析
+[root@k8s-master1 ssl]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.80.4    etcd1
+192.168.80.5    etcd2
+192.168.80.6    etcd3
+192.168.80.7    k8s-master1
+192.168.80.8    k8s-master2
+192.168.80.9    k8s-master3
+192.168.80.10   k8s-node1
+192.168.80.11   k8s-node2
+192.168.80.12   k8s-node3
+
+3、无密码ssh登陆其他节点，（k8s-master1上生成密钥）
+[root@k8s-master1 ssl]# ssh-keygen -t rsa
+[root@k8s-master1 ssl]# ssh-copy-id etcd1
+[root@k8s-master1 ssl]# ssh-copy-id etcd2
+[root@k8s-master1 ssl]# ssh-copy-id etcd3
+[root@k8s-master1 ssl]# ssh-copy-id k8s-master1
+[root@k8s-master1 ssl]# ssh-copy-id k8s-master2
+[root@k8s-master1 ssl]# ssh-copy-id k8s-master3
+[root@k8s-master1 ssl]# ssh-copy-id k8s-node1
+[root@k8s-master1 ssl]# ssh-copy-id k8s-node2
+[root@k8s-master1 ssl]# ssh-copy-id k8s-node3
+
+
+4、关闭防火墙
+sudo systemctl stop firewalld
+sudo systemctl disable firewalld
+sudo iptables -P FORWARD ACCEPT
+
+
+5、关闭swap分区
+sudo swapoff -a
+sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+
+6、关闭SELinux
+sudo setenforce 0
+grep SELINUX /etc/selinux/config 
+SELINUX=disabled
+
+
+7、加载内核模块
+sudo modprobe br_netfilter
+sudo modprobe ip_vs
+
+
+8、设置系统参数
+cat > kubernetes.conf <<EOF
+net.bridge.bridge-nf-call-iptables=1
+net.bridge.bridge-nf-call-ip6tables=1
+net.ipv4.ip_forward=1
+net.ipv4.tcp_tw_recycle=0
+vm.swappiness=0
+vm.overcommit_memory=1
+vm.panic_on_oom=0
+fs.inotify.max_user_watches=89100
+fs.file-max=52706963
+fs.nr_open=52706963
+net.ipv6.conf.all.disable_ipv6=1
+net.netfilter.nf_conntrack_max=2310720
+
+
+sysctl -p /etc/sysctl.d/kubernetes.conf
+##tcp_tw_recycle 和 Kubernetes 的 NAT 冲突，必须关闭 ，否则会导致服务不通；
+##关闭不使用的 IPV6 协议栈，防止触发 docker BUG；
+
+
+9、检查系统内核和模块适不适合运行docker（Linux系统）
+curl https://raw.githubusercontent.com/docker/docker/master/contrib/check-config.sh > check-config.sh
+$ bash ./check-config.sh
+
+
+
+四、环境介绍
+ca-key.pem
+ca.pem
+flanneld-key.pem
+flanneld.pem
+kubelet-bootstrap.kubeconfig
+kubelet-client-2018-12-20-20-10-59.pem
+kubelet-client-current.pem
+kubelet.config.json
+kubelet.crt
+kubelet.key
+kubelet.kubeconfig
+kube-proxy.config.yaml
+kube-proxy.kubeconfig
+
+
+etcd集群：etcd1 etcd2 etcd3
+需要的证书  /etc/kubernetes/cert)
+ca-key.pem
+etcd-key.pem
+ca.pem
+etcd.pem
+
+
+k8s-master集群：k8s-master1 k8s-master2 k8s-master3
+需要的证书:  /etc/kubernetes/cert)
+ca-key.pem
+ca.pem
+ca-config.json（←只生成证书的主机需要）
+encryption-config.yaml
+flanneld-key.pem
+flanneld.pem
+kube-controller-manager-key.pem
+kube-controller-manager.kubeconfig
+kube-controller-manager.pem
+kubernetes-key.pem
+kubernetes.pem
+kube-scheduler.kubeconfig
+~/.kube/config	
+
+运行的服务
+kube-apiserver
+kube-controller-manager
+kube-scheduler
+flanneld
+
+
+
+k8s-node集群:
+需要的证书: /etc/kubernetes/cert
+ca-key.pem
+ca.pem
+flanneld-key.pem
+flanneld.pem
+kubelet-bootstrap.kubeconfig
+kubelet-client-2018-12-20-20-10-59.pem
+kubelet-client-current.pem
+kubelet.config.json
+kubelet.crt
+kubelet.key
+kubelet.kubeconfig
+kube-proxy.config.yaml
+kube-proxy.kubeconfig
+
+
+运行的服务:
+docker
+flannel
+kubelet
+kube-proxy   
+
+
+cluster VIP:::114.67.81.105　高可用VIP，负责调度apiserver 6443端口
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

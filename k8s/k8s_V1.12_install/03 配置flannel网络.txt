@@ -1,0 +1,244 @@
+搭建flannel网络，目的使跨主机的docker能够互相通信，也是保障kubernetes集群的网络基础和保障，下面正式开始配置。
+
+一、生成Flannel网络TLS证书
+在所有集群节点都安装Flannel，下面的操作在k8s-master1上进行，其他节点重复执行即可。（证书生成一次就行）
+1、创建证书签名请求
+cat > flanneld-csr.json <<EOF
+{
+  "CN": "flanneld",
+  "hosts": [],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "BeiJing",
+      "L": "BeiJing",
+      "O": "k8s",
+      "OU": "4Paradigm"
+    }
+  ]
+}
+EOF
+
+该证书只会被 kubectl 当做 client 证书使用，所以 hosts 字段为空；
+
+
+生成证书和私钥：
+cfssl gencert -ca=/etc/kubernetes/cert/ca.pem \
+  -ca-key=/etc/kubernetes/cert/ca-key.pem \
+  -config=/etc/kubernetes/cert/ca-config.json \
+  -profile=kubernetes flanneld-csr.json | cfssljson -bare flanneld
+
+  
+2、将证书分发到所有集群节点/etc/kubernetes/cert/目录下
+scp flanneld*.pem k8s-master1:/etc/kubernetes/cert/
+scp flanneld*.pem k8s-master2:/etc/kubernetes/cert/
+scp flanneld*.pem k8s-master3:/etc/kubernetes/cert/
+scp flanneld*.pem k8s-node1:/etc/kubernetes/cert/
+scp flanneld*.pem k8s-node2:/etc/kubernetes/cert/
+scp flanneld*.pem k8s-node3:/etc/kubernetes/cert/
+
+
+
+
+二、部署 Flannel
+1、下载安装Flannel
+wget https://github.com/coreos/flannel/releases/download/v0.10.0/flannel-v0.10.0-linux-amd64.tar.gz
+tar -xzvf flannel-v0.10.0-linux-amd64.tar.gz
+cp {flanneld,mk-docker-opts.sh} /usr/local/bin
+
+
+2、向 etcd 写入网段信息
+下面2条命令在etcd集群中任意一台执行一次即可，也是是创建一个flannel网段供docker分配使用
+[root@etcd1 cert]# etcdctl --ca-file=/etc/kubernetes/cert/ca.pem --cert-file=/etc/kubernetes/cert/etcd.pem --key-file=/etc/kubernetes/cert/etcd-key.pem mkdir /kubernetes/network
+[root@etcd1 cert]# etcdctl --ca-file=/etc/kubernetes/cert/ca.pem --cert-file=/etc/kubernetes/cert/etcd.pem --key-file=/etc/kubernetes/cert/etcd-key.pem mk /kubernetes/network/config '{"Network":"172.30.0.0/16","SubnetLen":24,"Backend":{"Type":"vxlan"}}'
+
+
+3、创建system unit文件
+[root@k8s-master1 ssl]# cat > /etc/systemd/system/flanneld.service << EOF
+[Unit]
+Description=Flanneld overlay address etcd agent
+After=network.target
+After=network-online.target
+Wants=network-online.target
+After=etcd.service
+Before=docker.service
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/flanneld \
+  -etcd-cafile=/etc/kubernetes/cert/ca.pem \
+  -etcd-certfile=/etc/kubernetes/cert/flanneld.pem \
+  -etcd-keyfile=/etc/kubernetes/cert/flanneld-key.pem \
+  -etcd-endpoints=https://192.168.80.4:2379,https://192.168.80.5:2379,https://192.168.80.6:2379 \
+  -etcd-prefix=/kubernetes/network
+ExecStartPost=/usr/local/bin/mk-docker-opts.sh -k DOCKER_NETWORK_OPTIONS -d /run/flannel/docker
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=docker.service
+EOF
+
+
+mk-docker-opts.sh 脚本将分配给 flanneld 的 Pod 子网网段信息写入到 /run/flannel/docker 文件中，后续 docker 启动时使用这个文件中参数值设置 docker0 网桥。
+flanneld 使用系统缺省路由所在的接口和其它节点通信，对于有多个网络接口的机器（如，内网和公网），可以用 -iface=enpxx 选项值指定通信接口。
+
+
+4、启动flannel并且设置开机自启动
+systemctl daemon-reload
+systemctl enable flanneld
+systemctl start flanneld
+
+
+5、查看flannel分配的子网信息
+[root@k8s-master1 ~]# cat /run/flannel/docker 
+DOCKER_OPT_BIP="--bip=172.30.94.1/24"
+DOCKER_OPT_IPMASQ="--ip-masq=true"
+DOCKER_OPT_MTU="--mtu=1450"
+DOCKER_NETWORK_OPTIONS=" --bip=172.30.94.1/24 --ip-masq=true --mtu=1450"
+
+[root@k8s-master1 ~]# cat /run/flannel/subnet.env 
+FLANNEL_NETWORK=172.30.0.0/16
+FLANNEL_SUBNET=172.30.94.1/24
+FLANNEL_MTU=1450
+FLANNEL_IPMASQ=false
+
+/run/flannel/docker是flannel分配给docker的子网信息，/run/flannel/subnet.env包含了flannel整个大网段以及在此节点上的子网段。
+
+
+
+6、查看flannel网络是否生效
+[root@k8s-master1 ~]# ifconfig 
+docker0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1450
+        inet 172.30.94.1  netmask 255.255.255.0  broadcast 172.30.94.255
+        inet6 fe80::42:1aff:fed2:a4b4  prefixlen 64  scopeid 0x20<link>
+        ether 02:42:1a:d2:a4:b4  txqueuelen 0  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 8  bytes 648 (648.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens192: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.20.210  netmask 255.255.254.0  broadcast 192.168.21.255
+        inet6 fe80::ff2:187b:66fc:621b  prefixlen 64  scopeid 0x20<link>
+        ether 00:0c:29:c3:dc:a5  txqueuelen 1000  (Ethernet)
+        RX packets 3965867  bytes 619350597 (590.6 MiB)
+        RX errors 0  dropped 583  overruns 0  frame 0
+        TX packets 3159970  bytes 390102190 (372.0 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+flannel.1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1450
+        inet 172.30.94.0  netmask 255.255.255.255  broadcast 0.0.0.0
+        inet6 fe80::7827:fcff:fe4e:b5ff  prefixlen 64  scopeid 0x20<link>
+        ether 7a:27:fc:4e:b5:ff  txqueuelen 0  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 8 overruns 0  carrier 0  collisions 0
+		
+		
+可以明显看到flannel1.1的网络信息，说明flannel网络已经正常。
+
+
+
+
+三、配置docker支持flannel网络
+1、所有node安装docker
+关于安装docker，请参考：安装指定版本的docker
+
+2、配置docker支持flannel网络，所有docker节点都操作
+
+
+[root@k8s-master1 ~]# vi /etc/systemd/system/multi-user.target.wants/docker.service
+[Unit]
+Description=Docker Application Container Engine
+Documentation=https://docs.docker.com
+After=network-online.target firewalld.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+# the default is not to use systemd for cgroups because the delegate issues still
+# exists and systemd currently does not support the cgroup feature set required
+# for containers run by docker
+EnvironmentFile=/run/flannel/docker
+ExecStart=/usr/bin/dockerd $DOCKER_NETWORK_OPTIONS
+ExecReload=/bin/kill -s HUP $MAINPID
+# Having non-zero Limit*s causes performance problems due to accounting overhead
+# in the kernel. We recommend using cgroups to do container-local accounting.
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+# Uncomment TasksMax if your systemd version supports it.
+# Only systemd 226 and above support this version.
+#TasksMax=infinity
+TimeoutStartSec=0
+# set delegate yes so that systemd does not reset the cgroups of docker containers
+Delegate=yes
+# kill only the docker process, not all processes in the cgroup
+KillMode=process
+# restart the docker process if it exits prematurely
+Restart=on-failure
+StartLimitBurst=3
+StartLimitInterval=60s
+
+[Install]
+WantedBy=multi-user.target
+
+
+如上红色即为新增加支持flannel网络的配置
+
+
+3、重启docker，使配置生效
+systemctl daemon-reload
+systemctl restart docker
+
+
+
+4、查看docker网络是否生效
+i、启动一个容器（如有现有容器可以不run一个新的）
+[root@k8s-master1 ~]# docker run -itd centos
+d63ee9c72b5023fgfg36ld93j6723hd72jd1hsp2303kf7
+ii、查看ip地址是否是flannel网络分配的网段
+[root@k8s-master1 ~]# docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' d63
+172.30.94.2
+
+
+5、查看所有集群主机的网络情况
+[root@etcd1 cert]# etcdctl --ca-file=/etc/kubernetes/cert/ca.pem --cert-file=/etc/kubernetes/cert/etcd.pem --key-file=/etc/kubernetes/cert/etcd-key.pem ls /kubernetes/network/subnets
+/kubernetes/network/subnets/172.30.94.0-24
+/kubernetes/network/subnets/172.30.51.0-24
+/kubernetes/network/subnets/172.30.10.0-24
+/kubernetes/network/subnets/172.30.92.0-24
+/kubernetes/network/subnets/172.30.85.0-24
+/kubernetes/network/subnets/172.30.89.0-24
+
+
+发现容器使用了172.30.94.0/24网段。属于flannel，配置完成。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

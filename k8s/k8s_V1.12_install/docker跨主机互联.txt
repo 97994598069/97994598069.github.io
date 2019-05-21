@@ -1,0 +1,91 @@
+方案一、overlay Consul
+三台主机为例（都要安装docker）：
+192.168.20.20（consul服务）
+192.168.20.21（host1）
+192.168.20.22（host2）
+
+1、在consul服务主机安装consul服务容器
+docker run -d -p 8500:8500 -h consul --name consul progrium/consul -server -bootstrap
+
+
+2、host1、host2主机上修改以下内容
+vi /usr/lib/systemd/system/docker.service 在ExecStart追加
+--cluster-store=consul://192.168.20.20:8500 --cluster-advertise=ens192:2376
+--cluster-store 指定 consul 的地址。
+--cluster-advertise 告知 consul 自己的连接地址。
+
+
+3、重启docker
+systemctl daemon-reload  
+systemctl restart docker.service
+
+
+4、创建docker网络
+在host1或者host2其中任何一台创建即可，后续consul有自动发现服务
+在 host1 中创建 overlay 网络 ov_net1 （创建网络的时候可以--subnet指定子网信息，不指定系统自动分配）
+[root@ubuntu ~ [host1]]# docker network create -d overlay ov_net1
+49a8ea9add6a80d44cbd6becf22d66af40072cf9c3a346d66f94a6e72d8042e5
+
+
+-d overlay 指定 driver 为 overlay。
+[root@ubuntu ~ [host1]]# docker network ls
+NETWORK ID          NAME                DRIVER              SCOPE
+d0829fccb85c        bridge              bridge              local
+f59af6b0b523        host                host                local
+2613e0c2029e        none                null                local
+49a8ea9add6a        ov_net1             overlay             global
+此时在host2上docker netwoker ls 会发现和host1一样，多了个ov_net1的网络。（自动发现）
+
+
+
+5、创建容器
+在 host1 运行一个 centos容器bbox1并连接到 ov_net1
+[root@ubuntu ~ [host1]]# docker run -itd --name bbox1 --network ov_net1 centos
+5246d782fc8fd30890bcf2bb34374c54db3ee277cae585572f4b20129b68e3fe
+
+在 host2 运行一个centos容器bbox2并连接到 ov_net1
+[root@ubuntu ~ [host1]]# docker run -itd --name bbox2 --network ov_net1 centos
+33f33dc7ce094579269f3137767dc82f7b714e96766de87570a1de8a4eefd640
+
+
+
+6、互通测试
+此时bbox1容器已经可以ping通bbox2，bbox2也一样可以ping通bbox1
+（直接ping 容器名即可｛即bbox1，bbox2｝）
+
+
+
+
+
+方案二、weave 
+ 还是以host1和host2为例：
+在host1和host2上都安装weave执行文件
+curl -L git.io/weave -o /usr/local/bin/weave
+chmod a+x /usr/local/bin/weave
+
+
+1、在host1上启动weave容器
+weave launch --no-detect-tls
+
+
+2、以weave proxy方式启动容器webox1
+eval $(weave env)
+docker run --name webox1 -itd centos
+
+
+3、host2上启动weave容器并连接到host1
+weave launch 192.168.20.21 --no-detect-tls
+
+
+4、以weave proxy方式启动容器webox2
+eval $(weave env)
+docker run --name webox2 -itd centos
+
+
+5、互通测试
+此时webox1容器已经可以ping通webox2，webox2也一样可以ping通webox1
+
+
+
+另：也可在weave launch的时候加入--ipalloc-range=192.168.100.0/24 配置weave网段。
+　　还可以在docker run运行一个容器的时候加入变量 -e WEAVE_CIDR=xxx.xxx.xxx.xxx 指定该容器所在的网络

@@ -1,0 +1,239 @@
+etcd1：192.168.80.4
+etcd2：192.168.80.5
+etcd3：192.168.80.6
+三台centos7.5
+
+一、创建CA证书和密钥
+kubernetes 系统各组件需要使用 TLS 证书对通信进行加密，本文档使用 CloudFlare 的 PKI 工具集 cfssl 来生成 Certificate Authority (CA) 证书和秘钥文件，CA 是自签名的证书，用来签名后续创建的其它 TLS 证书。
+
+下面步骤是在k8s-master1上操作的。证书只需要创建一次即可，以后在向集群中添加新节点时只要将 /etc/kubernetes/cert 目录下的证书拷贝到新节点上即可。
+1、安装 CFSSL
+curl -o /usr/local/bin/cfssl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64
+curl -o /usr/local/bin/cfssljson https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+chmod +x /usr/local/bin/cfssl*
+
+
+2、创建CA配置文件
+mkdir -p /etc/kubernetes/cert && cd /etc/kubernetes/cert
+cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "87600h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": [
+            "signing",
+            "key encipherment",
+            "server auth",
+            "client auth"
+        ],
+        "expiry": "87600h"
+      }
+    }
+  }
+}
+EOF
+
+ca-config.json：可以定义多个 profiles，分别指定不同的过期时间、使用场景等参数；后续在签名证书时使用某个 profile； 
+signing：表示该证书可用于签名其它证书；生成的 ca.pem 证书中 CA=TRUE； 
+server auth：表示 client 可以用该 CA 对 server 提供的证书进行验证； 
+client auth：表示 server 可以用该 CA 对 client 提供的证书进行验证；
+
+
+
+3、创建CA证书签名请求
+cat > ca-csr.json <<EOF
+{
+  "CN": "kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "BeiJing",
+      "L": "BeiJing",
+      "O": "k8s",
+      "OU": "4Paradigm"
+    }
+  ]
+}
+EOF
+
+CN：Common Name，kube-apiserver 从证书中提取该字段作为请求的用户名 (User Name)，浏览器使用该字段验证网站是否合法；
+O：Organization，kube-apiserver 从证书中提取该字段作为请求用户所属的组 (Group)；
+kube-apiserver 将提取的 User、Group 作为 RBAC 授权的用户标识；
+
+
+生成 CA 证书和私钥：
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+
+
+4、创建etcd证书签名请求文件
+cat > etcd-csr.json <<EOF
+{
+  "CN": "etcd",
+  "hosts": [
+    "127.0.0.1",
+    "192.168.80.4",
+    "192.168.80.5",
+    "192.168.80.6"
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "BeiJing",
+      "L": "BeiJing",
+      "O": "k8s",
+      "OU": "4Paradigm"
+    }
+  ]
+}
+EOF
+
+
+hosts 字段指定授权使用该证书的 etcd 节点 IP 或域名列表，这里将 etcd 集群的三个节点 IP 都列在其中;
+
+
+
+生成 CA 证书和私钥：
+cfssl gencert -ca=/etc/kubernetes/cert/ca.pem \
+    -ca-key=/etc/kubernetes/cert/ca-key.pem \
+    -config=/etc/kubernetes/cert/ca-config.json \
+    -profile=kubernetes etcd-csr.json | cfssljson -bare etcd
+
+	
+5、将*.pem证书分发到3台etcd的/etc/kubernetes/cert目录下
+[root@k8s-master1 cert]# scp *.pem etcd1:/etc/kuberneters/cert
+[root@k8s-master1 cert]# scp *.pem etcd2:/etc/kuberneters/cert
+[root@k8s-master1 cert]# scp *.pem etcd3:/etc/kuberneters/cert
+
+
+ETCD使用证书的组件如下：
+etcd：使用 ca.pem、etcd-key.pem、etcd.pem；
+
+
+
+
+二、部署etcd集群
+在三个节点都安装etcd，下面的操作需要再三个节点都执行一遍
+1、下载etcd安装包
+wget https://github.com/etcd-io/etcd/releases/download/v3.3.10/etcd-v3.3.10-linux-amd64.tar.gz
+tar zxf etcd-v3.3.10-linux-amd64.tar.gz
+cp  etcd-v3.3.10-linux-amd64/etcd* /usr/local/bin
+
+
+2、创建工作目录
+mkdir -p /var/lib/etcd
+
+
+3、创建systemd unit 文件（红色字填写对应etcd主机的名称和ip）
+cat > /etc/systemd/system/etcd.service << EOF
+[Unit]
+Description=Etcd Server
+After=network.target
+After=network-online.target
+Wants=network-online.target
+Documentation=https://github.com/coreos
+
+[Service]
+Type=notify
+WorkingDirectory=/var/lib/etcd/
+ExecStart=/usr/local/bin/etcd \
+  --name etcd1 \
+  --cert-file=/etc/kubernetes/cert/etcd.pem \
+  --key-file=/etc/kubernetes/cert/etcd-key.pem \
+  --peer-cert-file=/etc/kubernetes/cert/etcd.pem \
+  --peer-key-file=/etc/kubernetes/cert/etcd-key.pem \
+  --trusted-ca-file=/etc/kubernetes/cert/ca.pem \
+  --peer-trusted-ca-file=/etc/kubernetes/cert/ca.pem \
+  --initial-advertise-peer-urls https://192.168.80.4:2380 \
+  --listen-peer-urls https://192.168.80.4:2380 \
+  --listen-client-urls https://192.168.80.4:2379,http://127.0.0.1:2379 \
+  --advertise-client-urls https://192.168.80.4:2379 \
+  --initial-cluster-token etcd-cluster-0 \
+  --initial-cluster etcd1=https://192.168.80.4:2380,etcd2=https://192.168.80.5:2380,etcd3=https://192.168.80.6:2380 \
+  --initial-cluster-state new \
+  --data-dir=/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+
+为了保证通信安全，需要指定 etcd 的公私钥(cert-file和key-file)、Peers 通信的公私钥和 CA 证书(peer-cert-file、peer-key-file、peer-trusted-ca-file)、客户端的CA证书（trusted-ca-file）； 
+
+创建etcd.pem 证书时使用的 etcd-csr.json 文件的 hosts 字段包含所有 etcd 节点的IP，否则证书校验会出错； 
+–initial-cluster-state 值为 new 时，–name 的参数值必须位于 –initial-cluster 列表中.
+
+
+4、启动etcd服务并且设置开机自启动
+sudo systemctl daemon-reload
+sudo systemctl enable etcd
+sudo systemctl start etcd
+
+
+5、查看etcd服务状态信息
+systemctl status etcd
+最先启动的 etcd 进程会卡住一段时间，等待其它节点上的 etcd 进程加入集群，为正常现象。
+
+
+
+6、验证etcd集群状态，以及查看leader,在任何一个etcd节点执行
+[root@etcd1 cert]# etcdctl --ca-file=/etc/kubernetes/cert/ca.pem --cert-file=/etc/kubernetes/cert/etcd.pem --key-file=/etc/kubernetes/cert/etcd-key.pem cluster-health
+  member 1ee23928cd50adb0 is healthy: got healthy result from https://192.168.80.6:2379
+  member 535d7a5dfde52a30 is healthy: got healthy result from https://192.168.80.4:2379
+  member 8476403d43c0e204 is healthy: got healthy result from https://192.168.80.5:2379
+
+
+[root@etcd1 cert]# etcdctl --ca-file=/etc/kubernetes/cert/ca.pem --cert-file=/etc/kubernetes/cert/etcd.pem --key-file=/etc/kubernetes/cert/etcd-key.pem member list
+  1ee23928cd50adb0: name=etcd3 peerURLs=https://192.168.80.6:2380 clientURLs=https://192.168.80.6:2379 isLeader=false
+  535d7a5dfde52a30: name=etcd1 peerURLs=https://192.168.80.4:2380 clientURLs=https://192.168.80.4:2379 isLeader=false
+  8476403d43c0e204: name=etcd2 peerURLs=https://192.168.80.5:2380 clientURLs=https://192.168.80.5:2379 isLeader=true
+
+
+7、举例：etcdctl调用集群创建/kubernetes/network的key
+[root@etcd3 cert]# etcdctl --ca-file=/etc/kubernetes/cert/ca.pem --cert-file=/etc/kubernetes/cert/etcd.pem --key-file=/etc/kubernetes/cert/etcd-key.pem mkdir /kubernetes/network
+
+
+至此ETCD TLS证书集群部署完成。
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
