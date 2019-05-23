@@ -1,0 +1,8 @@
+NotePort模式运行，理论上，端口在所有节点上都会通信
+
+但是一台服务器突然就不通信了
+ping flannel IP 发现不通信
+
+
+
+重启flannel和docker后恢复正常（flannel的ip会改变）

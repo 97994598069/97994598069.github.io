@@ -1,0 +1,63 @@
+[root@k8s01 baike]# kubectl get nodes --show-labels
+NAME           STATUS    ROLES     AGE       VERSION   LABELS
+192.168.2.41   Ready     <none>    204d      v1.9.0    beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/hostname=192.168.2.41,role=nginxplus,traefik=proxy,type=backEndNode1
+192.168.2.42   Ready     <none>    204d      v1.9.0    beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/hostname=192.168.2.42,traefik=proxy
+192.168.2.43   Ready     <none>    204d      v1.9.0    beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/hostname=192.168.2.43,traefik=proxy
+192.168.2.44   Ready     <none>    204d      v1.9.0    beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/hostname=192.168.2.44,traefik=proxy
+[root@k8s01 baike]# 
+
+
+例如，我要指定192.168.2.42这台机子运行：
+则如下：
+[root@k8s01 baike]# cat baike-jycloud-rc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: baike-jycloud
+spec:
+  type: NodePort
+  ports:
+  - port: 8774
+    nodePort: 8774
+  selector:
+    app: baike-jycloud
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: baike-jycloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: baike-jycloud
+  template:
+    metadata:
+      labels:
+        app: baike-jycloud
+    spec:
+      nodeSelector:    ###增加
+        kubernetes.io/hostname: 192.168.2.42     ##指定服务器
+      hostAliases:
+      - ip: "192.168.128.160"
+        hostnames:
+        - "config.jycloud.com"
+        - "eureka.jycloud.com"
+        - "web.jycloud.com"
+        - "manage.jycloud.com"
+      containers:
+      - name: baike-jycloud
+        image: 192.168.2.45:5000/com.ciip.cloud.core.jybk/jybk-service:V1.2.3
+        ports:
+        - containerPort: 8774
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: 'dev'
+        volumeMounts:
+        - mountPath: /service
+          name: baike-jycloud
+      volumes:
+      - name: baike-jycloud
+        hostPath:
+          path: /service
+          type: Directory
