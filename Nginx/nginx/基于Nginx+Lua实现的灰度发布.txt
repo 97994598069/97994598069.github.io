@@ -1,0 +1,163 @@
+灰度发布也叫 A/B 测试，原理是一套系统在实现了负载均衡，全国节点都部署了系统之后，可以在新功能上线后，让一小部分用户先使用，从中收集使用信息来做对比和发现bug，及时调整，最终分发到全国的节点。
+
+而在目前很多公司都会使用nginx作为前端服务器，为后端服务器提供负载技术。当我们需要对后端服务器进行升级时，我们只想让内部测试人员访问到新升级的服务器上，生产环境用户仍使用未升级的稳定环境。此时就可以使用nginx配合Lua模块来实现一定程度的条件控制。（本文中就是以IP作为限制）
+
+
+
+安装环境
+服务器 1： 192.168.1.214 （安装apache作为后端服务器）   也可用nginx等
+服务器 2： 192.168.1.215（安装apache作为后端服务器）    也可用nginx等
+服务器 3： 192.168.1.216 （安装nginx+lua 前端服务器）   也可用nginx等
+
+
+
+1.安装nginx
+准备工作
+yum install -y pcre pcre-devel
+yum install -y zlib zlib-devel
+yum install -y openssl openssl-devel
+
+下载地址：http://nginx.org/en/download.html
+本文中使用是nginx-1.12.2版本
+cd /data
+wget http://nginx.org/download/nginx-1.12.2.tar.gz
+tar -zvxf nginx-1.12.2.tar.gz
+cd nginx-1.12.2
+./configure --prefix=/data/nginx --with-http_stub_status_module --with-http_ssl_module
+make && make install
+
+
+2.安装Lua模块
+2.1安装LuaJIT
+下载地址：http://luajit.org/
+
+wget http://luajit.org/download/LuaJIT-2.0.4.tar.gz
+tar zxvf LuaJIT-2.0.4.tar.gz
+cd LuaJIT-2.0.4
+make install PREFIX=/usr/local/luajit
+echo "/usr/local/luajit/lib" > /etc/ld.so.conf.d/usr_local_luajit_lib.conf
+ldconfig
+export LUAJIT_LIB=/usr/local/luajit/lib
+export LUAJIT_INC=/usr/local/luajit/include/luajit-2.0
+
+
+
+2.2安装ngx_devel_kit
+下载地址https://github.com/simpl/ngx_devel_kit/tags
+wget https://github.com/simpl/ngx_devel_kit/archive/v0.3.0.tar.gz
+tar -zvxf v0.3.0.tar.gz
+mv ngx_devel_kit-0.3.0/ ngx_devel_kit
+
+
+2.3安装lua-nginx-module
+下载地址：https://github.com/openresty/lua-nginx-module/tags
+wget https://github.com/openresty/lua-nginx-module/archive/v0.10.11rc3.tar.gz
+tar -zvxg v0.10.11rc3.tar.gz
+mv lua-nginx-module-0.10.11rc3/ lua-nginx-module
+
+
+2.4 重新编译NGINX安装支持lua模块
+cd /data/nginx-1.12.2
+#具体模块路径安装时请修改
+./configure --prefix=/data/nginx --with-http_stub_status_module --with-http_ssl_module --with-ld-opt="-Wl,-rpath,/usr/local/luajit/lib" --add-module=/data/ngx_devel_kit --add-module=/data/lua-nginx-module
+make && make install
+
+##可能报错：
+安装nginx+lua时提示：./configure: error: ngx_http_lua_module requires the Lua library.
+可以通过yum install lua-devel解决
+
+
+
+make LUAINC=-I/usr/include/lua5.1/
+
+
+
+3.编写lua脚本实现根据请求来源IP地址，匹配对应的location
+cd /data/nginx
+mkdir lua
+cd lua
+
+vim ip_gray.lua
+#######以下为lua脚本
+local ip_config = ngx.shared.config;
+ClienIP=ngx.req.get_headers()["X-Real-IP"]
+if ClientIP == nil then
+    ClientIP = ngx.req.get_headers()["x_forworded_for"]
+end
+if ClientIP == nil then
+    ClientIP = ngx.var.remote_addr
+end
+for line in io.lines("/data/nginx/lua/ipList.conf") do
+    if not ip_config:get(line) then
+        ip_config:set(line, "0")
+    end
+end
+if ip_config:get(ClientIP) == "0" then
+    ngx.exec("@test_env")
+else
+    ngx.exec("@product_env")
+end
+
+#########以上为lua脚本
+
+创建存放测试IP地址文件
+vim ipList.conf
+192.168.1.13
+192.168.1.14
+
+
+4.修改Nginx配置nginx.conf
+下图为主要配置
+配置完毕后重启Nginx,可在ipList.conf中添加IP地址测试，添加后nginx无需reload，删除则需要reload。
+lua_code_cache on | off 开启或关闭Lua代码缓存 生产环境一定要打开
+
+
+lua_code_cache on;
+lua_shared_dict config 1m;
+
+upstream test { 
+    #server 192.168.1.214:80 max_fails=3 timeout=30s;
+	#server 192.168.1.215:80 max_fails=3 timeout=30s;
+	server 192.168.1.214:80;  ##直接使用轮询效果更明显
+	server 192.168.1.215:80;
+	#ip_hash;
+}
+
+server {
+    listen 80;
+	server_name localhost;
+	
+	location / {
+	    access_by_lua_file /data/nginx/lua/ip_gray.lua;
+	}
+
+	location @test_env {
+	    proxy_pass http://192.168.1.214:80;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+	}
+	
+	location @product_env {
+	    proxy_pass http://test;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;	    
+	}
+	
+	error_page 500 502 503 504 /50x.html;
+	location = /50x.html {
+	    root html;
+	}
+}
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++
+
+项目更新先推到指定的一台服务器上，然后指定公司ip出口访问此ip， 其余客户端照旧， 然后进行线上测试，如果没有问题，则将更新推到其余服务器上
+
+但是这样如果上线出现严重bug，则还是有部分用户会访问到
+解决：
+nginx的负载均衡中可以配置单独的一台服务器或者一个端口做 backup类型的负载均衡，然后更新先推到这台服务器上，然后指定公司ip访问到此服务器，可破  （经测试可行）
+
+
