@@ -1,0 +1,65 @@
+yarn安装：
+使用
+https://yarnpkg.com/en/docs/install#centos-stable
+
+
+curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo | sudo tee /etc/yum.repos.d/yarn.repo
+curl --silent --location https://rpm.nodesource.com/setup_8.x | sudo bash -
+yum install yarn
+
+[root@localhost ~]# yarn --version
+1.16.0
+
+
+使用：
+同样的切换到项目
+[root@localhost rzzx]# cd ciip-member-vue/
+[root@localhost ciip-member-vue]# ll
+total 152
+drwxr-xr-x.    3 root root  4096 May 21 15:09 build
+drwxr-xr-x.    2 root root  4096 May 21 15:09 config
+-rw-r--r--.    1 root root 67646 May 21 15:09 favicon.ico
+-rw-r--r--.    1 root root   372 May 21 15:09 index.html
+drwxr-xr-x. 1012 root root 28672 May 21 13:01 node_modules
+-rw-r--r--.    1 root root  3573 May 21 15:09 package.json
+-rw-r--r--.    1 root root   205 May 21 15:09 README.md
+-rw-r--r--.    1 root root  6758 May 21 15:09 readme.mmd
+drwxr-xr-x.    8 root root  4096 May 21 15:09 src
+drwxr-xr-x.    5 root root    35 May 21 15:09 static
+
+以往安装项目使用npm或者cnpm   若是报错可以尝试使用yarn命令，直接输入
+
+[root@localhost ciip-member-vue]# yarn
+
+
+安装完成之后，启动：
+可以使用npm run dev  或者npm run test 
+
+或者直接使用pm2来跑:
+pm2 start npm --name rzzx_dev -- run test （fork模式） 或者  pm2 start npm --name rzzx_dev -i 2 -- run test  （集群模式;但是每次reload就会有端口冲突而改变端口（从而会出现两个端口））
+
+
+
+https://github.com/mopduan/team/issues/19
+https://iblog.wilee.me/post/detail/6
+
+
+
+vue项目几个修改端口的姿势:
+一、vi ./node_modules/nuxt/lib/core/nuxt.js  
+将    139   listen(port = 3000, host = 'localhost') ### 将其中的3000改为3001
+
+
+二、vi config/index.js 
+// Various Dev Server settings
+host: '0.0.0.0', // can be overwritten by process.env.HOST
+port: 8094, // can be overwritten by process.env.PORT, if port is in use, a free one will be determined
+
+
+三、vi package.json 
+    "config": {
+        "nuxt": {
+            "host": "0.0.0.0",
+            "port": "3003"
+        }
+    },
