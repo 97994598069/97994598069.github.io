@@ -1,0 +1,314 @@
+不同方法
+sudo yum install epel-release
+
+1.从软件包全局安装
+sudo yum install python-django
+django-admin --version
+##显示版本信息OK
+
+
+
+2.全局安装通过pip
+sudo yum install python-pip
+sudo pip install django
+django-admin --version
+##显示版本OK
+
+
+3.通过pip在Virtualenv中安装
+我们将开始通过安装pip来自EPEL软件库：
+sudo yum install python-pip
+
+一旦pip安装，你可以用它来安装virtualenv键入包：
+sudo pip install virtualenv
+
+现在，无论何时启动一个新项目，都可以为其创建一个虚拟环境。 首先创建并移动到新的项目目录：
+mkdir ~/newproject
+cd ~/newproject
+
+
+现在，通过键入以下内容在项目目录中创建一个虚拟环境：
+virtualenv newenv
+
+
+这将安装Python的独立版本，以及pip您的项目目录中，成为一个孤立的目录结构。 我们选择拨打我们的虚拟环境newenv ，但你应该命名为描述性的东西。 将使用您选择的名称创建一个目录，该目录将包含将要安装软件包的文件层次结构。
+要将软件包安装到隔离环境中，必须通过键入以下命令来激活它：
+source newenv/bin/activate
+
+您的提示应该更改以反映您现在处于虚拟环境中。 它看起来像( newenv )username@hostname:~/newproject$ 。
+在新的环境中，你可以使用pip来安装Django。 请注意，您不需要使用sudo ，因为你是在本地进行安装：
+pip install django
+
+
+您可以键入以下内容来验证安装：
+django-admin --version
+1.7.5
+
+deactivate
+
+您的提示应该恢复到常规显示。 当您希望再次处理项目时，应重新激活虚拟环境，方法是重新进入项目目录并激活：
+cd ~/newproject
+source newenv/bin/activate
+
+
+
+开发版本通过git安装
+如果你需要的Django的开发版本，你必须下载并从其安装Django git存储库。
+要做到这一点，你需要安装git系统与yum 。 我们也将安装pip Python包管理器。 我们将使用它来处理Django在下载后的安装：
+sudo yum install git python-pip
+
+一旦你git ，你可以克隆Django的存储库。 在版本之间，此存储库将具有更多最新的功能和错误修复，可能会牺牲稳定性。 您可以克隆存储库到一个名为目录django-dev键入你的home目录内：
+git clone git://github.com/django/django ~/django-dev
+
+
+一旦库被克隆，您可以使用安装pip 。 我们将使用-e选项中的“编辑”模式，从版本控制安装时，这是需要安装：
+sudo pip install -e ~/django-dev
+
+
+您可以通过键入以下内容来验证安装是否成功：
+django-admin --version
+1.9.dev20150305200340
+请注意，您还可以使用结合这一战略virtualenv ，如果你想在一个单一的环境中安装的Django的开发版本之上。
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+现在你已经安装了Django，我们可以简要地告诉你如何开始项目。
+您可以使用django-admin命令来创建一个项目：
+django-admin startproject projectname
+cd projectname
+
+
+这将创建一个名为projectname当前目录中。 在此，管理脚本将被创建和另一个名为目录projectname将与实际的代码来创建。
+注 ：如果您在您与使用创建的项目目录已经virtualenv的命令，你可以告诉Django通过键入此放置管理脚本和内部目录到当前目录没有额外层（注意结尾点）：
+
+django-admin startproject projectname .
+
+要在更新版本的Django上引导数据库（默认情况下使用SQLite），可以键入：
+python manage.py migrate
+
+
+如果migrate命令不起作用，你可能正在使用Django的旧版本（可能是安装装配相反，你可以键入：
+python manage.py syncdb
+
+
+在此过程中，您将被要求创建一个管理用户。 选择用户的用户名，电子邮件地址和密码。
+如果您使用了migrate上面的命令，你需要手动创建管理用户。 您可以通过键入以下内容创建管理用户：
+python manage.py createsuperuser
+
+
+系统将提示您输入用户的用户名，电子邮件地址和密码。
+一旦你有一个用户，你可以启动Django开发服务器，看看一个新的Django项目是什么样子。 您只应将其用于开发目的。 跑：
+python manage.py runserver 0.0.0.0:8000
+
+
+访问你的服务器的IP地址后面:8000在Web浏览器
+server_ip_address:8000
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+若如下报错则:
+  File "/usr/local/lib/python3.7/site-packages/django/db/backends/sqlite3/base.py", line 66, in <module>
+    check_sqlite_version()
+  File "/usr/local/lib/python3.7/site-packages/django/db/backends/sqlite3/base.py", line 63, in check_sqlite_version
+    raise ImproperlyConfigured('SQLite 3.8.3 or later is required (found %s).' % Database.sqlite_version)
+django.core.exceptions.ImproperlyConfigured: SQLite 3.8.3 or later is required (found 3.7.17).
+
+则需重新安装新版本的sqlite3:
+下载新版本的sqlite3
+http://www.sqlite.org/
+
+安装过程  略
+{{ tar && ./configure && make && make install }}
+
+yum install sqlite-devel
+cp sqlite-snapshot-201905091837/sqlite3 /usr/local/bin/ 
+cp sqlite-snapshot-201905091837/sqlite3 /usr/bin/
+
+
+在命令行下输入sqlite3就可以看到以下信息，说明安装成功了。
+[admin@localhost sqlite-autoconf-3081101]$ sqlite3 
+SQLite version 3.8.11.1 2015-07-29 20:00:57
+Enter ".help" for usage hints.
+Connected to a transient in-memory database.
+Use ".open FILENAME" to reopen on a persistent database.
+sqlite> 
+
+输入.quit就可以退出sqlite3。
+sqlite> .quit
+[admin@localhost sqlite-autoconf-3081101]$ 
+
+安装完需要重新安装python3环境（./configure && make && make install）
+
+然后执行
+Django默认帮我们做很多事情，比如User、Session 这些都需要创建表来存储数据，Django已经把这些模块帮我准备好了，我们只需要执行数据库同步，把相关表生成出来即可：
+python manage.py migrate
+然后重新启动项目
+python manage.py runserver  0.0.0.0:8000  （如果不加0.0.0.0:8000，则使用ip不能访问到界面）
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+简单应用：  https://zhuanlan.zhihu.com/p/33759818
+
+3 安装django （指定django版本为2.0）
+python3 -m pip install django==2.0  (最好配置alisa 然后直接使用python)
+python -m pip install uwsgi   #WSGI协议
+
+为了在终端中使用uwsgi命令，执行以下命令
+ln -s /usr/local/bin/python3.6/bin/uwsgi   /usr/bin/uwsgi   ##我的没有动  我find了下，默认是在/usr/local/bin下而且只有这么一个
+
+4 测试是否安装成功
+依次输入命令
+python
+import django
+django.VERSION
+我们可以看到输出了Django的版本号，说明安装成功。
+
+提示： 安装成功后 Django 位于 Python 安装目录的 site-packages 目录下。
+
+
+如果不清楚得，可以使用以下命令查看python安装目录
+python
+import sys
+print(sys.prefix) 
+>>> print(sys.prefix) 
+/usr/local
+则目录在：/usr/local/lib/
+
+
+
+二 创建django 项目
+1 进入我们得站点目录，创建django项目： testdj
+cd  /var/www     #这是我的项目目录。使用时候自行换成你自己的啊
+django-admin.py startproject testdj
+
+
+2 启动服务：
+cd testdj # 切换到我们创建的项目
+python manage.py runserver  （python manage.py runserver 0.0.0.0:8000可以做调试使用？）  
+
+
+3 配置启动项目的xml 文件
+进入到项目 目录下：
+cd /var/www/testdj/testdj
+
+在你的django项目下新建 testdj.xml，内容如下：
+<uwsgi>
+    <socket>127.0.0.1:8997</socket><!-- 内部端口，自定义 -->
+        <chdir>/var/www/testdj</chdir><!-- 项目路径 -->
+            <module>testdj.wsgi</module>
+                <processes>4</processes> <!-- 进程数 --> 
+    <daemonize>uwsgi.log</daemonize><!-- 日志文件 -->
+</uwsgi>
+
+chmod 777 ./testdj.xml
+
+
+4 配置nginx
+在/etc/nginx/vhosts/中新建 python.conf，加入以下内容
+server {
+    listen 8000; #暴露给外部访问的端口
+    server_name localhost;
+        charset utf-8;
+    location / {
+        include uwsgi_params;
+        uwsgi_pass 127.0.0.1:8997; #外部访问8000就转发到内部8997
+    }
+    location /static/ {
+        alias /var/www/testdj/blog/static/; #项目静态路径设置
+    }
+}
+重启nginx
+
+
+5.启动应用
+进入项目目录：
+uwsgi -x testdj.xml
+
+浏览器输入：
+ip地址：8000
+
+此时显示，当前ip不允许
+解决：
+进入项目 setting.py 修改
+ALLOWED_HOSTS = [ '192.168.2.68','localhost', '127.0.0.1']
+
+然后执行
+ps aux | grep uwsgi
+killall  -9 uwsgi
+
+
+重新启动
+uwsgi -x testdj.xml
+
+浏览器再次访问：成功
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

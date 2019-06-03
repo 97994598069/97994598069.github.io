@@ -1,0 +1,159 @@
+OSS介绍：
+阿里云对象存储服务（OSS）提供海量、安全、低成本、高可靠的云存储服务。适用于配置文件、图片、小视频等共享业务；
+
+容器服务访问OSS 数据是通过 ossfs 把 bucket 挂载到本地文件系统中，容器中的应用通过本地文件系统操作OSS上的数据，实现数据的访问、共享。
+
+
+使用OSS卷挂载时：
+随机或者追加写文件会导致整个文件的重写。
+元数据操作，例如list directory，性能较差，因为需要远程访问OSS服务器。
+多个客户端挂载同一个bucket时，用户自行处理并发。例如：避免多个客户端写同一个文件。
+不适合用在高并发读/写的场景，这样会让系统的load升高。
+
+
+创建OSS存储卷
+创建OSS Bucket:
+1.在OSS控制台创建一个Bucket，根据需求配置bucket的读写权限；
+2.在概览页查询访问bucket的Endpoint；
+3.可以在集群中一个节点挂载OSS Bucket测试是否可行；
+
+
+创建PV
+通过OSS卷创建PV资源类型，配置PV唯一性标签alicloud-pvname: pv-oss，“pv-oss”为PV Name；
+配置storageClassName: oss，标识此PV为oss存储类型，只会与oss类型的PVC绑定；
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-oss
+  labels:
+    alicloud-pvname: pv-oss
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  storageClassName: oss
+  flexVolume:
+    driver: "alicloud/oss"
+    options:
+      bucket: "docker"
+      url: "oss-cn-hangzhou.aliyuncs.com"
+      akId: "***"
+      akSecret: "***"
+      otherOpts: "-o max_stat_cache_size=0 -o allow_other"
+
+	  
+options支持的参数：
+bucket：目前只支持挂载 Bucket，不支持挂载 Bucket 下面的子目录或文件。
+url: OSS Bucket的endpoint，挂载 OSS 的接入域名。
+akId: 用户的 access id 值。
+akSecret：用户的 access secret 值。
+otherOpts: 挂载 OSS 时支持定制化参数输入，格式为: -o **。
+
+
+创建应用
+PVC通过配置selector，指定与创建的oss PV进行绑定；
+配置storageClassName: oss，表示至于OSS类型存储卷绑定；
+OSS为共享存储，可以同时由多个Pod挂载一个bucket；
+
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc-oss
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: oss
+  resources:
+    requests:
+      storage: 5Gi
+  selector:
+    matchLabels:
+      alicloud-pvname: pv-oss
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oss-static
+  labels:
+    app: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+        volumeMounts:
+          - name: pvc-oss
+            mountPath: "/data"
+          - name: pvc-oss
+            mountPath: "/data1"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - cd /data
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+        - name: pvc-oss
+          persistentVolumeClaim:
+            claimName: pvc-oss
+
+
+健康检查使用说明
+OSSFS通过s3fs进行bucket挂载，是在用户态挂载的文件系统(FUSE)；OSSFS在kubelet重置的时候会重新启动，这时容器内部的bind目录已经不可用，需要重启容器；配置健康检查能保证容器内oss目录不可用时重启容器，进而重新bind oss目录；（升级最近版本flexvolume可解决此问题）
+
+livenessProbe 参数说明：
+command：sh -c cd /oss-path；语法如上面示例所示，目录为容器内部的oss对应目录，多个目录时写一个即可；
+initialDelaySeconds：容器启动后开始检查的时间；
+periodSeconds：检查时间周期；
+
+
+
+高可用验证
+创建服务：
+# kubectl create -f oss.yaml
+persistentvolume "pv-oss" created
+persistentvolumeclaim "pvc-oss" created
+deployment.apps "oss-static" created
+
+# kubectl get pod
+NAME                          READY     STATUS    RESTARTS   AGE
+oss-static-5d8cd48d96-9gc6c   1/1       Running   0          3s
+
+
+OSS Bucket上创建临时文件：
+# kubectl exec oss-static-5d8cd48d96-9gc6c ls /data | grep tmpfile
+# kubectl exec oss-static-5d8cd48d96-9gc6c touch /data/tmpfile
+# kubectl exec oss-static-5d8cd48d96-9gc6c ls /data/ | grep tmpfile
+tmpfile
+
+
+删除Pod，查看新创建Pod数据：
+# kubectl delete pod oss-static-5d8cd48d96-9gc6c
+# kubectl get pod
+NAME                          READY     STATUS        RESTARTS   AGE
+oss-static-5d8cd48d96-bfwb2   1/1       Running       0          14s
+
+# kubectl exec oss-static-5d8cd48d96-bfwb2 ls /data | grep tmpfile
+tmpfile
+
+
+
+
+
+
+

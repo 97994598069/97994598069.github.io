@@ -1,0 +1,58 @@
+官网:
+https://www.vmware.com/cn.html
+相关信息:
+电子邮箱:zcg00w@126.com
+验证邮箱:zcg00w@126.com
+密码:Bjjy.123
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+相关了解:
+vSphere、 ESXi、Vcenter、vSphere Client关系
+vSphere是什么？
+vSphere 是VMware公司发布的一整套产品包,是VMware公司推出的一套服务器虚拟化解决方案，包含VMware ESXi hypervisor，VMware vCenter Server等产品
+
+
+ESXi是什么？
+ESXi是一个hypervisor(虚拟机管理程序)，就是一个类似于Xen的虚拟层，用于把X86服务器的硬件进行虚拟化。你在ESXi上面安装其他OS就像在其他硬件上安装OS一样。一旦在一台X86服务器硬件上安装了ESXi，底层的硬件就被虚拟化了，这意味着，你可以用这台服务器创建、配置、多个虚拟机和OS(Linux和Windows都行)
+
+
+vCenter Server是什么？
+vCenter Server服务器是用于管理一个或者多个ESXi服务器的工具.
+
+
+vSphere Client是什么？
+vSphere Client就是通过它远程连接控制ESXi上的客户端程序。vSphere Client一次只能管理一个ESXi的主机，而vCenter Server可以同时管理多个ESXi服务器。
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+ESXI安装:
+http://idc.wanyunshuju.com/li/580.html
+链接：https://pan.baidu.com/s/1oz9Wq-UX4XA9puEa-vAMNA 
+提取码：s9b1 
+认证许可：  百度
+
+
+
+
+
+vCenter安装:
+https://cloud.tencent.com/developer/news/246135
+https://blog.51cto.com/3701740/2112464
+
+镜像下载下来之后，直接解压就行，然后运行inistaller.exe  E:\vcenter\vcsa-ui-installer\win32
+
+备注：安装的时候会有一步是设置root用户以及root密码，此时如果sphere.local   Bjjy.1234的话
+那么登陆172.10.10.154  (安装的时候设置的ip)的时候的用户名和密码就是administrator@sphere.local    Bjjy.1234
+
+
+######################################################################################################################################################
+远程装机:
+https://www.bbsmax.com/A/x9J2Dvrjd6/
+
+
+
+
+
+
