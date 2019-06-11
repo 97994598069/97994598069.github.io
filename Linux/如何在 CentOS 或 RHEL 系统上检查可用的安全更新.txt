@@ -1,0 +1,75 @@
+在这篇文章中，我们不但会提供所需的信息。而且，我们会介绍一些额外的命令，可以帮你获取指定安全更新的详实信息。
+希望这样可以启发你去了解并修复你列表上的那些漏洞。一旦有安全漏洞被公布，就必须更新受影响的软件，这样可以降低系统中的安全风险。
+
+对于 RHEL 或 CentOS 6 系统，运行下面的 Yum 命令 来安装 yum 安全插件。
+yum -y install yum-plugin-security
+
+在 RHEL 7&8 或是 CentOS 7&8 上面，这个插件已经是 yum 的一部分了，不用单独安装。
+要列出全部可用的补丁（包括安全、Bug 修复以及产品改进），但不安装它们：
+yum updateinfo list available
+
+要统计补丁的大约数量，运行下面的命令：
+yum updateinfo list available | wc -l
+
+
+想列出全部可用的安全补丁但不安装，以下命令用来展示你系统里已安装和待安装的推荐补丁：
+yum updateinfo list security all
+
+
+要显示所有待安装的安全补丁：
+yum updateinfo list security all | grep -v "i"
+
+
+
+要统计全部安全补丁的大致数量，运行下面的命令：
+yum updateinfo list security all | wc -l
+
+
+下面根据已装软件列出可更新的安全补丁。这包括 bugzilla（bug 修复）、CVE（知名漏洞数据库）、安全更新等：
+yum updateinfo list security 或者 yum updateinfo list sec
+
+
+显示所有与安全相关的更新，并且返回一个结果来告诉你是否有可用的补丁：
+yum --security check-update
+
+
+列出所有可用的安全补丁，并且显示其详细信息：
+yum info-sec
+
+
+如果你想要知道某个更新的具体内容，可以运行下面这个命令：
+yum updateinfo RHSA-2019:0163
+
+
+跟之前类似，你可以只查询那些通过 CVE 释出的系统漏洞：
+yum updateinfo list cves
+
+
+
+你也可以查看那些跟 bug 修复相关的更新，运行下面的命令：
+yum updateinfo list bugfix | less
+
+
+要想得到待安装更新的摘要信息，运行这个：
+yum updateinfo summary
+
+
+如果只想打印出低级别的安全更新，运行下面这个命令。类似的，你也可以只查询重要级别和中等级别的安全更新。
+yum updateinfo list sec | grep -i "Low"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
