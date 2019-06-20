@@ -1,0 +1,7 @@
+	location ~ .*\.(gif|jpeg|jpg|bmp|png|swf)$ {
+		expires 7d;
+		root html/blog;
+	}
+	location ~ .*\.(js|css)?$ {
+		expires 7d;
+	}
