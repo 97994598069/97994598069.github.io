@@ -1,0 +1,170 @@
+一，zabbix 分布式   proxy安装
+
+Zabbix分布式监控
+1.	假如3000服务器，1000在杭州、1000在上海、1000在深圳，Zabbix服务器部署在杭州
+2.	如果不使用分布式的话，Zabbix服务器得跟3000台服务器交互
+3.	如果不使用分布式的话，不一定异地的所有服务器都有外网
+4.	Zabbix Server建议都使用分布式
+
+
+实战环境
+5.	Zabbix服务器：192.168.237.49
+6.	Zabbix分布式Proxy：192.168.237.50
+7.	Zabbix客户端：192.168.237.51
+
+
+分布式架构
+8.	Zabbix Server -> Zabbix Proxy -> Zabbix Agent(多台)
+9.	Agent的Server白名单要配置Proxy
+
+
+Zabbix分布式需要安装Zabbix Proxy
+10.	先安装Mysql，缓存监控数据
+11.	安装Zabbix Proxy
+12.	需要初始化数据库
+
+
+安装Mysql服务器，大家也可以使用编译安装
+13.	yum install mariadb-server mariadb mariadb-devel -y
+14.	systemctl restart mariadb
+15.	systemctl enable mariadb
+
+
+Zabbix Proxy安装脚本
+yum install -y tar gcc make gcc-c++ net-snmp-devel libxml2-devel libcurl-devel pcre-devel useradd -s /sbin/nologin zabbix
+cd /usr/local/src/
+wget 'https://nchc.dl.sourceforge.net/project/zabbix/ZABBIX%20Latest%20Stable/4.0.3/zabbix-4.0.3.tar.gz'
+tar -zxvf zabbix-4.0.3.tar.gz
+cd zabbix-4.0.3
+./configure --prefix=/usr/local/zabbix --enable-proxy --enable-agent --with-mysql --with-net-snmp --with-libcurl --with-libxml2
+make && make install
+chown zabbix:zabbix /usr/local/zabbix/ -R
+
+
+验证Proxy的安装
+16.	二进制文件/usr/local/zabbix/sbin/zabbix_proxy
+17.	/usr/local/zabbix/sbin/zabbix_proxy --version
+
+
+Mysql数据初始化
+18.	create database zabbix character set utf8 collate utf8_bin;
+19.	grant all privileges on zabbix.* to zabbix@'127.0.0.1' identified by 'zabbixpwd';
+20.	set names utf8;
+21.	use zabbix;
+22.	source /usr/local/src/zabbix-4.0.3/database/mysql/schema.sql;
+
+
+Zabbix分布式Proxy配置/usr/local/zabbix/etc/zabbix_proxy.conf
+Hostname=bjproxy
+Server=192.168.237.49
+LogFile=/usr/local/zabbix/zabbix_proxy.log
+DBHost=127.0.0.1
+DBName=zabbix
+DBUser=zabbix
+DBPassword=zabbixpwd
+DBPort=3306
+ConfigFrequency=60
+
+Zabbix网页配置
+27.	管理 -> agent程序代理
+28.	观察最近出现的时间，没有超过60s就证明proxy添加正常
+
+
+
+
+二,zabbix分布式监控linux
+分布式架构
+1.	Zabbix Server -> Zabbix Proxy -> Zabbix Agent(多台)
+2.	Zabbix Agent的白名单要配置Proxy的
+
+
+实战环境
+3.	Zabbix服务器：192.168.237.49
+4.	Zabbix分布式Proxy：192.168.237.50
+5.	Zabbix客户端：192.168.237.51
+
+
+客户端Agent的配置
+PidFile=/usr/local/zabbix/zabbix_agentd.pid
+LogFile=/usr/local/zabbix/zabbix_agentd.log
+Hostname=www_001
+Server=192.168.237.50
+ServerActive=192.168.237.50
+UnsafeUserParameters=1
+Include=/usr/local/zabbix/etc/zabbix_agentd.conf.d/*.conf
+
+
+添加主机
+6.	使用分布式监控
+7.	使用Linux模板
+
+添加多台agent
+
+分布式监控的数据交互
+8.	Zabbix Proxy 去监控Agent收集数据
+9.	Zabbix Proxy收集完数据给Zabbix Server
+
+
+
+三，自动发现
+为什么要用主机自动发现和自动注册
+1.	手动添加主机比较麻烦
+2.	得填写主机IP，应用模板等等
+3.	主机自动发现和自动注册能够帮我们自动添加主机
+
+
+Zabbix自动发现实战
+4.	Zabbix添加自动发现
+5.	创建动作，假如说添加主机、应用模板
+
+
+自动发现建议
+6.	使用Zabbix Agent去自动发现，也就是只有部署了Zabbix客户端的才能被发现
+7.	使用的自动发现Key建议为：system.uname
+
+
+Action实现
+8.	发现到了后自动添加主机
+9.	发现Down自动移除主机，一般不建议
+
+
+主机自动发现和自动注册
+1.	自动发现主机名设置比较麻烦
+2.	自动发现配置起来比较麻烦，没有自动注册好
+3.	自动注册相对来说比自动发现好用
+4.	使用自动注册的话，添加主机的时候主机名使用Agent配置的Hostname
+
+
+主机自动注册的流程
+5.	zabbix客户端需要配置ServerActive
+6.	zabbix客户端把自己的元数据提供给zabbix服务器或zabbix分布式proxy
+7.	zabbix服务器添加动作，当收到元数据时候自动添加主机、链接模板等
+
+
+Zabbix客户端配置HostMetadataItem
+PidFile=/usr/local/zabbix/zabbix_agentd.pid
+LogFile=/usr/local/zabbix/zabbix_agentd.log
+Hostname=www_001
+Server=192.168.237.50
+ServerActive=192.168.237.50
+UnsafeUserParameters=1
+Include=/usr/local/zabbix/etc/zabbix_agentd.conf.d/*.conf
+HostMetadataItem=system.uname
+
+
+
+Zabbix网页上配置自动注册自动添加主机
+8.	事件源选择自动注册
+9.	创建动作
+10.	动作中指定条件，假如说来自哪个Proxy，元数据包含什么（主机名）
+11.	验证自动注册
+
+
+Zabbix的自动注册
+12.	添加主机会把Hostname填上
+13.	只需要一个Action就好
+14.	需要注意每个Agent都要加上HostMetadataItem这个配置
+
+
+
+

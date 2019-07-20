@@ -1,0 +1,220 @@
+一,配置邮箱报警
+
+Zabbix告警
+1.	网页上能直接看到触发器告警
+2.	一般不能一直看网页，所以触发器触发后我们要发送邮件、微信、钉钉等通知我们
+
+Zabbix告警原理
+3.	触发器触发后，可以配置对应的动作
+4.	在动作里可以发邮件、微信、钉钉、短信等
+
+
+告警脚本的放置位置见配置/usr/local/zabbix/etc/zabbix_server.conf
+LogFile=/usr/local/zabbix/zabbix_server.log
+DBHost=127.0.0.1
+DBName=zabbix
+DBUser=zabbix
+DBPassword=zabbixpwd
+DBPort=3306
+Timeout=30
+AlertScriptsPath=/usr/local/zabbix/alertscripts
+ExternalScripts=/usr/local/zabbix/externalscripts
+LogSlowQueries=3000
+
+
+邮件告警注意事项
+5.	服务器往外的25端口一般被云厂商禁止
+6.	所以建议使用465端口发送邮件
+7.	qq邮箱、163邮箱需要配置开启smtp
+
+
+发邮件的python脚本/usr/local/zabbix/alertscripts/zabbix_sendmail.py
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+from email.mime.text import MIMEText
+from email.header import Header
+from smtplib import SMTP_SSL
+import sys
+
+smtpaddr = 'smtp.qq.com'
+myemail='361589194@qq.com'
+#password='mypassword'
+f = open('/usr/local/zabbix/.passwd','r')
+password = f.readline().strip()
+
+recvmail=sys.argv[1]
+subject=sys.argv[2]
+content=sys.argv[3]
+
+msg = MIMEText("""%s"""%(content), "plain", "utf-8")
+msg['Subject'] = Header(subject, 'utf-8').encode()
+msg['From'] = myemail
+msg['To'] =  recvmail
+
+
+try:
+  smtp = SMTP_SSL( smtpaddr )
+  smtp.login(myemail, password)
+  smtp.sendmail(myemail, recvmail.split(','), msg.as_string())
+  smtp.quit()
+  print("success")
+except Exception as e:
+  print("fail: "+str(e))
+
+  
+测试脚本
+/usr/local/zabbix/alertscripts/zabbix_sendmail.py 361589194@qq.com 'zabbix disk' 'content: disk > 90%'
+
+
+Zabbix邮件告警配置
+8.	写一个邮件告警的脚本，需要测试成功
+9.	报警媒介添加邮件告警
+10.	用户设置报警媒介
+11.	创建触发器动作
+
+
+报警媒介添加邮件告警
+12.	自定义脚本
+13.	脚本名称：zabbix_sendmail.py
+14.	脚本需要三个参数
+{ALERT.SENDTO}
+{ALERT.SUBJECT}
+{ALERT.MESSAGE}
+
+
+用户添加报警媒介
+15.	类型选择邮件告警
+16.	触发器有多种触发，从信息 -> 灾难，可定义接收哪种类型的告警
+17.	用户需要对服务器可读
+
+创建触发器动作
+18.	动作有多种事件源，告警的选择触发器
+19.	邮件主题定义 -> {ALERT.SUBJECT}
+20.	邮件内容定义 -> {ALERT.MESSAGE}
+21.	操作添加发送邮件告警
+22.	恢复添加发送邮件告警
+
+
+主题、内容定义
+1.	主机名变量：{HOST.NAME1}
+2.	主机IP变量：{HOST.IP1}
+
+延迟告警
+3.	一般来说不会有问题马上发送告警，例如检测80端口
+4.	定义持续时间
+5.	定义step
+
+
+
+二,配置微信报警
+企业微信地址，个人可注册
+https://work.weixin.qq.com/
+
+登录企业微信
+1.	企业 -> 微工作台里可以直接微信关注，无需要下载企业微信
+2.	通讯录里的账号在发微信脚本中要用到
+3.	应用与小程序可创建应用
+
+
+发微信的python脚本/usr/local/zabbix/alertscripts/zabbix_wx.py
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import json
+import sys
+import urllib,urllib2
+
+agentid = 'xxx'
+corpid = 'xxx'
+corpsecret = 'xxx'
+
+#get tocken
+gettoken_url = 'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=' + corpid + '&corpsecret=' + corpsecret
+
+token_file = urllib2.urlopen(gettoken_url)
+token_data = token_file.read().decode('utf-8')
+token_json = json.loads(token_data)
+my_token = token_json['access_token']
+
+#send wechart 
+touser=sys.argv[1]  #many user: 'zhangsan|wangwu'
+content=sys.argv[2] #content
+post_content = {
+        "touser":touser,
+        "agentid":agentid,
+        "msgtype": "text",
+        "text":{
+                "content":content,
+        }
+}
+json_content = json.dumps(post_content)
+url = 'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=' + my_token
+response = urllib2.urlopen(url,json_content)
+print(response.read().decode('utf-8'))
+
+测试脚本
+/usr/local/zabbix/alertscripts/zabbix_wx.py 'zhuang_weihong' 'disk is not enough'
+
+Zabbix微信告警配置步骤
+4.	写一个微信告警的脚本，这个已经测试成功
+5.	报警媒介添加微信告警
+6.	用户设置报警媒介
+7.	创建触发器动作
+
+
+
+三,配置钉钉报警
+钉钉企业的地址
+https://oa.dingtalk.com/
+
+钉钉企业告警的注意事项
+1.	通讯录管理里的userid发钉钉需要用到
+2.	工作台里可自建应用
+3.	微应用管理可以管理应用
+4.	开发账号管理可以查看密码信息
+
+发送钉钉告警的脚本/usr/local/zabbix/alertscripts/zabbix_dd.py
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+#curl 'https://oapi.dingtalk.com/gettoken?corpid=xxx&corpsecret=xxx'
+import json,urllib2,sys
+
+appkey = 'xxx'
+appsecret = 'xxx'
+agentid = 'xxx'
+touser = sys.argv[1]
+content = sys.argv[2]
+
+tockenurl = 'https://oapi.dingtalk.com/gettoken?corpid=' + appkey + "&corpsecret=" + appsecret
+tockenresponse = urllib2.urlopen(tockenurl)
+tockenresult = json.loads(tockenresponse.read().decode('utf-8'))
+tocken =  tockenresult['access_token']
+
+sendurl = 'https://oapi.dingtalk.com/message/send?access_token=' + tocken
+headers = {
+'Content-Type':'application/json'
+}
+main_content = {
+"touser": touser,
+"toparty": "",
+"agentid": agentid,
+"msgtype": "text",
+"text": {
+"content": content
+}
+}
+main_content = json.dumps(main_content)
+req = urllib2.Request(sendurl,headers=headers)
+response = urllib2.urlopen(req, main_content.encode('utf8'))
+print(response.read().decode('utf-8'))
+
+手动发钉钉告警测试
+/usr/local/zabbix/alertscripts/zabbix_dd.py manager1391 'zabbix告警'
+
+Zabbix钉钉告警配置步骤
+5.	写一个钉钉告警的脚本
+6.	报警媒介添加钉钉告警
+7.	用户设置报警媒介
+8.	创建触发器动作
+
+
+

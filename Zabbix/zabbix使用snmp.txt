@@ -1,0 +1,157 @@
+一，snmp的安装
+SNMP简单介绍
+1.	Simple Network Management Protocol。简单网络管理协议
+2.	使用snmp协议可以方便我们监控服务器、交换机、路由器等
+
+
+SNMP监控实战说明
+3.	监控Linux、Windows服务器建议使用Agent
+4.	网络设备一般使用SNMP，监控网络接口存活和网络接口流量
+
+
+使用SNMP监控说明
+5.	被监控服务器需要安装snmp服务
+6.	路由器、交换机可以开启SNMP服务器，需要自己设置SNMP的密码
+7.	Zabbix服务器通过snmp协议去监控
+
+
+Snmp的版本
+8.	v1基于community进行控制访问
+9.	v2c也是基于community进行控制访问，但比v1增强了部分功能。实战中使用v2c
+10.	v3加强了认证
+
+
+实战
+11.	Zabbix服务器：192.168.237.49
+12.	被监控的服务器：192.168.237.50
+
+Centos Snmp服务器安装
+yum install -y net-snmp net-snmp-utils
+
+
+Snmp的配置/etc/snmp/snmpd.conf
+com2sec notConfigUser  default   shijiangepwd
+group   notConfigGroup v1           notConfigUser
+group   notConfigGroup v2c           notConfigUser
+view    systemview    included   .1.3.6.1
+access  notConfigGroup ""      any       noauth    exact  systemview none none
+syslocation hangzhou
+syscontact module@hangzhou.com
+dontLogTCPWrappersConnects yes
+
+
+Snmp配置详解
+13.	com2sec notConfigUser  default     shijiangepwd  #用户名、访问IP白名单（default代表所有ip访问）、密码
+14.	group   notConfigGroup v2c           notConfigUser #组名、SNMP版本、用户名
+15.	view    systemview    included   .1.3.6.1   #视图名称、包含（incl/excl）、subtree
+16.	access  notConfigGroup ""      any       noauth    exact  systemview none none  #组名、内容、SNMP版本any所有、认证等级、systemview读权限、无写权限、无trapper权限
+
+
+Snmp开启
+17.	systemctl start snmpd
+18.	systemctl enable snmpd
+
+
+
+
+
+
+SNMP的监控基于OID
+1.	OID，Object Identifier对象标识符
+2.	OID由数字组成比较难记
+
+
+使用Oid获取监控数据
+3.	snmpwalk -v 2c -c shijiangepwd 192.168.237.50 .1.3.6.1.4.1.2021.10.1.3 #监控cpuload
+4.	.1.3.6.1.2.1.2   #监控网卡信息
+5.	SNMP基于Oid，Oid树图的理解有助于权限的开通
+
+
+Oid的难点
+6.	难记，数字都比较难记。例如IP一般我们记不住，记域名
+7.	类似我们会记得www.baidu.com，不会去记IP
+8.	但实际访问却是基于IP的，实际监控是基于OID的
+
+
+MIB库
+9.	由于Oid的难记，产生了MIB。类似DNS服务器，把域名和IP的关系对应上
+10.	MIB，Management Information Base，管理信息库。把oid跟名字对应起来
+11.	MIB库有多个，网络相关的mib，系统相关的mib库
+
+
+
+使用名字获取监控信息
+12.	laLoad
+13.	ifDescr
+14.	ifOperStatus
+15.	ifHCOutOctets 网口出的总流量(byte)
+16.	ifHCInOctets 网口入的总流量
+17.	bps
+
+
+网卡流量监控注意，建议使用64位的去监控
+18.	32位比较容易溢出，2^32  4294967296
+19.	64位的监控准
+
+
+
+三，zabbix使用snmp监控实用
+Zabbix添加主机有多种接口
+1.	Agent
+2.	Jmx
+3.	Ipmi
+4.	SNMP，Zabbix的SNMP帮我们封装好的，能够直接获取监控值
+
+
+使用SNMP接口监控服务器实战，交换机路由器类似
+5.	使用Snmp接口
+6.	端口使用默认161端口
+
+
+Snmp密码修改（community修改）
+7.	管理-> 一般->宏定义
+8.	{$SNMP_COMMUNITY} = shijiangepwd
+
+
+Snmp监控的添加
+9.	ifDescr： 1.3.6.1.2.1.2.2.1.2
+10.	ifOperStatus： 1.3.6.1.2.1.2.2.1.8
+11.	ifHCInOctets： 1.3.6.1.2.1.31.1.1.1.6
+12.	ifHCOutOctets： 1.3.6.1.2.1.31.1.1.1.10
+
+
+Zabbix使用SNMP监控
+13.	网卡名测试
+14.	网卡流量、网卡存活
+15.	添加一个网口，网口是否开启
+
+
+
+四，使用snmp自动发现
+为什么需要自动发现
+1.	假如说交换机有10+个物理网口
+2.	需要批量监控所有网口的状态和网口的流量
+
+手动添加监控
+3.	ifOperStatus： 1.3.6.1.2.1.2.2.1.8  .1 .2 .3等等
+4.	ifHCInOctets： 1.3.6.1.2.1.31.1.1.1.6
+5.	ifHCOutOctets： 1.3.6.1.2.1.31.1.1.1.10
+6.	比较麻烦，名字还无法对应
+
+Zabbix使用snmp自动发现
+7.	discovery[{#IFDESCR},1.3.6.1.2.1.2.2.1.2]
+8.	snmp自动发现自动添加索引变量：{#SNMPINDEX}
+
+Zabbix使用自动发现监控网卡状态和流量
+9.	discovery[{#IFDESCR},1.3.6.1.2.1.2.2.1.2]
+10.	ifOperStatus：1.3.6.1.2.1.2.2.1.8.{#SNMPINDEX}
+11.	ifHCInOctets：1.3.6.1.2.1.31.1.1.1.6.{#SNMPINDEX}
+12.	ifHCOutOctets：1.3.6.1.2.1.31.1.1.1.10.{#SNMPINDEX}
+
+
+使用模板监控
+13.	Zabbix默认有提供SNMP的模板
+14.	Linux SNMP的模板
+15.	Cisco SNMP的模板
+
+

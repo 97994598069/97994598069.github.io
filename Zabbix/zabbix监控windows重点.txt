@@ -1,0 +1,56 @@
+一,安装windows客户端
+Zabbix监控Windows环境说明
+1.	zabbix server的ip：xxx
+2.	被监控windows的ip：xxx
+
+
+下载Zabbix Agent
+http://www.zabbix.com/download
+ 
+Windows安装zabbix agent
+3.	解压到D:\Program Files\zabbix_agents-4.0.0
+
+编辑配置文件D:\Program Files\zabbix_agents-4.0.0\conf\zabbix_agentd.win.conf
+LogFile=D:\Program Files\zabbix_agents-4.0.0\zabbix_agentd.log
+Server=xxx
+ServerActive=xxx
+Hostname=xxx
+ 
+cmd中执行命令注册为服务
+4.	d:
+5.	"D:\Program Files\zabbix_agents-4.0.0\bin\zabbix_agentd.exe" --config "D:\Program Files\zabbix_agents-4.0.0\conf\zabbix_agentd.win.conf" --install
+
+
+cmd运行
+
+6.	查看日志
+7.	查看监听netstat -an|find "10050"
+
+
+
+二,监控windows
+zabbix_get获取windows信息
+zabbix_get -s xxx -k system.uname
+zabbix_get -s xxx -k vm.memory.size[free]
+zabbix_get -s xxx -k vfs.fs.size[C:,pfree]
+
+
+windows防火墙放开10050端口
+1.	防火墙关闭的可以跳过这步
+2.	高级设置->入站规则->新建规则->端口->10050->允许连接->所有
+ 
+zabbix页面上添加windows主机
+3.	直接应用windows模板
+4.	验证Windows监控是否正常
+ 
+编写一个最简单的bat脚本D:\Program Files\zabbix_agents-4.0.0\echo.bat
+@echo off
+echo "100"
+
+
+zabbix配置添加D:\Program Files\zabbix_agents-4.0.0\conf\zabbix_agentd.win.conf
+UserParameter=echo.shijiange,D:\Program Files\zabbix_agents-4.0.0\echo.bat
+
+
+
+

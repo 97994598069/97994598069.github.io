@@ -1,0 +1,99 @@
+一，安装grafana
+Zabbix查看图形两种方法
+1.	需要创建Graph
+2.	直接在Latest Data搜索，然后自己组合查看
+
+
+Zabbix图形
+3.	Zabbix图形需要创建
+4.	Zabbix图形组合比较麻烦
+
+
+Grafana简介
+5.	Grafana自身并不存储数据，数据从其它地方获取。需要配置数据源
+6.	Grafana支持从Zabbix中获取数据
+7.	Grafana优化了图形的展现，可以用来做监控大屏
+8.	Grafana支持用户的认证，运维安全
+
+
+
+实战环境
+9.	Zabbix Server: 192.168.237.49
+10.	Grafana: 192.168.237.50
+
+
+Grafana下载地址
+http://docs.grafana.org/installation/rpm/
+
+
+Grafana安装启动
+wget 'https://dl.grafana.com/oss/release/grafana-6.0.2-1.x86_64.rpm'
+yum -y localinstall grafana-6.0.2-1.x86_64.rpm
+systemctl enable grafana-server
+systemctl start grafana-server
+
+
+
+Grafana访问
+14.	默认用户名密码都是admin
+15.	需要修改密码，如果是放在公网的话，密码一定要有复杂性
+
+
+二，简单使用及插件安装
+Grafana的使用
+1.	需要先创建dashboard，然后再创建图形
+2.	每次操作都需要save保存，类似代码写完提交到代码管理服务器一样
+
+
+Grafana的数据源介绍
+3.	支持Influxdb等
+4.	默认不支持去Zabbix读取数据，需要安装插件
+
+
+Grafana安装Zabbix插件
+5.	grafana-cli plugins list-remote
+6.	grafana-cli plugins list-remote|grep -i zabbix
+7.	grafana-cli plugins install alexanderzobnin-zabbix-app
+8.	插件安装有时候比较慢，可以下载离线的zabbix插件，放到/var/lib/grafana/plugins，解压
+9.	systemctl restart grafana-server
+
+
+Grafana开启Zabbix插件
+plugins -> apps -> zabbix -> enable
+
+
+
+三，Grafana读取zabbix数据并展示
+Grafana配置Zabbix数据源
+1.	http://xxx.xxx.xxx.xxx/zabbix/api_jsonrpc.php
+2.	选择Zabbix的版本
+3.	配置Zabbix用户名密码
+4.	添加数据源成功会有提示
+
+Grafana面板中添加图形
+5.	CPU负载，CPU时间
+6.	服务器流量
+
+Granfana面板
+7.	Grafana面板中添加单一状态
+8.	Grafana添加Zabbix告警
+
+
+
+三，Grafana高级变量的使用
+Grafana展现Zabbix数据
+1.	单台服务器的流量比较好展现，但多台服务器的流量得手动创建图形，比较麻烦
+2.	Grafana的变量功能让我们可以选择展现哪台服务器的流量
+
+
+Zabbix添加监控项目的顺序
+3.	主机组
+4.	主机
+5.	监控项目(指定应用集)
+
+
+Grafana变量的使用
+6.	主机组变量： group: *
+7.	主机变量：     host: $group.*
+
+

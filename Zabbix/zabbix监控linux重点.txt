@@ -1,0 +1,171 @@
+添加监控项目有多种方式
+1.	simple check，被监控的服务器无需安装客户端，如ping，端口检测之类的
+2.	zabbix agent，被动式监控服务器
+3.	zabbix agent(active)，主动式监控服务器
+4.	snmp check，使用snmp协议去获取监控信息
+5.	zabbix trapper，主动式监控
+6.	External check，zabbix server上可编写监控脚本
+7.	Jmx agent，监控java进程
+
+
+实战环境
+zabbix server: 192.168.237.49
+被监控服务器: 192.168.237.50
+
+客户端监控、简单监控比较
+8.	能获取到更多的监控信息，例如cpu、内存等
+9.	zabbix客户端内置了很多key，方便我们监控基本硬件信息
+10.	zabbix客户端能够自定义监控，方便我们监控部署的应用
+
+Zabbix Agent编译安装
+yum install -y gcc gcc-c++ make pcre-devel
+
+useradd -s /sbin/nologin zabbix
+
+cd /usr/local/src/
+wget 'https://nchc.dl.sourceforge.net/project/zabbix/ZABBIX%20Latest%20Stable/4.0.3/zabbix-4.0.3.tar.gz'
+tar -zxvf zabbix-4.0.3.tar.gz
+cd zabbix-4.0.3
+./configure --prefix=/usr/local/zabbix --enable-agent
+make && make install
+
+chown zabbix:zabbix -R /usr/local/zabbix/
+
+环境变量配置
+PATH=$PATH:/usr/local/zabbix/sbin/:/usr/local/zabbix/bin/
+
+zabbix agent配置，Server和ServerActive上配置的是zabbix server的ip
+PidFile=/usr/local/zabbix/zabbix_agentd.pid
+LogFile=/usr/local/zabbix/zabbix_agentd.log
+Hostname=xxx
+Server=xxx
+ServerActive=xxx
+UnsafeUserParameters=1
+Include=/usr/local/zabbix/etc/zabbix_agentd.conf.d/*.conf
+
+zabbix agent启动
+/usr/local/zabbix/sbin/zabbix_agentd
+
+
+二，监控cpu、内存、磁盘、网络
+zabbix_get
+1.	zabbix提供一个zabbix_get工具，可以跟zabbix agent通讯获取监控信息
+2.	使用方式：zabbix_get -s xxx -k xxx
+3.	zabbix agent查看所有可监控项目：zabbix_agentd -p
+
+监控cpu负载
+key: system.cpu.load[all,avg1]     Float型
+key: system.cpu.load[all,avg5]  Float型
+key: system.cpu.load[all,avg15] Float型
+
+
+监控cpu使用和空闲
+system.cpu.util[,iowait,] Float型
+system.cpu.util[,system,] Float型
+system.cpu.util[,user,] Float型
+system.cpu.util[,idle,] Float型
+
+
+监控剩余内存(buffers\cached实际上也是剩余的)
+vm.memory.size[available]
+
+监控磁盘
+名称：Disk pfree on $1
+名称：inode pfree on $1
+vfs.fs.size[/,pfree]  Float型
+vfs.fs.inode[/,pfree]  Float型
+
+
+监控流量
+net.if.in[eth0]			整形(每秒速率) 默认返回字节数，需要*8   
+net.if.out[eth0]   整形(每秒速率) 默认返回字节数，需要*8
+
+
+Shell计算流量
+onetime=$(ifconfig|grep eth0 -A 6|grep 'RX packets'|awk '{print $5}')
+sleep 30
+twotime=$(ifconfig|grep eth0 -A 6|grep 'RX packets'|awk '{print $5}')
+echo "incoming traffic is $((($twotime-$onetime)/30*8))bps"
+
+onetime=$(ifconfig|grep eth0 -A 6|grep 'TX packets'|awk '{print $5}')
+sleep 30
+twotime=$(ifconfig|grep eth0 -A 6|grep 'TX packets'|awk '{print $5}')
+echo "outer traffic is $((($twotime-$onetime)/30*8))bps"
+
+
+
+
+zabbix客户端的两种方式
+1.	主动式
+2.	被动式，默认使用的被动式
+
+被动式
+zabbix服务器主动去被监控的服务器收集信息，类似zabbix_get
+
+zabbix主动式的介绍
+3.	客户端 -> zabbix服务器，获取主动式需要汇报的key和时间间隔
+4.	客户端采集数据汇报给zabbix
+5.	相对于被动式，客户端主动汇报监控数据会减小zabbix服务器的压力
+
+
+主动式监控添加
+6.	需要主机名一致
+7.	需要zabbix server的10051端口放开
+8.	添加两个主动式监控
+
+
+抓包查看主动式监控
+9.	重启agent
+10.	抓包
+
+
+
+三,使用模板监控linux
+两种模板
+1.	系统自带模板，Zabbix自带了很多实用的模板
+2.	自定义模板
+
+使用自带模板监控Linux
+Template OS Linux
+
+可根据自己需求调整模板
+不使用的要及时，降低mysql的压力
+
+
+
+四,使用自定义key监控linux
+zabbix自定义key监控
+1.	zabbix agent提供了很多可监控的信息
+2.	但如果有需求，例如监控mysql等，自带的监控项无法满足我们的需求
+
+
+自定义key说明
+3.	所有语言，只要能运行返回结果即可
+4.	运维常用的语言：Shell、Python
+
+
+自定义key
+5.	无参数自定义key
+6.	有参数自定义key
+7.	使用自定义Shell脚本监控内存，一般脚本只需要输出数字即可
+
+
+无参数shell脚本/tmp/memavailable.sh
+free  -m | grep 'Mem:' |awk '{print $NF}'
+
+
+有参数shell脚本/tmp/mem.sh
+case "$1" in 
+  "available") free  -m | grep 'Mem:' |awk '{print $NF}';;
+  "total") free  -m | grep 'Mem:' |awk '{print $2}';;
+  "used") free  -m | grep 'Mem:' |awk '{print $3}';;
+  *) echo "not supported";;
+esac
+
+
+Zabbix自定义key的配置/usr/local/zabbix/etc/zabbix_agentd.conf.d/mem.conf
+UserParameter=mem.available,sh /tmp/memavailable.sh
+UserParameter=mem.check[*],sh /tmp/mem.sh $1
+
+
+

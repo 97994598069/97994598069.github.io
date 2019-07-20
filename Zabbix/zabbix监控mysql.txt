@@ -1,0 +1,60 @@
+Mysql的基础监控
+1.	Zabbix Agent的安装
+2.	进程存活
+3.	检测端口
+
+
+Mysql的高级监控说明
+4.	Mysql提供show global status可以实现对Mysql的高级监控
+5.	高级监控包含监控Mysql连接数，增删改查数，流量等
+
+
+开通最小权限用户，保证安全
+6.	grant usage on *.* to 'monitor'@'127.0.0.1' identified by 'shijiangepwd';
+7.	flush privileges;
+
+
+监控命令详解mysql -umonitor -h 127.0.0.1 -pshijiangepwd -e 'show global status'
+8.	Threads_connected：连接数
+9.	Com_select：查询总量
+10.	Com_insert：插入总量
+11.	Com_update：更新总量
+12.	Com_delete：删除总量
+13.	Bytes_received: 流入总流量
+14.	Bytes_sent：流出总流量
+15.	Slow_queries：慢查询总量
+
+
+监控Shell脚本check_mysql.sh
+port=$1
+key=$2
+mysql -umonitor -pshijiangepwd -h 127.0.0.1 -P${port} -e "show global status" |grep "${key}\s" |awk '{print $2}'
+
+测试监控Shell脚本
+sh /usr/local/zabbix/check_mysql.sh 3306 Threads_connected
+
+Zabbix自定义Key配置
+16.	UserParameter=mysql.status[*],sh /usr/local/zabbix/check_mysql.sh $1 $2 2>/dev/null
+17.	重启agent
+
+
+测试能否获取到值
+18.	zabbix_get -s xxx -k mysql.status[3306,Threads_connected]
+19.	zabbix_get -s xxx -k mysql.status[3306,Com_insert]
+
+
+使用模板去监控Mysql
+20.	利用自带的模板改一改
+21.	mysql.status[3306,Threads_connected]
+22.	mysql.status[3306,Com_select]
+23.	mysql.status[3306,Bytes_received]
+24.	mysql.status[3306,Bytes_sent]
+
+
+写一个测试的程序我们来测一下
+while true;do
+  mysql -h 127.0.0.1 -e "select * from test.test;insert into test.test values (2);delete from test.test;"
+  sleep 1
+done
+
+
