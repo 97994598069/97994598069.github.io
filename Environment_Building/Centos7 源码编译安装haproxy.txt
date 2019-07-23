@@ -1,0 +1,120 @@
+操作环境:
+一台haproxy主机地址为:192.168.80.100
+两台web服务器地址分别为:192.168.80.102  192.168.80.103
+
+192.168.80.100:
+安装haproxy：
+源码编译安装haproxy,需要软件包。
+yum install -y \
+pcre-devel \
+bzip2-devel \
+gcc \
+gcc-c++ \
+make
+
+
+tar xzvf haproxy-1.5.15.tar.gz  -C  /opt   --解压软件包的 /opt/下
+
+cd /opt/haproxy-1.5.15
+make TARGET=linux26  PREFIX=/usr/local/haproxy     //标识64为系统
+make install PREFIX=/usr/local/haproxy           --安装路径
+
+mkdir /etc/haproxy        --创建配置文件目录
+
+useradd -s /sbin/nologin -M  haproxy    --创建一个不可登录系统，且没有家目录的用户
+
+————————到此安装haproxy完成————————
+
+
+HAProxy配置文件详解
+其配置文件主要由五个部分组成，分别为global部分，defaults部分，frontend部分，backend部分，liste部分。
+1)global部分
+用于设置全局配置参数
+2) defaults部分
+默认参数的配置部分。
+3) frontend部分
+用于设置接收用户请求的前端虚拟节点。frontend可以根据ACL规则直接指定要使用的后端backend。
+4) backend部分
+用于设置集群后端服务集群的配置，也就是添加一组真实服务器，以处理前端用户的请求。
+5) listen部分此部分是frontend和backend部分的结合体。配置此部分不需要在配置
+
+cp /opt/haproxy-1.5.15/examples/haproxy.cfg /etc/haproxy/
+
+vi /etc/haproxy/haproxy.cfg
+
+--------------全局配置----------------
+global 
+    log 127.0.0.1   local0  notice        #配置全局日志记录，local0为日志设备，notice为输出的日志级别，表示使用本地（127.0.0.1）机器上的rsyslog服务中的local0设备记录日志等级为notice的日志。      
+    #log loghost    local0 info #定义haproxy 日志级别
+     maxconn 20480        #可以接收的最大并发连接数
+ #chroot  /usr/local/haproxy-1.5.15     #工作目录
+    pidfile  /var/run/haproxy.pid     #haproxy 进程PID文件
+    maxconn  4000         //最大连接数
+    user   haproxy       #运行的程序用户 
+    group   haproxy   #运行的程序用户组
+    daemon           //创建1个进程进入deamon模式运行，以后台形式运行harpoxy
+
+#---------------------------------------------------------------------
+#common defaults that all the 'listen' and 'backend' sections will
+#use if not designated in their block
+#---------------------------------------------------------------------
+defaults
+    mode   http       //所处理的类别，tcp是四层，http是七层，health只会返回OK，若是混合模式则mode不需要设置
+    log    global        //定义日志，采用全局定义
+    option  dontlognull    //不记录健康检查的日志信息
+    option  httpclose     //每次请求完毕后主动关闭http通道
+    option  httplog    //日志类别为http日志格式；如果是混合模式，此处还需要加上tcpclog
+    #option  forwardfor    //后端服务器可以从Http Header中获得客户端ip
+    option  redispatch     //serverId对应的服务器挂掉后,强制定向到其他健康的服务器
+    balance roundrobin    #设置默认负载均衡方式，轮询方式
+    timeout connect 10s  //连接超时
+    timeout client 10s   //客户端连接超时
+    timeout server 10s   //服务器连接超时
+    timeout check 10s    //健康检测的超时时间
+    maxconn     60000    //最大连接数
+    retries     3        //3次连接失败就认为服务不可用
+--------------统计页面配置------------------
+listen admin_stats       #为haproxy访问状态监控页面配置，取名为admin_stats
+    bind 0.0.0.0:8089      //监听端口
+    stats enable          //启用监听端口
+    mode http         #http的7层模式
+    log global         # 继承global中log的定义
+    stats uri  /stats     #监控页面的url访问路径，即http://ip/stats访问监控页面
+    stats realm Haproxy\ Statistics     #监控页面的密码框提示信息
+    stats auth  admin:admin          #监控页面的用户和密码admin,可以设置多个用户名
+    #stats hide-version   //隐藏统计页面上HAProxy的版本信息
+    stats admin if TRUE    //当通过认证才可管理
+    stats refresh 30s    //页面自动刷新时间30s
+---------------web设置-----------------------
+listen webcluster     #定义webcluster服务器组。
+        bind 0.0.0.0:80   #定义haproxy前端部分监听的端口。
+        mode http    #http的7层模式
+        option httpchk GET /index.html     #心跳检测
+        log global    #继承global中log的定义
+        maxconn 3000   #server进程可接受的最大并发连接数
+        balance roundrobin    #负载均衡的方式：轮询
+server web01 192.168.80.102:80 check inter 2000 fall 5
+server web02 192.168.80.103:80 check inter 2000 fall 5
+
+注：
+后端服务器 web1 和 web2 ，IP 地址分别为 192.168.80.102 和 192.168.80.103
+check：对当前server做健康状态检测cp examples/haproxy.init /etc/init.d/haproxy 
+chmod 755 /etc/init.d/haproxy
+chkconfig --add haproxy
+inter <delay>：检测之间的时间间隔，默认为2000ms
+fall <count>：连续多少次检测结果为“失败”才标记为不可用；默认为3
+rise <count>：连续多少次检测结果为“成功”才标记为可用；默认为2
+cp examples/haproxy.init /etc/init.d/haproxy     
+chmod 755 /etc/init.d/haproxy            
+chkconfig --add haproxy
+
+
+ln -s /usr/local/haproxy/sbin/haproxy /usr/sbin/haproxy
+service haproxy start
+service firewalld stop
+
+访问统计页面
+在浏览器地址栏:192.168.80.100:8089/stats
+
+
+
