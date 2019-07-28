@@ -1,0 +1,8 @@
+有这么个需求，只允许html、shtml、js、css访问，其它任何文件都不允许访问。
+在nginx location配置取反，如下：
+~* .*\.(?![html|shtml|js|css]$)
+{ 
+    return 503;
+	
+}
+
