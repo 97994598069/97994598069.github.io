@@ -1,0 +1,48 @@
+生产环境中的某些api出现故障，但是问题无法重现，但是又很想解决掉问题以及我们新项目上线，需要跟踪请求与响应的信息，可以预先找到一些bug，减少大面积的损失。
+安装nginx与ngx_lua
+响应日志需要lua的支持，
+请参考ttlsa之前的文章《nginx + ngx_lua安装测试http://www.ttlsa.com/nginx/nginx-modules-ngx_lua/》
+备注：安装过程中，发现nginx-1.9.0版本与ngx_lua不兼容，所以我换成nginx-1.4.2
+nginx日志配置
+....省略一些配置....
+log_format  main  '$remote_addr | $remote_user | [$time_local] | "$request" | '
+                      '$status | $body_bytes_sent | "$http_referer"  | '
+                      '"$http_user_agent" | "$http_x_forwarded_for" |  "$request_body" | "$resp_body"';
+....省略一些配置....
+
+$request_body变量由nginx自身提供，用于记录POST请求日志
+$resp_body变量由我们后面再server中定义，由ngx_lua获取
+
+nginx虚拟主机配置
+listen       80;
+        server_name  www.ttlsa.com;
+        access_log  /data/logs/nginx/www.ttlsa.com.access.log  main;
+
+        index index.html index.<a href="http://www.ttlsa.com/php/" title="php"target="_blank">php</a> index.html;
+        root /data/site/www.ttlsa.com/;
+        set $resp_body ""; // 这个必须放到最外层，否则日志取不到默认值
+        location /ttlsa/api
+        {
+         // 以下配置可以放到server里面，如此一来，整个server的请求都会记录到log中
+         lua_need_request_body on;
+         body_filter_by_lua '
+                        local resp_body = string.sub(ngx.arg[1], 1, 1000)
+                        ngx.ctx.buffered = (ngx.ctx.buffered or"") .. resp_body
+                        if ngx.arg[2] then
+                                ngx.var.resp_body = ngx.ctx.buffered
+                        end
+          ';
+          //省略一些配置
+		  }
+		  
+		  
+配置完毕之后，所有/ttlsa/api下的请求都会记录到log中，包含request和response日志
+
+日志结果展示
+10.11.11.11 | - | [23/May/2015:11:51:11 +0800] | "POST /ttlsa/api HTTP/1.1" | 200 ~ 519 | "-" | "Apache-HttpClient/4.3.2 (java 1.5)" | "-" | "<xml><appid>10002221</appid><mch_id>78912321</mch_id><device_info>10001</device_info><nonce_str>WhQD62S7mW06uGZb09JHZx78VN6Z9VO7</nonce_str><body>\xE5\xBE\xAE\xE4\xBF\xA1\xE6\x9D\xA1\xE7\xA0\x81\xE6\x94\xAF\xE4\xBB\x98</body><out_trade_no>20150523109755485501108746</out_trade_no><total_fee>20910</total_fee><spbill_create_ip>192.168.1.103</spbill_create_ip><auth_code>130145050921275499</auth_code><sign>8F7C57A99DBA452EFEF685CBE14BE599</sign></xml>" | "<xml><appid>10002221</appid><device_info>10001</device_info><err_code><![CDATA[NOTENOUGH]]></err_code><err_code_des><![CDATA[\xE9\x93\xB6\xE8\xA1\x8C\xE5\x8D\xA1\xE5\x8F\xAF\xE7\x94\xA8\xE4\xBD\x99\xE9\xA2\x9D\xE4\xB8\x8D\xE8\xB6\xB3\xEF\xBC\x88\xE5\xA6\x82\xE4\xBF\xA1\xE7\x94\xA8\xE5\x8D\xA1\xE5\x88\x99\xE4\xB8\xBA\xE5\x8F\xAF\xE9\x80\x8F\xE6\x94\xAF\xE9\xA2\x9D\xE5\xBA\xA6\xE4\xB8\x8D\xE8\xB6\xB3\xEF\xBC\x89\xEF\xBC\x8C\xE8\xAF\xB7\xE6\xA0\xB8\xE5\xAE\x9E\xE5\x90\x8E\xE5\x86\x8D\xE8\xAF\x95]]></err_code_des><mch_id>78912321</mch_id><nonce_str><![CDATA[PxPXdLScGOhBZ17O]]></nonce_str><result_code><![CDATA[FAIL]]></result_code><return_code><![CDATA[SUCCESS]]></return_code><return_msg><![CDATA[OK]]></return_msg><sign><![CDATA[F04FE3EEF6B3E1E6962616786A177C22]]></sign></xml>"
+
+以上是某个微信支付项目中的日志，通过根据此日志，可以及早发现问题并且修复。有些人可能有疑问，POST里面的一些内容都是\xE9\x93\xB6\xE8，无法理解。怎么办呢？看后续文章。
+
+
+
+		  
