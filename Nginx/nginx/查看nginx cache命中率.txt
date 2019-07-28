@@ -1,0 +1,63 @@
+一、在http header上增加命中显示
+nginx提供了$upstream_cache_status这个变量来显示缓存的状态，我们可以在配置中添加一个http头来显示这一状态，达到类似squid的效果。
+
+ location  / {
+        proxy_redirect          off;
+        proxy_set_header        Host            $host;
+        proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout   180;
+        proxy_send_timeout      180;
+        proxy_read_timeout      180;
+        proxy_buffer_size       128k;
+        proxy_buffers           4 128k;
+        proxy_busy_buffers_size 128k;
+        proxy_temp_file_write_size 128k;
+        proxy_cache cache;
+        proxy_cache_valid 200 304 1h;
+        proxy_cache_valid 404 1m;
+        proxy_cache_key $uri$is_args$args;
+        add_header  Nginx-Cache "$upstream_cache_status";
+        proxy_pass http://backend;
+}
+
+而通过curl或浏览器查看到的header如下：
+HTTP/1.1 200 OK
+Date: Mon, 22 Apr 2013 02:10:02 GMT
+Server: nginx
+Content-Type: image/jpeg
+Content-Length: 23560
+Last-Modified: Thu, 18 Apr 2013 11:05:43 GMT
+Nginx-Cache: HIT  ###(查看状态)
+Accept-Ranges: bytes
+Vary: User-Agent
+
+$upstream_cache_status包含以下几种状态：
+·MISS 未命中，请求被传送到后端
+·HIT 缓存命中
+·EXPIRED 缓存已经过期请求被传送到后端
+·UPDATING 正在更新缓存，将使用旧的应答
+·STALE 后端将得到过期的应答
+
+
+二、nginx cache命中率统计
+即然nginx为我们提供了$upstream_cache_status函数，自然可以将命中状态写入到日志中。具体可以如下定义日志格式：
+addr - $remote_user [$time_local] "$request" '
+                  '$status $body_bytes_sent "$http_referer" '
+                  '"$http_user_agent" "$http_x_forwarded_for"'
+                  '"$upstream_cache_status"';
+				  
+命中率统计方法：用HIT的数量除以日志总量得出缓存命中率：
+awk '{if($NF==""HIT"") hit++} END {printf "%.2f%",hit/NR}' access.log
+
+
+了解了原理以后，也可以通过crontab脚本将每天的命中率统计到一个日志中，以备查看。
+crontab -l
+1 0 * * * /opt/shell/nginx_cache_hit >>/usr/local/nginx/logs/hit 
+
+访脚本的内容为：
+bin/bash
+LOG_FILE='/usr/local/nginx/logs/access.log.1'
+LAST_DAY=$(date +%F -d "-1 day")
+awk '{if($NF==""HIT"") hit++} END {printf "'$LAST_DAY': %d %d %.2f%n", hit,NR,hit/NR}' $LOG_FILE
+
