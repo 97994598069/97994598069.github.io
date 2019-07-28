@@ -1,0 +1,99 @@
+二.      配置
+应用服务器的性能优化主要在合理使用CPU、内存、磁盘IO和网络IO四个方面，现在我们从Nginx配置文件 nginx.conf 入手进行优化：
+
+(1)  工作进程数的选择
+指令：worker_processes 
+定义了Nginx对外提供web服务时的工作进程数。最优值取决于许多因素，包括（但不限于）CPU核心的数量、存储数据的硬盘数量及负载模式。不能确定的时候，将其设置为可用的CPU内核数将是一个好的开始（设置为“auto”将尝试自动检测它）。Shell执行命令  ps ax | grep "nginx: worker process" | grep -v "grep" 可以看到运行中的Nginx工作进程数，一般建议设置成服务器逻辑核心数，Shell执行命令 cat /proc/cpuinfo | grep processor | wc -l 可以检测出服务器逻辑核心总数，偷懒可以直接写auto，Nginx自适应。
+
+(2)  是否绑定CPU
+指令：worker_cpu_affinity
+绑定工作进程到对应CPU核心，Nginx默认未开启CPU绑定。目前的服务器一般为多核CPU，当并发很大时，服务器各个CPU的使用率可能出现严重不均衡的局面，这时候可以考虑使用CPU绑定，以达到CPU使用率相对均匀的状态，充分发挥多核CPU的优势。top、htop等程序可以查看所有CPU核心的使用率状况。绑定样例：
+
+(3)  打开文件数限制
+指令：worker_rlimit_nofile
+设定了每个Nginx工作进程打开的最大文件数，受限于系统的用户进程打开文件数限制，未设置则使用系统默认值。理论上应该设置为当前Shell启动进程的最大打开文件数除以Nginx的工作进程数。由于Nginx的工作进程打开文件数并不一完全均匀，所以可以将其设置成Shell启动进程的最大打开文件数。Shell执行命令 ulimit -n 可以查看当前登录Shell会话最大打开文件数数限制。Linux系统用户进程默认同时打开文件最大数为1024，这个值太小，访问量稍大就报“too many open files"。Shell执行命令先修改用户打开文件数限制：
+echo "* - nofile 65535" >>/etc/security/limits.conf
+ 
+然后添加入/etc/profile如下两行内容，修改所有Shell和通过Shell启动的进程打开文件数限制：
+echo "ulimit -n 65535" >>/etc/profile 
+
+
+(4) 惊群问题
+指令：accept_mutex  (应该为on)
+如果 accept_mutex 指令值为 on 启用，那么将轮流唤醒一个工作进程接收处理新的连接，其余工作进程继续保持睡眠；如果值为 off 关闭，那么将唤醒所有工作进程，由系统通过use指令指定的网络IO模型调度决定由哪个工作进程处理，未接收到连接请求的工作进程继续保持睡眠，这就是所谓的“惊群问题”。Web服务器Apache的进程数很多，成百上千也是时有的事，“惊群问题”也尤为明显。Nginx为了稳定，参数值保守的设置为 on 开启状态。可以将其设置成Off 提高性能和吞吐量，但这样也会带来上下文切换增多或者负载升高等等其它资源更多消耗的后果。
+
+
+(5)  网络IO模型
+指令：use
+定义了Nginx设置用于复用客户端线程的轮询方法(也可称多路复用网络IO模型)。这自然是选择效率更高的优先，Linux 2.6+内核推荐使用epoll，FreeBSD推荐使用kqueue，安装时Nginx会自动选择。
+
+
+(6)  连接数
+指令：worker_connections
+定义了Nginx一个工作进程的最大同时连接数，不仅限于客户端连接，包括了和后端被代理服务器等其他的连接。官网文档还指出了该参数值不能超过 worker_rlimit_nofile 值，所以建议设置成和 worker_rlimit_nofile 值相等。
+
+
+(7)  打开文件缓存
+指令：open_file_cache
+开启关闭打开文件缓存，默认值 off 关闭，强烈建议开启，可以避免重新打开同一文件带来的系统开销，节省响应时间。如需开启必须后接参数 max=数字，设置缓存元素的最大数量。当缓存溢出时，使用LRU(最近最少使用)算法删除缓存中的元素；可选参数 inactive=时间 设置超时，在这段时间内缓存元素如果没有被访问，将从缓存中删除。示例：open_file_cache max=65536  inactive=60s。
+指令：open_file_cache_valid
+设置检查open_file_cache缓存的元素的时间间隔。
+指令：open_file_cache_min_uses
+设置在由open_file_cache指令的inactive参数配置的超时时间内， 文件应该被访问的最小次数。如果访问次数大于等于此值，文件描述符会保留在缓存中，否则从缓存中删除。
+
+(8)  日志相关
+指令：access_log 和 error_log
+当并发很大时，Nginx的访问日志和错误日志的保存肯定会造成对磁盘的大量读写，也将影响Nginx的性能。并发量越大，IO越高。这时候可以考虑关闭访问日志和错误日志，或者将日志保存到tmpfs文件系统里，或者减少保存的访问日志条目和错误日志的级别，从而避免磁盘IO的影响。关闭日志使用 access_log off。如必须保存日志，可以按每日或者每时或者其它时间段对日志做切割，这也可以减小IO，虽然可能效果不是特别大，不过因为日志文件尺寸变小了很多，也方便查阅或归档分析日志。一般线上环境建议错误日志设置为 error 或者 crit。自定义访问日志的条目和错误日志的级别，详细信息可以参阅官网或者网上其它文档，按需修改。
+
+
+(9)  隐藏Nginx版本号
+指令：server_tokens
+开启或关闭“Server”响应头中输出的Nginx版本号。推介设置为 off，关闭显示响应头的版本号，对性能的提高有小小的裨益，主要还是为了安全起见，不被骇客找到版本号对应的漏洞，从而被攻击。
+
+
+(10) 压缩相关
+指令：gzip
+Nginx默认开启了gzip压缩功能。有可能很多人认为，开启gzip压缩会增加CPU的处理时间和负载。但是经过我们网站的测试发现，关闭了gzip压缩功能的Nginx虽然减少了CPU计算，节省了服务器的响应时间，但网站页面总体响应时间反而加长了，原因在于js和css、xml、json、html等等这些静态文件的数据传输时间的增长大大超过了服务器节省出来的响应时间，得不偿失。gzip on 开启压缩后，大约可以减少75%的文件尺寸，不但节省了比较多的带宽流量，也提高了页面的整体响应时间。所有建议还是开启。当然也不是所有的静态文件都需要压缩，比如静态图片和PDF、视频，文件本身就应当做压缩处理后保存到服务器。这些文件再次使用gzip压缩，压缩的比例并不高，甚至适得其反，压缩后文件尺寸增大了。CPU压缩处理这些静态文件增加占用的服务器响应时间绝大部分时候会超过了被压缩减小的文件尺寸减少的数据传输时间，不划算。是否需要对Web网站开启压缩，以及对哪些文件过滤压缩，大家可以通过使用HttpWatch、Firebug等等网络分析工具对比测试。
+指令：gzip_comp_level
+指定压缩等级，其值从1到9，数字越大，压缩率越高，越消耗CPU，负载也越高。9等级无疑压缩率最高，压缩后的文件尺寸也最小，但也是最耗CPU资源，负载最高，速度最慢的，这对于用户访问有时是无法忍受的。一般推荐使用1-4等级，比较折衷的方案。我们公司网站使用等级2。
+指令：gzip_min_length
+指定压缩的文件最小尺寸，单位 bytes 字节，低于该值的不压缩，超过该值的将被压缩。我们网站设置为1k，太小的文件没必要压缩，压缩过小尺寸文件带来增加的CPU消耗时间和压缩减少的文件尺寸降低的数据下载时间互相抵消，并有可能增加总体的响应时间。
+指令：gzip_types
+指定允许压缩的文件类型，Nginx配置目录 conf 下的 mime.types 文件存放了Nginx支持的文件类型，text/html类型文件，文件后缀为html htm shtml默认压缩。推荐配置：gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript。
+
+
+(11) 浏览器缓存
+指令：expires
+设置HTTP应答中的“Expires”和“Cache-Control”头标。"Expires"一般结合"Last-Modified"使用。当设置了合理的expires配置时，浏览器第一次访问Web页面元素，会下载页面中的的静态文件到本机临时缓存目录下。第二次及之后再次访问相同URL时将发送带头标识"If-Modified-Since"和本地缓存文件时间属性值的请求给服务器，服务器比对服务器本地文件时间属性值，如果未修改，服务器直接返回http 304状态码，浏览器直接调用本地已缓存的文件；如果时间属性值修改了，重新发送新文件。这样就避免了从服务器再次传送文件内容，减小了服务器压力，节省了带宽，同时也提高了用户访问速度，一举三得。指令后接数字加时间单位，即为缓存过期时间；-1 表示永远过期，不缓存。强烈建议添加expires配置，过期时间的选择具体分析。我们公司的部分Nginx配置如下：
+
+location ~ .+\.(gif|jpg|jpeg|png|bmp|swf)$
+{
+    expires 30d;
+}
+
+location ~ .+\.(js|css|xml|javascript|txt|csv)$
+{
+    expires 30d;
+}
+
+或者统一将静态文件放在固定目录下再对目录做location和expires，示例：
+location /static/
+{
+    expires 30d;
+}
+
+
+(12) 持久连接
+指令：keepalive_timeout
+启用Http的持久连接Keepalive属性，复用之前已建立的TCP连接接收请求、发送回应，减少重新建立TCP连接的资源时间开销。在此的建议是当网站页面内容以静态为主时，开启持久连接；若主要是动态网页，且不能被转化为静态页面，则关闭持久连接。后接数字和时间单位符号。正数为开启持久连接，0关闭。
+
+(13) 减少HTTP请求次数
+网站页面中存在大量的图片、脚本、样式表、Flash等静态元素，减少访问请求次数最大的优点就是减少用户首次访问页面的加载时间。可以采用合并相同类型文件为一个文件的办法减少请求次数。这其实属于Web前端优化范畴，应当由Web前段工程师做好相关静态文件的规划管理，而不是由运维来做。不过Nginx也可以通过安装阿里巴巴提供的Concat或者Google的PageSpeed模块实现这个合并文件的功能。我们公司并未使用合并功能，具体安装配置信息请查询网上相关文档，这里不再累述。Concat源代码网址：https://github.com/alibaba/nginx-http-concat/，PageSpeed源代码网址：https://github.com/pagespeed/ngx_pagespeed。
+
+(14) PHP相关
+Nginx不能直接解析PHP代码文件，需要调用FastCGI接口转给PHP解释器执行，然后将结果返回给Nginx。PHP优化本文暂不介绍。Nginx可以开启FastCGI的缓存功能，从而提高性能。
+指令：fastcgi_temp_path
+定义FastCGI缓存文件保存临时路径。
+指令：fastcgi_cache_path
+定义FastCGI缓存文件保存路径和缓存的其它参数。缓存数据以二进制数据文件形式存储，缓存文件名和key都是通过对访问URL使用MD5计算获得的结果。缓存文件先保存至fastcgi_temp_path指定的临时目录下，然后通过重命名操作移至fastcgi_cache_path指定的缓存目录。levels指定了目录结构,子目录数以16为基数；keys_zone指定了共享内存区名和大小，用于保存缓存key和数据信息；inactive指定了缓存数据保存的时间，当这段时间内未被访问，将被移出；max_size指定了缓存使用的最大磁盘空间，超过容量时将最近最少使用数据删除。建议fastcgi_temp_path和fastcgi_cache_path设为同一分区，同分区移动操作效率更高。示例：
+
