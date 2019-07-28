@@ -1,0 +1,86 @@
+$http_header的应用：
+当我们一个项目部署在两个服务器下面，然后在另外一个服务器搭建nginx反响代理，反响代理把请求转发给两个服务器的时候，他们的日志记录的是反向代理的ip， 而不是真正请求的用户IP， 这时就可以通过配置proxy_set_header 把真实IP设置给一个X-forwarded-For 或者 X-Real-IP 转给后端服务器，然后后端服务器读取通过http_x_real_ip来读取真实IP， 记录到access_log下面
+
+例如：
+ location / {
+                proxy_pass http://tg_web_cluster;
+                proxy_set_header Host      $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                # proxy_set_header X-Forwarded-Proto $scheme;
+        }
+		
+日志的格式把第一个IP换成刚才转发过来的头部X-Real-IP就可以记录用户IP了：
+
+log_format tg_log '$http_x_real_ip - $remote_user [$time_local] '
+                '"$request" $status $body_bytes_sent '
+                '"$http_referer" "$http_user_agent" "$gzip_ratio" - $request_time';
+
+				
+
+
+NGINX访问https跳转到http的解决方法
+问题：浏览器打开https://www.ttlsa.com/aaa.html，然后跳转到http://www.ttlsa.com/aaa.html
+网站架构：用户--https--->nginx代理---http---->tomcat/nginx+php
+
+nginx待遇发给后端的请求是http协议，后端程序跳转获取到的协议是http，返回一个redirect（http header中带Location:http://www.ttlsa.com/aaa.html），浏览器收到location，跳转到了location指定的地方。
+
+
+解决方法1:
+在nginx代理中增加一个header，标志用户请求是http还是https，后端获取header决定跳转到http/https页面。这个方法需要修改nginx配置和程序，不推荐，但是可以解决问题。
+
+解决方法2:
+nginx代理中配置proxy_redirect
+proxy_redirect http://$schema://;
+以上指令会将后端响应header location内容中的http://替换成用户端协议https://。
+NGINX访问https跳转到http的解决了
+
+
+nginx日志request_time 和upstream_response_time区别
+笔者在根据nginx的accesslog中$request_time进行程序优化时，发现有个接口，直接返回数据，平均的$request_time也比较大。原来$request_time包含了用户数据接收时间，而真正程序的响应时间应该用$upstream_response_time。
+
+下面介绍下2者的差别：
+1、request_time
+官网描述：request processing time in seconds with a milliseconds resolution; time elapsed between the first bytes were read from the client and the log write after the last bytes were sent to the client 。
+指的就是从接受用户请求的第一个字节到发送完响应数据的时间，即包括接收请求数据时间、程序响应时间、输出
+响应数据时间。
+
+2、upstream_response_time
+官网描述：keeps times of responses obtained from upstream servers; times are kept in seconds with a milliseconds resolution. Several response times are separated by commas and colons like addresses in the $upstream_addr variable
+是指从Nginx向后端（php-cgi)建立连接开始到接受完数据然后关闭连接为止的时间。
+从上面的描述可以看出，$request_time肯定比$upstream_response_time值大，特别是使用POST方式传递参数时，因为Nginx会把request body缓存住，接受完毕后才会把数据一起发给后端。所以如果用户网络较差，或者传递数据较大时，$request_time会比$upstream_response_time大很多。
+所以如果使用nginx的accesslog查看php程序中哪些接口比较慢的话，记得在log_format中加入$upstream_response_time。
+
+
+
+nginx对指定目录做代理
+web1，作为前端端服务器，访问地址是http://192.168.1.1，要将http://192.168.1.1/bbs的请求交给web2。在web1的网站根目录下并没有bbs目录
+
+web2，作为后端web服务器，访问地址是http://192.168.1.2
+
+web1配置location 方式一
+location /bbs/ {
+proxy_pass http://192.168.1.2/;   "有/"
+}
+效果：通过 http://192.168.1.1/bbs  可以访问到web2网站根目录下的内容
+
+
+web1配置location 方式二
+如果在web1中加入location中多少加 "/"
+location /bbs/ {
+proxy_pass http://192.168.1.2;  "无/"
+}
+效果：要通过web1反问web2网站根目录的内容则需要输入：http://192.168.1.1/bbs/bbs
+
+		
+		
+
+
+				
+				
+
+
+
+
+
+
