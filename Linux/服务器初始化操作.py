@@ -1,11 +1,12 @@
 1.更换国内的yum源
 yum -y install wget
 1)备份原来自带的yum源
-略
+cd /etc/yum.repos.d && mkdir backup && mv ./* ./backup
 
 2)下载国内yum源和epel
 wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
-wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo
+wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.163.com/.help/CentOS7-Base-163.repo
+mv /etc/yum.repos.d/CentOS7-Base-163.repo /etc/yum.repos.d/CentOS-Base.repo
 
 3)更新缓存
 yum clean all 
