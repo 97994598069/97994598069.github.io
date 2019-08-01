@@ -1,0 +1,251 @@
+4台CentOs7虚拟主机：172.16.28.130, 172.16.28.131, 172.16.28.132, 172.16.28.133
+系统服务：LVS, Keepalived
+Web服务器：nginx
+集群搭建：LVS DR模式
+
+2. 软件安装
+在四台虚拟机上，我们以如下方式搭建集群：
+172.16.28.130 lvs+keepalived
+172.16.28.131 lvs+keepalived
+172.16.28.132 nginx
+172.16.28.133 nginx
+
+
+2.1 lvs+keepalived安装
+在172.16.28.130 和172.16.28.131 上安装ipvs和keepalived：
+# 安装ipvs
+sudo yum install ipvsadm
+# 安装keepalived
+sudo yum install keepalived
+
+
+
+在172.16.28.132 和172.16.28.133 上安装nginx：
+# 安装nginx
+sudo yum install nginx
+
+需要注意的是，在两台nginx服务器上需要将防火墙关闭，否则lvs+keepalived的两台机器就无法将请求发送到两台nginx服务器上来：
+# 关闭防火墙
+systemctl disable firewalld.service
+或者执行如下命令:
+firewall-cmd --direct --permanent --add-rule ipv4 filter INPUT 0 --in-interface ens33 --destination 224.0.0.18 --protocol vrrp -j ACCEPT
+firewall-cmd --reload
+
+
+查看两台负载均衡机器是否支持lvs：
+sudo lsmod |grep ip_vs
+# 如果看到如下结果，则说明是支持的
+[zhangxufeng@localhost ~]$ sudo lsmod|grep ip_vs
+ip_vs 145497 0
+nf_conntrack 137239 1 ip_vs
+libcrc32c 12644 3 xfs,ip_vs,nf_conntrack
+
+如果上述命令没有任何结果，则执行sudo ipvsadm 命令启动ipvs之后，再通过上述命令进行查看即可。启动ipvs之后，我们就可以在/etc/keepalived/ 目录下编辑keepalived.conf 文件，我们以172.16.28.130 机器作为master机器，master节点配置如下：
+# Global Configuration
+global_defs {
+ lvs_id director1 # 指定lvs的id
+}
+# VRRP Configuration
+vrrp_instance LVS {
+ state MASTER	# 指定当前节点为master节点
+ interface ens33	# 这里的ens33是网卡的名称，通过ifconfig或者ip addr可以查看
+ virtual_router_id 51	# 这里指定的是虚拟路由id，master节点和backup节点需要指定一样的
+ priority 151	# 指定了当前节点的优先级，数值越大优先级越高，master节点要高于backup节点
+ advert_int 1	# 指定发送VRRP通告的间隔，单位是秒
+ authentication {
+ auth_type PASS	# 鉴权，默认通过
+ auth_pass 123456	# 鉴权访问密码
+ }
+ virtual_ipaddress {
+ 172.16.28.120	# 指定了虚拟ip
+ }
+}
+# Virtual Server Configuration - for www server
+# 后台真实主机的配置
+virtual_server 172.16.28.120 80 {
+ delay_loop 1	# 健康检查的时间间隔
+ lb_algo rr	# 负载均衡策略，这里是轮询
+ lb_kind DR	# 调度器类型，这里是DR
+ persistence_time 1	# 指定了持续将请求打到同一台真实主机的时间长度
+ protocol TCP	# 指定了访问后台真实主机的协议类型
+ # Real Server 1 configuration
+ # 指定了真实主机1的ip和端口
+ real_server 172.16.28.132 80 {
+ weight 1	# 指定了当前主机的权重
+ TCP_CHECK {
+ connection_timeout 10	# 指定了进行心跳检查的超时时间
+ nb_get_retry 3	# 指定了心跳超时之后的重复次数
+ delay_before_retry 3	# 指定了在尝试之前延迟多长时间
+ }
+ }
+ # Real Server 2 Configuration
+ real_server 172.16.28.133 80 {
+ weight 1	# 指定了当前主机的权重
+ TCP_CHECK {
+ connection_timeout 10	# 指定了进行心跳检查的超时时间
+ nb_get_retry 3	# 指定了心跳超时之后的重复次数
+ delay_before_retry 3	# 指定了在尝试之前延迟多长时间
+ }
+ }
+}
+
+
+上面是master节点上keepalived的配置，对于backup节点，其配置与master几乎是一致的，只是其state和priority参数不同。如下是backup节点的完整配置：
+# Global Configuration
+global_defs {
+ lvs_id director2 # 指定lvs的id
+}
+# VRRP Configuration
+vrrp_instance LVS {
+ state BACKUP	# 指定当前节点为master节点
+ interface ens33	# 这里的ens33是网卡的名称，通过ifconfig或者ip addr可以查看
+ virtual_router_id 51	# 这里指定的是虚拟路由id，master节点和backup节点需要指定一样的
+ priority 150	# 指定了当前节点的优先级，数值越大优先级越高，master节点要高于backup节点
+ advert_int 1	# 指定发送VRRP通告的间隔，单位是秒
+ authentication {
+ auth_type PASS	# 鉴权，默认通过
+ auth_pass 123456	# 鉴权访问密码
+ }
+ virtual_ipaddress {
+ 172.16.28.120	# 指定了虚拟ip
+ }
+}
+# Virtual Server Configuration - for www server
+# 后台真实主机的配置
+virtual_server 172.16.28.120 80 {
+ delay_loop 1	# 健康检查的时间间隔
+ lb_algo rr	# 负载均衡策略，这里是轮询
+ lb_kind DR	# 调度器类型，这里是DR
+ persistence_time 1	# 指定了持续将请求打到同一台真实主机的时间长度
+ protocol TCP	# 指定了访问后台真实主机的协议类型
+ # Real Server 1 configuration
+ # 指定了真实主机1的ip和端口
+ real_server 172.16.28.132 80 {
+ weight 1	# 指定了当前主机的权重
+ TCP_CHECK {
+ connection_timeout 10	# 指定了进行心跳检查的超时时间
+ nb_get_retry 3	# 指定了心跳超时之后的重复次数
+ delay_before_retry 3	# 指定了在尝试之前延迟多长时间
+ }
+ }
+ # Real Server 2 Configuration
+ real_server 172.16.28.133 80 {
+ weight 1	# 指定了当前主机的权重
+ TCP_CHECK {
+ connection_timeout 10	# 指定了进行心跳检查的超时时间
+ nb_get_retry 3	# 指定了心跳超时之后的重复次数
+ delay_before_retry 3	# 指定了在尝试之前延迟多长时间
+ }
+ }
+}
+
+将master和backup配置成完全一样的原因是，在master宕机时，可以根据backup的配置进行服务的无缝切换。
+
+
+
+在lvs+keepalived机器配置完成之后，我们下面配置两台应用服务器的nginx配置。这里我们是将nginx作为应用服务器，在其配置文件中配置返回状态码为200，并且会将当前主机的ip返回，如下是其配置：
+worker_processes auto;
+# pid /run/nginx.pid;
+events {
+ worker_connections 786;
+}
+http {
+ server {
+ listen 80;
+ # 这里是直接返回200状态码和一段文本
+ location / {
+ default_type text/html;
+ return 200 "Hello, Nginx! Server zhangxufeng@172.16.28.132\n";
+ }
+ }
+}
+worker_processes auto;
+# pid /run/nginx.pid;
+events {
+ worker_connections 786;
+}
+http {
+ server {
+ listen 80;
+ # 这里是直接返回200状态码和一段文本
+ location / {
+ default_type text/html;
+ return 200 "Hello, Nginx! Server zhangxufeng@172.16.28.133\n";
+ }
+ }
+}
+
+
+可以看到，两台机器返回的文本中主机ip是不一样的。nginx配置完成后，可以通过如下命令进行启动：
+sudo nginx
+
+
+在启动nginx之后，我们需要配置虚拟ip，这是因为我们使用的lvs调度器是DR模式，前面我们讲到过，这种模式下，对客户端的响应是真实服务器直接返回给客户端的，而真实服务器需要将响应报文中的源ip修改为虚拟ip，这里配置的虚拟ip就是起这个作用的。我们编辑/etc/init.d/lvsrs 文件，写入如下内容：
+#!/bin/bash
+ifconfig lo:0 172.16.28.120 netmask 255.255.255.255 broadcast 172.16.28.120 up
+route add -host 172.16.28.120 dev lo:0
+echo "0" > /proc/sys/net/ipv4/ip_forward
+echo "1" > /proc/sys/net/ipv4/conf/lo/arp_ignore
+echo "2" > /proc/sys/net/ipv4/conf/lo/arp_announce
+echo "1" > /proc/sys/net/ipv4/conf/all/arp_ignore
+echo "2" > /proc/sys/net/ipv4/conf/all/arp_announce
+exit 0
+lo：表示当前主机真实网卡的名称；
+172.16.28.120：表示虚拟ip；
+
+
+编写完成后运行该脚本文件即可。然后将两台lvs+keepalived机器上的keepalived服务启动起来即可：
+sudo service keepalived start
+
+
+最后可以通过如下命令查看配置的lvs+keepalived的策略：
+[zhangxufeng@localhost keepalived]$ sudo ipvsadm -ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+ -> RemoteAddress:Port Forward Weight ActiveConn InActConn
+TCP 172.16.28.120:80 rr
+ -> 172.16.28.132:80 Route 1 0 0
+ 
+
+2.2 集群测试
+根据上述步骤，我们配置完成了一个lvs+keepalived+nginx的集群。在浏览器中，我们可以访问http://172.16.28.120 即可看到如下响应：
+Hello, Nginx! Server zhangxufeng@172.16.28.132
+
+多次刷新浏览器之后，可以看到浏览器中显示的文本切换如下，这是因为lvs的负载均衡策略产生的：
+Hello, Nginx! Server zhangxufeng@172.16.28.133
+
+
+
+
+
+
+
+
+
+
+
+
+nginx是一款非常优秀的反向代理工具，支持请求分发，负载均衡，以及缓存等等非常实用的功能。在请求处理上，nginx采用的是epoll模型，这是一种基于事件监听的模型，因而其具备非常高效的请求处理效率，单机并发能力能够达到上百万。nginx接收到的请求可以通过负载均衡策略分发到其下一级的应用服务器，这些服务器一般是以集群方式部署的，因而在性能不足的情况下，应用服务器可以通过加机器的方式扩展流量。此时，对于一些特大型的网站，性能的瓶颈就来自于nginx了，因为单机的nginx的并发能力是有上限的，而nginx本身是不支持集群模式的，因而此时对nginx的横向扩展就显得尤为重要。
+
+
+keepalived是一款服务器状态检测和故障切换的工具。在其配置文件中，可以配置主备服务器和该服务器的状态检测请求。也就是说keepalived可以根据配置的请求，在提供服务期间不断向指定服务器发送请求，如果该请求返回的状态码是200，则表示该服务器状态是正常的，如果不正常，那么keepalived就会将该服务器给下线掉，然后将备用服务器设置为上线状态。
+
+lvs是一款用于四层负载均衡的工具。所谓的四层负载均衡，对应的是网络七层协议，常见的如HTTP协议是建立在七层协议上的，而lvs作用于四层协议上，也即：传输层，网络层，数据链路层和物理层。这里的传输层主要协议有TCP和UDP协议，也就是说lvs主要支持的方式是TCP和UDP。也正是因为lvs是处于四层负载均衡上的，因而其处理请求的能力比常见的服务器要高非常多，比如nginx的请求处理就是建立在网络七层上的，lvs的负载均衡能力是nginx的十倍以上。
+
+
+通过上面的介绍，我们可以发现，在特大型网站中，应用服务器是可以横向扩容的，而nginx是不支持横向扩容的，此时nginx就会成为性能瓶颈。而lvs是一款负载均衡工具，因而如果我们结合lvs和nginx，那么就可以通过部署多台nginx服务器，通过lvs的负载均衡能力，将请求均衡的分发到各个nginx服务器上，再由nginx服务器分发到各个应用服务器，这样，我们就实现了nginx的横向扩展了。由于nginx本质上也是一款应用服务器，因而其也有可能宕机，因而这里结合keepalived就可以实现nginx的故障检测和服务切换。也就是说，通过keepalived+lvs+nginx，我们实现了nginx的高可用集群模式。
+
+
+
+在上面的介绍中，我们会注意到，虽然keepalived+lvs+nginx实现了nginx的集群模式，但是在我们使用nginx的时候，其本身是有一个ip和端口的，默认监听的端口是80和443，那么lvs是如何实现将请求分发给具有不同ip和端口的nginx服务器的呢？这里就是通过虚拟ip实现的，所谓虚拟ip就是对外提供一个公共的ip，外部客户端请求的都是这个ip，lvs在接收到虚拟ip的请求之后，通过配置的调度器和负载均衡策略，选择一个目标nginx服务器，然后将请求转发给该服务器。这里lvs有两个概念，就是调度器和负载均衡策略，所谓的调度器指的是lvs将会以何种方式处理请求和响应数据，其主要有三种调度器：
+
+
+
+
+Virtual Server via Network Address Translation(VS/NAT)：这种方式的主要原理是，用户发送请求到虚拟ip上后，lvs会根据负载均衡算法选择一个目标处理服务，然后将请求报文中的目标ip地址修改为计算得到的目标服务器，并且发送给该服务器。对于响应的报文，调度器会将目标服务器返回的响应数据中的源地址修改为虚拟ip地址。通过这种方式，对客户端而言，其形式上面向的是一台服务器。不过这种方式的缺点在于，所有的响应数据都需要通过调度器，如果请求量比较大的情况下，那么调度器就会成为整个系统的瓶颈。
+
+
+Virtual Server via IP Tunneling(VS/TUN)：这种方式主要解决的就是VS/NAT中，响应数据会经过调度器的问题。同VS/NAT一样 ，调度器还是会接收请求的数据，并且将报文中的目标ip修改为目标服务的ip，但是在目标服务处理完数据之后，其会直接将响应报文中的源ip修改为虚拟ip，然后将请求发送给客户端。通过这种方式，响应数据就由各个目标服务进行了处理，而无需通过调度器进行返回，这种方式会大大提高系统的吞吐量，而且由于一般请求报文比响应报文小很多，调度器也只需要处理请求报文，那么系统的整体负载将会被均摊到各个服务器上。
+
+
+Virtual Server via Direct Routing(VS/DR)：这种方式相对于VS/TUN，其主要区别在于，VS/NAT是将请求报文中的ip地址修改为目标服务的ip地址，而VS/DR则是直接将请求报文中的MAC地址修改为目标地址，这种方式效率会更高，因为VS/TUN中的ip地址最终还是需要转换为MAC地址来发送数据的。
