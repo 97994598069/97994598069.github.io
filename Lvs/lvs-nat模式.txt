@@ -1,0 +1,159 @@
+lvs-s:   eth0:192.168.108.171   eth1:192.168.0.20
+lvs-m：  eth0:192.168.108.170   eth1:192.168.0.10
+
+VIP： 192.168.108.180
+
+
+web1:  eth0:192.168.0.30
+web2:  eth0:192.168.0.40
+
+
+上述除了192.168.108.180为公网外，其余皆为内网
+
+
+
+lvs-m:
+yum install -y gcc gcc-c++ make pcre pcre-devel kernel-devel openssl-devel libnl-devel popt-devel
+
+1、检查linux内核是否集成lvs模块：modprobe -l | grep ipvs
+2、开启路由转发功能：echo "1" >/proc/sys/net/ipv4/ip_forward
+
+
+3、安装ipvsadm
+wget http://www.linuxvirtualserver.org/software/kernel-2.6/ipvsadm-1.26.tar.gz
+tar -zxvf ipvsadm-1.26.tar.gz
+cd ipvsadm-1.26
+make && make install
+在执行make的时候如果出现错误提示：libipvs.h：14:23：error：net/ip_vs.h：No such file ordirectory则添加软连接ln -s /usr/src/kernels/2.6.18-194.el5-x86_64/ /usr/src/linux
+
+4、安装keepalived
+wget http://www.keepalived.org/software/keepalived-1.2.7.tar.gz
+tar zxvf keepalived-1.2.7.tar.gz
+cd keepalived-1.2.7
+./configure --prefix=/usr/local/keepalived
+make && make install
+
+
+将keepalived配置成系统服务
+cp /usr/local/keepalived/etc/rc.d/init.d/keepalived /etc/init.d/
+cp /usr/local/keepalived/etc/sysconfig/keepalived /etc/sysconfig/
+mkdir /etc/keepalived/
+cp /usr/local/keepalived/etc/keepalived/keepalived.conf /etc/keepalived/
+cp /usr/local/keepalived/sbin/keepalived /usr/sbin/
+
+
+5、修改主keepalived配置文件（备只修改router_id、state和priority）
+[root@localhost ~]# vi /etc/keepalived/keepalived.conf
+! Configuration File for keepalived
+global_defs {
+notification_email {
+test@sina.com #故障接受联系人
+}
+notification_email_from admin@test.com #故障发送人
+smtp_server 127.0.0.1  #本机发送邮件
+smtp_connect_timeout 30
+router_id LVS_MASTER   #BACKUP上修改为LVS_BACKUP
+}
+vrrp_instance VI_1 {
+state MASTER    #BACKUP上修改为BACKUP
+interface eth0
+virtual_router_id 51   #虚拟路由标识，主从相同
+priority 100    #BACKUP上修改为90
+advert_int 1
+authentication {
+auth_type PASS
+auth_pass 1111   #主从认证密码必须一致
+}
+virtual_ipaddress {  #虚拟IP（VTP）
+192.168.108.180
+ }
+}
+vrrp_instance LAN_GATEWAY { #定义内网网关
+ state MASTER#BACKUP上修改为BACKUP
+ interface eth1
+ virtual_router_id 50 #虚拟路由ID，主从相同
+ priority 100  #BACKUP上修改为90
+ advert_int 1
+ authentication {
+ auth_type PASS
+ auth_pass 1111
+ }
+ virtual_ipaddress {  #内网网关虚拟IP
+ 192.168.0.50
+ }
+}
+virtual_server 192.168.0.50 80 { #定义内网网关虚拟IP和端口
+delay_loop 6    #检查真实服务器时间，单位秒
+lb_algo rr      #设置负载调度算法，rr为轮训
+lb_kind NAT     #设置LVS负载均衡NAT模式
+persistence_timeout 50 #同一IP的连接60秒内被分配到同一台真实服务器
+protocol TCP    #使用TCP协议检查realserver状态
+real_server 192.168.0.10 80 {  #第一个网关节点
+weight 3          #节点权重值
+TCP_CHECK {       #健康检查方式
+connect_timeout 3 #连接超时
+nb_get_retry 3    #重试次数
+delay_before_retry 3  #重试间隔/S
+ }
+}
+real_server 192.168.0.20 80 {  #第二个网关节点
+weight 3
+TCP_CHECK {
+connect_timeout 3
+nb_get_retry 3
+delay_before_retry 3
+  }
+ }
+}
+virtual_server 192.168.108.180 80 { #定义外部虚拟IP
+delay_loop 6
+lb_algo rr
+lb_kind NAT
+persistence_timeout 50
+protocol TCP
+real_server 192.168.0.30 80 {  #第一个web服务器
+weight 3
+TCP_CHECK {
+connect_timeout 3
+nb_get_retry 3
+delay_before_retry 3
+connect_port 80
+ }
+}
+real_server 192.168.0.40 80 {  #第二个web服务器
+weight 3
+TCP_CHECK {
+connect_timeout 3
+nb_get_retry 3
+delay_before_retry 3
+connect_port 80
+  }
+ }
+}
+
+[root@localhost ~]# service keepalived restart #启动keepalived
+
+
+
+二、配置两台real-web服务
+1、配置两台内网Web服务器网关指向192.168.0.50
+
+
+2、启动http服务并写入测试页
+[root@localhost ~]# service httpd start
+[root@localhost ~]# echo “192.168.0.30″ > /var/www/html/index.html
+[root@localhost ~]# echo “192.168.0.40″ > /var/www/html/index.html
+[root@localhost ~]# service iptables stop  #关闭防火墙
+[root@localhost ~]# setenforce 0  #临时关闭selinux
+
+三、测试及常用命令
+http://192.168.108.180#访问一直刷新会轮训显示192.168.0.30/40
+
+模拟宕掉主LVS，服务器照常工作，再宕掉Web1，这时只会显示Web2，这样就实现ip负载均衡，高可用集群。当主LVS恢复后，会切换成主动服务器，如果Keepalived监控模块检测web故障恢复后，恢复的主机又将此节点加入集群系统中。
+
+常用命令：
+[root@localhost ~]# ipvsadm -ln #显示集群中服务器ip信息
+[root@localhost ~]# ip addr #显示VTP绑定在哪个服务器上
+[root@localhost ~]# tail -f /var/log/messger
+(从日志中可知，主机出现故障后，备机立刻检测到，此时备机变为MASTER角色，并且接管了主机的虚拟IP资源，最后将虚拟IP绑定在etho设备上)
+
