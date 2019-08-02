@@ -34,6 +34,9 @@ cd boost_1_59_0
 ./bootstrap.sh
 ./b2 install
 注:此处如果只为安装mysql其实可以不用安装的，解压就好，到时安装mysql时引用目录，不过percona-xtrabackup需要用到，所以我安装了。
+cmake的时候需要指定其路径：-DWITH_BOOST=/server/mysql/boost
+cmake -DCMAKE_INSTALL_PREFIX=/server/mysql  -DMYSQL_DATADIR=/server/mysql/data -DSYSCONFDIR=/etc -DMYSQL_UNIX_ADDR=/server/mysql/mysql.sock -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_MEMORY_STORAGE_ENGINE=1 -DWITH_READLINE=1 -DMYSQL_UNIX_ADDR=l -DMYSQL_TCP_PORT=3306 -DENABLED_LOCAL_INFILE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8 -DDEFAULT_COLLATION=utf8_general_ci -DDOWNLOAD_BOOST=1 -DWITH_BOOST=/server/mysql/boost}}
+
 
 下载mysql-5.7.18
 cd /root
