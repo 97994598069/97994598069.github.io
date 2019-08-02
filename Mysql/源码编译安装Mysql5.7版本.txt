@@ -115,13 +115,6 @@ grep chkconfig ./* -R  -color
 [root@Wg64 mysql]# chkconfig --list mysqld
 mysqld            0:off       1:off       2:on 3:on 4:on 5:on 6:off
 
-{{{##如果是centos7则如下：
-cp usr/lib/systemd/system/mysqld.service /usr/lib/systemd/system/
-systemctl daemon-reload    //刷新识别mysqld.service服务
-systemctl enable mysqld    //加入系统自启动
-systemctl start mysqld     //启动服务
-netstat -anpt | grep 3306  
-}}}
 
 （12）初始化数据库
 [root@Wg64 mysql]# /server/mysql/bin/mysqld --initialize-insecure --user=mysql --basedir=/server/mysql --datadir=/server/mysql/data  
