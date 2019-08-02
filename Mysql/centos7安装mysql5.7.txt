@@ -30,6 +30,10 @@ perl-Data-Dumper \
 下载boost_1_59_0
 cd /usr/local
 wget http://downloads.sourceforge.net/project/boost/boost/1.59.0/boost_1_59_0.tar.gz
+cd boost_1_59_0
+./bootstrap.sh
+./b2 install
+注:此处如果只为安装mysql其实可以不用安装的，解压就好，到时安装mysql时引用目录，不过percona-xtrabackup需要用到，所以我安装了。
 
 下载mysql-5.7.18
 cd /root
