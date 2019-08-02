@@ -1,0 +1,154 @@
+1、源码编译安装mysql（5.7版本） 
+下载地址：
+https://cdn.mysql.com//Downloads/MySQL-5.7/mysql-boost-5.7.18.tar.gz
+#（MySQL从5.7版本之后，boost是必须的，建议把系统自带的boost库卸载，源码编译安装高版本
+Boost库是为C++语言标准库提供扩展的一些C++程序库的总称）
+（1）环境准备：
+[root@Wg64 ~]# ls
+mysql-boost-5.7.18.tar.gz  nginx-1.10.3.tar.gz  nginx.conf  pcre-8.38.tar.gz  php-7.0.18.tar.gz
+
+#卸载系统自带boots库
+[root@Wg64 ~]# yum -y remove boost-*   
+
+#卸载系统自带的mysql
+[root@Wg64 ~]#  yum -y remove mysql
+[root@Wg64 ~]# rpm -qa | grep mysql
+mysql-libs-5.1.73-5.el6_6.x86_64
+[root@Wg64 ~]#  rpm -e --nodeps  mysql-libs-5.1.73-5.el6_6.x86_64
+[root@Wg64 ~]# rpm -qa | grep mysql
+
+#安装必要的资源包
+建议使用网络yum源，RHEL6.5光盘中自带的软件包版本不够，mysql-boost-5.7.18.tar.gz的编译对软件包的版本要求比较高，其中cmake的版本要不低于2.8
+#安装依赖包
+[root@Wg64 ~]# yum install -y cmake make gcc gcc-c++ bison ncurses ncurses-devel
+
+（2）添加用户和组
+[root@Wg64 ~]# groupadd mysql
+[root@Wg64 ~]# useradd -M -s /sbin/nologin -r -g mysql mysql
+
+（3）创建安装目录和数据存放目录
+[root@Wg64 ~]# mkdir -p /server/mysql
+
+（4）上传源码包 并解压源码包
+[root@HK64 LAMP]# ls
+略
+
+[root@Wg64 ~]# tar zxf mysql-boost-5.7.18.tar.gz -C /server/
+
+#将boots文件移动到/server/mysql/下
+cd /server/mysql-5.7.18/  
+[root@Wg64 mysql-5.7.18]# mv boost/ /server/mysql
+[root@Wg64 mysql-5.7.18]# cd /server/mysql
+[root@Wg64 mysql]# ls
+boost 
+
+
+（6）配置参数
+[root@Wg64 mysql]# cd ../
+[root@Wg64 server]# ls
+mysql  mysql-5.7.18
+
+
+[root@Wg64 server]# cd mysql-5.7.18/
+[root@Wg64 mysql-5.7.18]#cmake -DCMAKE_INSTALL_PREFIX=/server/mysql  -DMYSQL_DATADIR=/server/mysql/data -DSYSCONFDIR=/etc -DMYSQL_UNIX_ADDR=/server/mysql/mysql.sock -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_MEMORY_STORAGE_ENGINE=1 -DWITH_READLINE=1 -DMYSQL_UNIX_ADDR=l -DMYSQL_TCP_PORT=3306 -DENABLED_LOCAL_INFILE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8 -DDEFAULT_COLLATION=utf8_general_ci -DDOWNLOAD_BOOST=1 -DWITH_BOOST=/server/mysql/boost
+这些编译参数的帮助寻找方法：
+http://www.mysql.com→→Documentation→→选择对应的版本（5.7）Installation & Upgrades→→Installing MySQL from Source →→MySQL Source-Configuration Options
+最终的URL https://dev.mysql.com/doc/refman/5.7/en/source-configuration-options.html      
+
+DCMAKE_INSTALL_PREFIX：指定MySQL程序的安装目录，默认/usr/local/mysql
+DEFAULT_CHARSET：指定服务器默认字符集，默认latin1
+DEFAULT_COLLATION：指定服务器默认的校对规则，默认latin1_general_ci
+ENABLED_LOCAL_INFILE：指定是否允许本地执行LOAD DATA INFILE，默认OFF
+WITH_COMMENT：指定编译备注信息
+WITH_xxx_STORAGE_ENGINE：指定静态编译到mysql的存储引擎，MyISAM，MERGE，MEMBER以及CSV四种引擎默认即被编译至服务器，不需要特别指定。
+WITHOUT_xxx_STORAGE_ENGINE：指定不编译的存储引擎
+SYSCONFDIR：初始化参数文件目录
+MYSQL_DATADIR：数据文件目录
+MYSQL_TCP_PORT：服务端口号，默认3306
+MYSQL_UNIX_ADDR：socket文件路径，默认/tmp/mysql.sock
+
+
+
+编译
+mysql-5.7.18.tar.gz编译时会占用大量的系统资源，建议使用多个核心同时进行编译，否则可能会编译失败
+
+（7）编译
+#查看服务器cpu数
+[root@Wg64 mysql-5.7.18]# grep processor /proc/cpuinfo | wc -l
+2 
+[root@Wg64 mysql-5.7.18]# make -j 2
+
+（8）安装
+[root@xuegod63 mysql-5.7.18]# make install
+
+（9）修改目录权限
+[root@Wg64 mysql-5.7.18]# chown -R mysql:mysql /server/mysql/
+
+（10）生成配置文件
+#将原服务器配置文件移动备份或删除
+[root@Wg64 mysql-5.7.18]# mv /etc/my.cnf{,.bak}
+
+#因5.7版本无此配置模板文件/server/mysql/support-files/my-default.cnf   
+#自行编写my.cnf文件 
+[root@Wg64 mysql-5.7.18]#vim /etc/my.cnf
+[mysqld]
+sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES
+#default
+user = mysql
+basedir = /server/mysql
+datadir = /server/mysql/data
+port = 3306
+pid-file = /server/mysql/data/mysql.pid
+socket = /server/mysql/mysql.sock
+character-set-server=utf8
+[client]
+socket = /server/mysql/mysql.sock
+
+
+（11）生成服务启动脚本
+grep chkconfig ./* -R  -color
+
+[root@Wg64 mysql]# cp /server/mysql/support-files/mysql.server /etc/init.d/mysqld
+[root@Wg64 mysql]# chmod +x /etc/init.d/mysqld
+[root@Wg64 mysql]# chkconfig --add mysqld
+[root@Wg64 mysql]# chkconfig mysqld on
+[root@Wg64 mysql]# chkconfig --list mysqld
+mysqld            0:off       1:off       2:on 3:on 4:on 5:on 6:off
+
+（12）初始化数据库
+[root@Wg64 mysql]# /server/mysql/bin/mysqld --initialize-insecure --user=mysql --basedir=/server/mysql --datadir=/server/mysql/data  
+
+
+（13）启动服务
+[root@Wg64 mysql]# service mysqld restart 
+ ERROR! MySQL server PID file could not be found!
+Starting MySQL.Logging to '/server/mysql/data/Wg64.err'.
+ SUCCESS! 
+ 
+[root@Wg64 mysql]# service mysqld restart 
+Shutting down MySQL.. SUCCESS! 
+Starting MySQL. SUCCESS!
+
+
+（15）优化调用命令路径
+#添加path路径： vim /etc/profile 添加下面2行 在文件的结尾
+export MYSQL_HOME=/server/mysql
+export PATH=$PATH:$MYSQL_HOME/bin
+
+
+#使修改生效
+source /etc/profile
+ 
+或
+[root@Wg64 mysql]# ln -s /server/mysql/bin/* /usr/local/bin/
+
+
+（14）修改mysql密码测试登入：
+ 
+[root@Wg64 ~]# mysqladmin -u root password "123456"
+mysqladmin: [Warning] Using a password on the command line interface can be insecure.
+Warning: Since password will be sent to server in plain text, use ssl connection to ensure password safety.
+测试登入成功：
+
+
+
