@@ -1,0 +1,275 @@
+https://yq.aliyun.com/articles/601364
+
+#卸载系统自带的mysql
+[root@Wg64 ~]#  yum -y remove mysql
+[root@Wg64 ~]# rpm -qa | grep mysql
+mysql-libs-5.1.73-5.el6_6.x86_64
+[root@Wg64 ~]#  rpm -e --nodeps  mysql-libs-5.1.73-5.el6_6.x86_64
+[root@Wg64 ~]# rpm -qa | grep mysql
+
+yum install \
+vim \
+git \
+gcc \
+gcc-c++ \
+wget \
+make \
+cmake \
+automake \
+autoconf \
+libaio \
+libtool \
+net-tools \
+bison-devel \
+libaio-devel \
+ncurses-devel \
+perl-Data-Dumper \
+-y
+
+
+下载boost_1_59_0
+cd /usr/local
+wget http://downloads.sourceforge.net/project/boost/boost/1.59.0/boost_1_59_0.tar.gz
+
+下载mysql-5.7.18
+cd /root
+wget http://dev.mysql.com/get/Downloads/MySQL-5.7/mysql-5.7.18.tar.gz
+tar -zxvf mysql-5.7.18.tar.gz
+cd mysql-5.7.18
+
+
+运行cmake
+cmake . \
+-DCMAKE_INSTALL_PREFIX=/usr/local/mysql \
+-DWITH_SYSTEMD=1 \
+-DDOWNLOAD_BOOST=1 \
+-DWITH_BOOST=/usr/local \
+-DDEFAULT_CHARSET=utf8mb4 \
+
+make
+make install
+
+添加mysql用户
+useradd -s /sbin/nologin -M mysql
+
+创建数据文件目录、所属组、用户改为mysql
+mkdir /data/
+mkdir /data/mysql/
+chown -R mysql:mysql /etc/my.cnf
+chown -R mysql:mysql /data/mysql/
+chown -R mysql:mysql /var/*/mysql*
+chown -R mysql:mysql /usr/local/mysql/
+
+
+修改SELinux
+vim /etc/sysconfig/selinux
+
+SELINUX=permissive
+
+ESC
+:wq
+
+setenforce 0
+
+
+my.cnf详细配置
+vim /etc/my.cnf
+
+[client]
+default-character-set = utf8mb4
+
+[mysql]
+default-character-set = utf8mb4
+
+[mysqld]
+datadir=/data/mysql
+character-set-server=utf8mb4
+init_connect='SET NAMES utf8mb4'
+collation-server=utf8mb4_unicode_ci
+character-set-client-handshake=FALSE
+
+symbolic-links=0
+log-error=/var/log/mysqld.log
+socket=/var/lib/mysql/mysql.sock
+pid-file=/var/run/mysqld/mysqld.pid
+secure_file_priv=/var/lib/mysql-files
+
+server-id=1
+binlog-format=Row
+log-bin=/data/mysql/mysql-bin
+sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+
+ESC
+:wq
+
+
+初始化数据库配置
+# --initialize-insecure参数为不安全的初始化方案，建议使用--initialize参数
+# 以下代码执行完之后,会在/data/mysql/mysql-error.log保存初始密码
+
+su mysql
+su mysql !!!
+su mysql !!!
+
+/usr/local/mysql/bin/mysqld \
+--initialize \
+--user=mysql \
+--datadir=/data/mysql \
+--basedir=/usr/local/mysql \
+
+# 查看初始密码
+cat /var/lib/mysql/mysql.log|grep password
+
+# ssh连接mysql,如果对ssh不了解,不要这样做
+/usr/local/mysql/bin/mysql_ssl_rsa_setup \
+--initialize \
+--user=mysql \
+
+vim /etc/my.cnf
+
+[client]
+port = 3306
+socket = /tmp/mysql.sock
+
+[mysqld]
+port = 3306
+slow_query_log = 1
+long_query_time = 1
+socket = /tmp/mysql.sock
+basedir = /usr/local/mysql
+datadir = /data/mysql
+pid-file = /data/mysql/mysql.pid
+log_error = /data/mysql/mysql-error.log
+slow_query_log_file = /data/mysql/mysql-slow.log
+default_storage_engine = InnoDB
+
+[mysqld_safe]
+log-error=/data/mysql/mysql.log
+pid-file=/data/mysql/mysqld.pid
+
+ESC
+:wq
+
+
+添加mysqld.service
+exit
+cp /usr/local/mysql/usr/lib/systemd/system/mysqld.service /usr/lib/systemd/system/
+
+mysqld.service详细配置
+vim /usr/lib/systemd/system/mysqld.service
+
+# 将下面的配置覆盖整个文件内容
+[Unit]
+Description=开机启动MySQL.
+After=default.target network.target syslog.target
+
+[Service]
+User=mysql
+Group=mysql
+Type=forking
+PIDFile=/data/mysql/mysqld.pid
+TimeoutSec=0
+PermissionsStartOnly=true
+ExecStartPre=/usr/local/mysql/bin/mysqld_pre_systemd
+ExecStart=/usr/local/mysql/bin/mysqld --daemonize --pid-file=/data/mysql/mysql.pid $MYSQLD_OPTS
+EnvironmentFile=-/etc/sysconfig/mysql
+LimitNOFILE = 5000
+Restart=on-failure
+RestartPreventExitStatus=1
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target
+
+ESC
+:wq
+
+
+启用mysqld.service
+systemctl enable mysqld
+systemctl start  mysqld
+systemctl daemon-reload
+
+
+测试配置是否正确，没有任何输出则表示一切正常
+/usr/local/mysql/bin/mysqld_pre_systemd
+
+
+数据文件所属用户修改为mysql（如果‘初始化数据库配置’时完全按文档进行，可不执行本步骤，不确定则执行）
+chown -R mysql:mysql /data/mysql/
+
+启动mysql
+systemctl enable mysqld
+systemctl start  mysqld
+
+添加mysql到mysql用户环境变量
+su mysql
+vim /home/mysql/.bash_profile
+
+PATH=$PATH:$HOME/.local/bin:$HOME/bin:/usr/local/mysql/bin
+
+ESC
+:wq
+
+source /home/mysql/.bash_profile
+
+
+尝试连接mysql
+# mysql默认用户为root
+mysql -u root -p
+password:**************
+#修改root[DB用户]初始密码
+SET PASSWORD=PASSWORD('**************');
+show databases;
+use mysql;
+show tables;
+select * from user \G;
+
+测试启动、停止、重启mysql
+#启用并启动
+systemctl enable mysqld
+systemctl start mysqld
+#禁用并关闭
+systemctl disable mysqld
+systemctl stop mysqld
+#启用并重新启动
+systemctl enable mysqld
+systemctl restart mysqld
+
+
+设置外部访问密码
+# 数据库名-通配符及格式:
+    *[允许操作所有数据库]
+    %pay%[允许操作名字包含'pay'的数据库]
+    mydatabase[仅允许操作'mydatabase'数据库]
+# 表名-通配符及格式:
+    *[允许操作所有表]
+    %pay%[允许操作名字包含'pay'的表]
+    mytable[仅允许操作'mytable'表]
+# ip地址-通配符及格式:
+    %/0.0.0.0[允许任意IP访问]
+    xxx.xxx.xxx.xxx[仅限公网访问]
+    192.168.x.xxx[仅限局域网访问]
+    localhost/127.0.0.1/::1[仅限本机访问]
+
+# 数据库授权格式
+GRANT 权限名 ON 数据库名.数据表名 TO '数据用户'@'访问IP' IDENTIFIED BY '用户密码' WITH GRANT OPTION;
+
+# 为任意数据库表 任意操作 分配root用户,仅限本地访问
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' IDENTIFIED BY '**************' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' IDENTIFIED BY '**************' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'::1' IDENTIFIED BY '**************' WITH GRANT OPTION;
+
+# 为任意数据库表 任意操作 分配mysql用户,任意IP访问(安装调试阶段、本地开发使用,用后即删)
+GRANT ALL PRIVILEGES ON *.* TO 'mysql'@'%' IDENTIFIED BY '**************' WITH GRANT OPTION;
+
+# 为任意数据库表 增删改查 分配单独用户,为不同的业务分配专属用户
+GRANT INSERT ON *.* TO 'insert1'@'127.0.0.1' IDENTIFIED BY '**************' WITH GRANT OPTION;
+GRANT DELETE ON *.* TO 'delete1'@'127.0.0.1' IDENTIFIED BY '**************' WITH GRANT OPTION;
+GRANT UPDATE ON *.* TO 'update1'@'127.0.0.1' IDENTIFIED BY '**************' WITH GRANT OPTION;
+GRANT SELECT ON *.* TO 'select1'@'127.0.0.1' IDENTIFIED BY '**************' WITH GRANT OPTION;
+
+# 刷新权限
+FLUSH PRIVILEGES;
+
+
