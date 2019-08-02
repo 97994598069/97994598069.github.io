@@ -1,6 +1,6 @@
 1、源码编译安装mysql（5.7版本） 
 下载地址：
-https://cdn.mysql.com//Downloads/MySQL-5.7/mysql-boost-5.7.18.tar.gz
+https://dev.mysql.com//Downloads/MySQL-5.7/mysql-boost-5.7.18.tar.gz
 #（MySQL从5.7版本之后，boost是必须的，建议把系统自带的boost库卸载，源码编译安装高版本
 Boost库是为C++语言标准库提供扩展的一些C++程序库的总称）
 （1）环境准备：
