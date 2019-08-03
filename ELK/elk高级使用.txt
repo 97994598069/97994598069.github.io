@@ -1,0 +1,738 @@
+https://www.csdn.net/gather_29/MtTaYgysMjM4Ni1ibG9n.html
+多个filebeat--->logstash--->es集群--->kibana
+filebeat组件配置: (多个数据源)
+服务器          安装根目录
+172.17.0.153    /opt/filebeat-6.2.3-linux-x86_64
+172.17.0.154    /opt/filebeat-6.2.3-linux-x86_64 
+172.17.0.155    /opt/filebeat-6.2.3-linux-x86_64
+172.17.0.156    /opt/filebeat-6.2.3-linux-x86_64
+下载:
+https://www.elastic.co/downloads/past-releases
+https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-6.2.3-linux-x86.tar.gz
+二、解压安装
+安装教程：https://blog.csdn.net/beyond_qjm/article/details/81944486
+安装目录
+/opt
+tar -xvf filebeat/filebeat-6.2.3-linux-x86.tar.gz
+三、配置详解
+配置文件（/opt/filebeat-6.2.3-linux-x86/filebeat.yml）
+四、启动
+cd /opt/filebeat-6.2.3-linux-x86
+./filebeat -e -c ./filebeat.yml
+五、清除标记
+Filebeat 会将文件读取位置记录 /opt/filebeat-6.2.3-linux-x86/data/registry 文件夹中，想重新从文件开始读取需要删除 registry 文件夹，然后重启Filebeat 。
+整合配置：
+filebeat.prospectors:
+- type: log
+enabled: true # 开关
+paths: # 日志文件路径，可以用用通配符
+- /logs/access/access*  #访问记录 
+#- c:\programdata\elasticsearch\logs\*  如果是windows服务器，用这个路径
+fields_under_root: true
+multiline: # 日志多行处理，列如java的堆栈信息
+pattern: ^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} # 匹配ip
+negate: true
+match: after
+fields: # 自定义属性，用于 Logstash 中
+log_type: access # 日志文件类型
+server_id: 172.17.0.153 # 服务器ip地址
+scan_frequency: 120s #扫描间隔，单位为秒；设置太小会引起filebeat频繁扫描文件，导致cpu占用百分比过高
+tail_files: false #是否是从文件尾部开始监听
+backoff: 30s #文件检查间隔时间
+max_backoff: 60
+tail_files: true
+- type: log
+enabled: true
+paths:
+- /logs/console/console*  #log日志
+fields_under_root: true
+multiline:
+pattern: ^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
+negate: true
+match: after
+fields:
+log_type: console
+server_id: 172.17.0.153
+scan_frequency: 120
+tail_files: false #是否是从文件尾部开始监听
+backoff: 30s #文件检查间隔时间
+max_backoff: 60
+tail_files: true
+output.logstash: # 输出到logstash的安装位置，以及监听的端口
+hosts: ["172.17.0.184:9988"]
+三、Logstash安装
+172.17.0.184    /home/elk/logstash-6.2.3/
+安装教程：https://blog.csdn.net/beyond_qjm/article/details/81945527
+一、下载
+https://www.elastic.co/downloads/past-releases
+https://artifacts.elastic.co/downloads/logstash/logstash-6.2.3.tar.gz
+二、创建新用户
+useradd elk
+passwd elk
+三、解压安装
+安装目录
+/home/elk
+tar -xvf logstash-6.2.3.tar.gz		
+四、运行参数
+略
+五、基础配置
+添加配置文件
+/home/elk/logstash-6.2.3/bin/config/log4j.cfg
+input{
+beats {
+port => "9988"
+}
+}
+filter{
+grok{
+match => [
+"message" , "%{TIMESTAMP_ISO8601:time} %{DATA:thread} %{LOGLEVEL:level}  %{JAVACLASS:class} : %{GREEDYDATA:info}",
+"message" , "%{TIMESTAMP_ISO8601:time} %{DATA:thread} %{LOGLEVEL:level} %{JAVACLASS:class} : %{GREEDYDATA:info}",
+"message" , "%{URIHOST:visitHost} - - \[%{HTTPDATE:time}\] \"%{CISCO_REASON:method} %{URIPATHPARAM:request} %{SYSLOGPROG:protocol}\" %{NUMBER:responseCode:int} %{NUMBER:responseTime:int}"
+]
+}
+date { 
+match => [
+"time", "dd/MMM/yyyy:HH:mm:ss Z",
+"yyyy-MM-dd HH:mm:ss.SSS",
+"yyyy-MM-dd HH:mm:ss"
+]
+target => "@timestamp"
+locale => "cn"
+}
+mutate{
+remove_field => ["@version","_score","_id","program","time","beat","offset","prospector","host","message","tags"]
+}
+}
+output{
+#file{path=>"/home/elk/out.log"}
+stdout{codec=>rubydebug}
+if [log_type] == "console" and [info] =~ /^\S/ {
+elasticsearch{
+hosts => ["172.17.0.183:9200"]
+index => "console-%{+YYYY.MM}"
+manage_template => true
+template_name => "console"
+template_overwrite => true
+template => "/home/elk/logstash-6.2.3/bin/config/console.json"
+}
+}
+if [log_type] == "access" {
+elasticsearch{
+hosts => ["172.17.0.183:9200"]
+index => "access-%{+YYYY.MM}"
+manage_template => true
+template_name => "access"
+template_overwrite => true
+template => "/home/elk/logstash-6.2.3/bin/config/access.json"
+}
+}
+}
+### filter   grok测试：http://grokdebug.herokuapp.com/
+添加 /home/elk/logstash-6.2.3/bin/config/laccess.json
+{
+"template": "access*",
+"settings": {
+"index.number_of_shards": 5,
+"number_of_replicas": 1
+},
+"mappings": {
+"access": {
+"_all": {
+"enabled": false
+},
+"properties": {
+"@timestamp": {
+"type": "date",
+},
+"server_id": {
+"type": "string",
+"index": "not_analyzed"
+},
+"source": {
+"type": "string",
+"index": "not_analyzed"
+},
+"visitHost": {
+"type": "string",
+"index": "not_analyzed"
+},
+"method": {
+"type": "string",
+"index": "not_analyzed"
+},
+"request": {
+"type": "string",
+"index": "analyzed"
+},
+"protocol": {
+"type": "string",
+"index": "not_analyzed"
+},
+"responseCode": {
+"type": "integer",
+"index": "not_analyzed"
+},
+"responseTime": {
+"type": "integer",
+"index": "not_analyzed"
+},
+"log_type": {
+"type": "string",
+"index": "not_analyzed"
+}
+}
+}
+}
+}
+添加 /home/elk/logstash-6.2.3/bin/config/console.json
+{
+"template": "console*",
+"settings": {
+"index.number_of_shards": 5,
+"number_of_replicas": 1
+},
+"mappings": {
+"console": {
+"_all": {
+"enabled": false
+},
+"properties": {
+"@timestamp": {
+"type": "date",
+},
+"server_id": {
+"type": "string",
+"index": "not_analyzed"
+},
+"source": {
+"type": "string",
+"index": "not_analyzed"
+},
+"thread": {
+"type": "string",
+"index": "not_analyzed"
+},
+"level": {
+"type": "string",
+"index": "not_analyzed"
+},
+"class": {
+"type": "string",
+"index": "not_analyzed"
+},
+"info": {
+"type": "string",
+"index": "analyzed"
+},
+"log_type": {
+"type": "string",
+"index": "not_analyzed"
+}
+}
+}
+}
+}
+六、启动
+cd /home/elk/logstash-6.2.3/bin
+./bin/logstash -f ./bin/config/log4j.cfg
+七、清除标记
+logstash会将文件读取位置记录 $HOME/.sincedb_****  文件中，想重新从文件开始读取需要删除 $HOME/.sincedb_****，然后重启logstash。
+四、Elasticsearch安装
+172.17.0.181  /home/elk/elasticsearch-6.2.3  data
+172.17.0.182 /home/elk/elasticsearch-6.2.3  data
+172.17.0.183 /home/elk/elasticsearch-6.2.3 master
+安装教程：https://blog.csdn.net/beyond_qjm/article/details/81943552
+elasticsearch-head安装配置：https://blog.csdn.net/beyond_qjm/article/details/81947181
+一、安装（elasticsearch-6.2.3）
+下载链接
+https://www.elastic.co/downloads/past-releases
+https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.2.3.tar.gz
+创建新用户（高版本elasticsearch为安装考虑已禁止使用root启动）
+useradd elk
+passwd elk
+解压 安装包
+安装目录 /home/elk
+tar -xvf elasticsearch-6.2.3.tar.gz
+4. 创建数据保存目录
+mkdir /home/elk/data/elasticsearch/data
+5. 创建日志信息保存目录
+mkdir /home/elk/data/elasticsearch/logs
+二、配置
+配置文件（/home/elk/elasticsearch-6.2.3/config/elasticsearch.yml）
+#集群的名称
+cluster.name: elk
+#节点名称,不能相同
+node.name: node-1
+#指定该节点是否有资格被选举成为master节点，默认是true，es是默认集群中的第一台机器为master，如果这台机挂了就会重新选举master
+node.master: true
+#允许该节点存储数据(默认开启)
+node.data: true
+#索引数据的存储路径
+path.data: /home/elk/data/elasticsearch/data
+#日志文件的存储路径
+path.logs: /home/elk/data/elasticsearch/logs
+#设置为true来锁住内存。因为内存交换到磁盘对服务器性能来说是致命的，当jvm开始swapping时es的效率会降低，所以要保证它不swap
+bootstrap.memory_lock: true
+#绑定的ip地址，默认为localhost如果在别的PC可能无法通过浏览器访问
+network.host: 172.17.0.183
+#设置对外服务的http端口，默认为9200
+http.port: 9200
+# 设置节点间交互的tcp端口,默认是9300
+transport.tcp.port: 9300
+#Elasticsearch将绑定到可用的环回地址，并将扫描端口9300到9305以尝试连接到运行在同一台服务器上的其他节点。
+#这提供了自动集群体验，而无需进行任何配置。数组设置或逗号分隔的设置。每个值的形式应该是host:port或host
+#（如果没有设置，port默认设置会transport.profiles.default.port 回落到transport.tcp.port）。
+#请注意，IPv6主机必须放在括号内。默认为127.0.0.1, [::1]
+discovery.zen.ping.unicast.hosts: ["172.17.0.181:9300", "172.17.0.182:9300", "172.17.0.183:9300"]
+#如果没有这种设置,遭受网络故障的集群就有可能将集群分成两个独立的集群 - 分裂的大脑 - 这将导致数据丢失
+discovery.zen.minimum_master_nodes: 3
+#主节点需要配置否侧 _head 插件无法连接
+#开启跨域访问支持，默认为false
+http.cors.enabled: true 
+#跨域访问允许的域名地址，(允许所有域名)以上使用正则
+http.cors.allow-origin: "*"
+2. 配置
+# ======================== Elasticsearch Configuration =========================
+#
+# NOTE: Elasticsearch comes with reasonable defaults for most settings.
+#       Before you set out to tweak and tune the configuration, make sure you
+#       understand what are you trying to accomplish and the consequences.
+#
+# The primary way of configuring a node is via this file. This template lists
+# the most important settings you may want to configure for a production cluster.
+#
+# Please consult the documentation for further information on configuration options:
+# https://www.elastic.co/guide/en/elasticsearch/reference/index.html
+#
+# ---------------------------------- Cluster -----------------------------------
+#
+# Use a descriptive name for your cluster:
+#
+cluster.name: elk
+#
+# ------------------------------------ Node ------------------------------------
+#
+# Use a descriptive name for the node:
+#
+node.name: node-183
+#
+# Add custom attributes to the node:
+#
+#node.attr.rack: r1
+#
+# ----------------------------------- Paths ------------------------------------
+#
+# Path to directory where to store the data (separate multiple locations by comma):
+#
+path.data: /home/elk/data/elasticsearch/data
+#
+# Path to log files:
+#
+path.logs: /home/elk/data/elasticsearch/logs
+#
+# ----------------------------------- Memory -----------------------------------
+#
+# Lock the memory on startup:
+#
+bootstrap.memory_lock: false
+bootstrap.system_call_filter: false
+#
+# Make sure that the heap size is set to about half the memory available
+# on the system and that the owner of the process is allowed to use this
+# limit.
+#
+# Elasticsearch performs poorly when the system is swapping the memory.
+#
+# ---------------------------------- Network -----------------------------------
+#
+# Set the bind address to a specific IP (IPv4 or IPv6):
+#
+network.host: 172.17.0.183
+#
+# Set a custom port for HTTP:
+#
+http.port: 9200
+transport.tcp.port: 9300
+#是否作为主机
+node.master: true
+#是否作为数据节点
+node.data: false
+#
+# For more information, consult the network module documentation.
+#
+# --------------------------------- Discovery ----------------------------------
+#
+# Pass an initial list of hosts to perform discovery when new node is started:
+# The default list of hosts is ["127.0.0.1", "[::1]"]
+#
+discovery.zen.ping.unicast.hosts: ["172.17.0.181:9300", "172.17.0.182:9300","172.17.0.183:9300"]
+#
+# Prevent the "split brain" by configuring the majority of nodes (total number of master-eligible nodes / 2 + 1):
+#
+#discovery.zen.minimum_master_nodes: 2
+#
+# For more information, consult the zen discovery module documentation.
+#
+# ---------------------------------- Gateway -----------------------------------
+#
+# Block initial recovery after a full cluster restart until N nodes are started:
+#
+#gateway.recover_after_nodes: 3
+#
+# For more information, consult the gateway module documentation.
+#
+# ---------------------------------- Various -----------------------------------
+#
+# Require explicit names when deleting indices:
+#
+#action.destructive_requires_name: true
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+三、安装可能报错
+错误
+[1]: max file descriptors [4096] for elasticsearch process is too low, increase to at least [65536
+编辑 limits.conf 在第一行加上如下内容
+vi /etc/security/limits.conf
+* soft nofile 65536
+* hard nofile 131072
+* soft nproc 2048
+* hard nproc 4096
+错误
+[2]: max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]
+编辑 limits.conf 在第一行加上如下内容
+vi /etc/sysctl.conf
+vm.max_map_count = 655360
+执行 sysctl -p
+sysctl -p
+错误
+[3]: ERROR: bootstrap checks failed system call filters failed to install; check the logs and fix your configuration or disable system call filters at your own risk
+这是在因为Centos6不支持SecComp，而ES5.2.0默认bootstrap.system_call_filter为true进行检测，所以导致检测失败，失败后直接导致ES不能启动。
+编辑elasticsearch.yml中配置bootstrap.system_call_filter为false，注意要在Memory下面
+bootstrap.memory_lock: false
+bootstrap.system_call_filter: false
+elasticsearch-head安装、配置
+一、安装Nodejs
+1. 下载安装包
+wget https://npm.taobao.org/mirrors/node/latest-v4.x/node-v4.4.7-linux-x64.tar.gz
+2. 安装目录
+/home/elk/
+3.  解压
+tar -zxvf node-v4.4.7-linux-x64.tar.gz
+4.  创建快捷连接
+ln -s /home/elk/node-v4.4.7-linux-x64/bin/node /usr/local/bin/node
+ln -s /home/elk/node-v4.4.7-linux-x64/bin/npm /usr/local/bin/npm
+二、下载elasticsearch-head
+1. 下载zip
+通过浏览器访问
+https://codeload.github.com/mobz/elasticsearch-head/zip/master
+安装目录
+/home/elk/
+解压
+unzip elasticsearch-head.zip
+2. 使用git下载
+安装git
+yum -y install git
+下载
+git clone https://github.com/mobz/elasticsearch-head.git
+3. 进入elasticsearch-head安装
+cd /home/elk/elasticsearch-head/
+npm install
+插件安装相对会慢一些，请耐心等待...
+三、配置插件
+插件启动前，需要先对插件进行一些相关配置
+1. 修改elasticsearch.yml，增加跨域的配置(需要重启es才能生效)：
+vi /etc/elasticsearch/elasticsearch.yml
+加入配置: http.cors.enabled: true http.cors.allow-origin: "*"
+2. 修改Gruntfile.js文件，修改服务监听地址（增加hostname属性（connect/server/options/第一行新增hostname: "*",），将其值设置为*）
+四、启动插件（后台启动方式）
+cd /usr/share/elasticsearch-head/node_modules/grunt/bin/
+nohup ./grunt server & exit
+五、停止插件
+ps aux|grep grunt
+kill -9 ~
+五、Kibana安装
+172.17.0.183    /home/elk/kibana-6.2.3-linux-x86_64
+安装教程：https://blog.csdn.net/beyond_qjm/article/details/81946384
+一、下载
+https://www.elastic.co/downloads/past-releases
+https://artifacts.elastic.co/downloads/kibana/kibana-6.2.3-linux-x86_64.tar.gz
+二、创建新用户
+useradd elk
+passwd elk
+三、解压安装
+安装目录
+/home/elk
+tar -xvf kibana-6.2.3-linux-x86_64.tar.gz
+四、配置说明
+修改kibana根目录下的 /home/elk/kibana-6.2.3-linux-x86_64/config/kibana.yml 文件，带 * 为必改项其余可以为默认配置。
+* port : 定义访问端口，默认5601。
+* Host : 定义kibana 服务IP。
+* elasticsearch_url ：定义es 服务地址，填写master节点地址即可。
+elasticsearch_preserve_host ：默认，浏览器请求中的主机名即作为 Kibana 发送给 Elasticsearch 时请求的主机名。这里设置为true即可。
+kibana_index: 默认的，kibana连接了es服务后，也会创建一个索引来保存相关信息，默认名字为.kibana
+default_app_id ： 设置默认打开的界面是什么，有discover, visualize, dashboard 和 settings 选择，默认discover。
+request_timeout ：等待 Kibana 后端或 Elasticsearch 的响应的超时时间，单位毫秒；默认300000毫秒
+shard_timeout ：Elasticsearch 等待分片响应的超时时间；默认是0 ；0就是disable 关闭。
+verify_ssl ：定义是否验证 Elasticsearch SSL 证书；false就是关闭；默认true开启。
+五、启动
+cd /home/elk/kibana-6.2.3-linux-x86_64/bin
+shell 启动
+./kibana
+后台启动
+nohup ./kibana &
+
+整合配置：
+修改 /home/elk/kibana-6.2.3-linux-x86_64/config/kibana.yml 中的  server.host: "172.17.0.183"
+
+
+
+六、log日志配置
+1. Spring boot - logback（Spring boot项目）
+（1）配置系统环境	
+spring:
+profiles: ###环境变量配置
+active: dev
+dev、test为测试环境，prod为生产环境
+
+（2）在resource目录下添加logback-spring.xml 配置文件
+需要修改属性 APP_NAME 改为当前项目名，用对区别不同系统的日志
+
+<configuration scan="true" scanPeriod="60 seconds" debug="false">
+<contextName>logback-demo</contextName>
+
+<!-- 定义日志文件名称,与工程名一致 -->
+<property name="APP_NAME" value="duban-home" />
+<!-- 定义日志的根目录 -->
+<property name="LOG_HOME" value="/logs/console" />
+
+<!-- 输出到控制台 ConsoleAppender -->
+<appender name="consoleLog" class="ch.qos.logback.core.ConsoleAppender">
+<!-- 展示格式 layout  控制台输出使用 layout ，文件输出使用 encoder -->
+<layout class="ch.qos.logback.classic.PatternLayout">
+<pattern>
+<!--
+输出格式
+%d{HH: mm:ss.SSS}——日志输出时间
+%thread——输出日志的进程名字，这在Web应用以及异步任务处理中很有用
+%-5level——日志级别，并且使用5个字符靠左对齐
+%logger{36}——日志输出者的名字
+%msg——日志消息
+%n——平台的换行符
+-->
+<pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %thread %-5level %c : %msg%n</pattern>
+</pattern>
+</layout>
+</appender>
+
+<!-- 输出到文件 RollingFileAppender -->
+<appender name="fileLog" class="ch.qos.logback.core.rolling.RollingFileAppender">
+<!--如果只是想要 Error 级别的日志，那么需要过滤一下，默认是 info 级别的，ThresholdFilter-->
+<!--<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+<level>Error</level>
+</filter>-->
+
+<!--日志名称，如果没有File 属性，那么只会使用FileNamePattern的文件路径规则
+如果同时有<File>和<FileNamePattern>，那么当天日志是<File>，明天会自动把今天
+的日志改名为今天的日期。即，<File> 的日志都是当天的。
+-->
+<!--<File>${LOG_HOME}/console_${APP_NAME}.log</File>-->
+
+<!--滚动策略，按照时间滚动 TimeBasedRollingPolicy-->
+<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+<!--文件路径,定义了日志的切分方式——把每一天的日志归档到一个文件中,以防止日志填满整个磁盘空间-->
+<FileNamePattern>${LOG_HOME}/console_${APP_NAME}_%d{yyyy-MM-dd}.log</FileNamePattern>
+<!--只保留最近90天的日志-->
+<maxHistory>90</maxHistory>
+<!--用来指定日志文件的上限大小，那么到了这个值，就会删除旧的日志-->
+<!--<totalSizeCap>1GB</totalSizeCap>-->
+</rollingPolicy>
+
+<!--日志输出编码格式化-->
+<encoder>
+<charset>UTF-8</charset>
+<pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %thread %-5level %c : %msg%n</pattern>
+</encoder>
+</appender>
+
+<!-- 指定最基础的日志输出级别 appender将会添加到这个loger -->
+<!-- 测试环境+开发环境. 多个使用逗号隔开. -->
+<springProfile name="dev,test">
+<root level="INFO">
+<appender-ref ref="consoleLog"/>
+<appender-ref ref="fileLog"/>
+</root>
+</springProfile>
+
+<!-- 生产环境 -->
+<springProfile name="prod">
+<root level="INFO">
+<appender-ref ref="fileLog"/>
+</root>
+</springProfile>
+
+</configuration>
+
+
+
+（3）加载logback配置文件
+
+# 配置日志
+logging:
+config：classpath:logback-spring.xml 
+
+
+2. 整合log4j
+1）修改pom.xml文件
+Springboot项目
+
+<!--删除Spring boot默认使用的日志依赖-->
+<dependency>
+<groupId>org.springframework.boot</groupId>
+<artifactId>spring-boot-starter</artifactId>
+<exclusions>
+<exclusion>
+<groupId>org.springframework.boot</groupId>
+<artifactId>spring-boot-starter-logging</artifactId>
+</exclusion>
+</exclusions>
+</dependency>
+<!-- 加入log4j日志依赖 -->
+<dependency>
+<groupId>org.springframework.boot</groupId>
+<artifactId>spring-boot-starter-log4j</artifactId>
+<version>1.3.8.RELEASE</version>
+</dependency>
+
+
+非 Springboot项目
+<!-- 加入log4j日志依赖 -->
+<dependency>
+<groupId>org.slf4j</groupId>
+<artifactId>slf4j-api</artifactId>
+<version>1.7.21</version>
+</dependency>
+<dependency>
+<groupId>org.slf4j</groupId>
+<artifactId>slf4j-log4j12</artifactId>
+<version>1.7.21</version>
+</dependency>
+<dependency>
+<groupId>commons-logging</groupId>
+<artifactId>commons-logging</artifactId>
+<version>1.2</version>
+</dependency>
+
+
+（2）加入log4j.properties
+将duban-home修改为当前项目名，用对区别不同系统的日志
+log4j.rootLogger=info,ServerDailyRollingFile,stdout
+
+log4j.appender.ServerDailyRollingFile=org.apache.log4j.DailyRollingFileAppender
+log4j.appender.ServerDailyRollingFile.DatePattern='-'yyyy-MM-dd'.log'
+log4j.appender.ServerDailyRollingFile.File=/logs/console/console_duban-home
+log4j.appender.DAILY_ROLLING_FILE.Append=true
+log4j.appender.ServerDailyRollingFile.layout=org.apache.log4j.PatternLayout
+log4j.appender.ServerDailyRollingFile.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss.SSS} %t %-5p %c : %m%n
+log4j.appender.ServerDailyRollingFile.Append=true
+
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss.SSS} %t %-5p %c : %m%n
+
+
+3. Tomcat access访问日志
+Tomcat中默认的情况下，access log是没有设置的。在server.xml文件中配置如下
+<!-- Access log processes all example.  
+Documentation at: /docs/config/valve.html -->  
+<!--  
+<Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"    
+prefix="localhost_access_log." suffix=".txt" pattern="common" resolveHosts="false"/>  
+-->  
+
+改为
+1. prefix中的duban-home为服务器名，用于识别不同的服务器
+2. pattern为输出格式	   
+
+<!-- Access log processes all example.  
+            Documentation at: /docs/config/valve.html -->  
+        
+       <Valve className="org.apache.catalina.valves.AccessLogValve" directory="/logs/access/"    
+              prefix="access_duban-home_log." suffix=".txt" pattern="%h - - %t &quot;%r&quot; %s %D" resolveHosts="false"/> 
+			  
+
+pattern说明
+pattern属性值由字符串常量和pattern标识符加上前缀"%"组合而成。pattern标识符加上前缀"%"，用来代替当前请求/响应中的对应的变量值。目前支持如下的pattern：
+· %a - 远端IP地址
+· %A - 本地IP地址
+· %b - 发送的字节数，不包括HTTP头，如果为0，使用"－"
+· %B - 发送的字节数，不包括HTTP头
+· %h - 远端主机名(如果resolveHost=false，远端的IP地址）
+· %H - 请求协议
+· %l - 从identd返回的远端逻辑用户名（总是返回 '-'）
+· %m - 请求的方法（GET，POST，等）
+· %p - 收到请求的本地端口号
+· %q - 查询字符串(如果存在，以 '?'开始)
+· %r - 请求的第一行，包含了请求的方法和URI
+· %s - 响应的状态码
+· %S - 用户的session ID
+· %t - 日志和时间，使用通常的Log格式
+· %u - 认证以后的远端用户（如果存在的话，否则为'-'）
+· %U - 请求的URI路径
+· %v - 本地服务器的名称
+· %D - 处理请求的时间，以毫秒为单位
+· %T - 处理请求的时间，以秒为单位
+
+
+七、添加为服务
+将以上应用添加为服务方便管理
+教程：https://blog.csdn.net/beyond_qjm/article/details/81947493
+
+在 /etc/init.d/ 目录下创建脚本就可以通过 service 命令启动，如：
+vi /etc/init.d/logstash
+#!/bin/bash
+			export JAVA_HOME=/usr/lib/jdk/jdk1.8.0_144
+			export JRE_HOME=$JAVA_HOME/jre
+			export PATH=$PATH:$HOME/.local/bin:$HOME/bin:$JAVA_HOME/bin:$MYSQL_HOME/bin
+			export SINCEDB_DIR=/root
+
+			ls_path=/home/elk/logstash-6.2.3
+
+			case "$1" in
+			start)
+			        cd $ls_path
+			        nohup ./bin/logstash -f ./bin/config/log4j.cfg &
+
+			        echo "logstash startup"
+			        ;;
+			stop)
+			        ls_pid=`ps aux|grep logstash | grep -v 'grep logstash' | awk '{print $2}'`
+			        for pid in $ls_pid
+			        do
+			                if [ !=$pid];thenkill−9$pidfidoneecho"logstashstopped";;restart)lspid=‘psaux|greplogstash|grep−v′greplogstash′|awk′print$2′‘forpidin$lspiddoif[!=$pid];thenkill−9$pidfidoneecho"logstashstopped";;restart)lspid=‘psaux|greplogstash|grep−v′greplogstash′|awk′print$2′‘forpidin$lspiddoif[ != $pid ] ;then
+			                        kill -9 $pid
+			                fi
+			        done
+			        echo "logstash stopped"
+
+			        cd $ls_path
+			        nohup ./bin/logstash -f ./bin/config/log4j.cfg &
+
+			        echo "logstash startup"
+			        ;;
+			*)
+			        echo "start|stop|restart"
+			        ;;
+			esac
+
+			exit $?
+
+启动logstash
+service logstash start
+	 
+	 
+	 
+
+
+
+
