@@ -15,6 +15,7 @@ yum install  gcc perl-ExtUtils-MakeMaker
 
 5、下载最新版git
 wget https://github.com/git/git/archive/v2.9.2.tar.gz
+##wget https://github.com/git/git/archive/v2.9.2.tar.gz
 
 
 6、解压到相应的目录
