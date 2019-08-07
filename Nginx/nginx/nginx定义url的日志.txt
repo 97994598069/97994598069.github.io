@@ -1,3 +1,5 @@
+https://www.cnblogs.com/kevingrace/p/8483089.html
+
 server {
         error_log    /var/logs/nginx/example.com.error.log;
         location /static/ { 
@@ -8,7 +10,7 @@ server {
 
 
 
-Ñ¹Ëõ¸ñÊ½
+å‹ç¼©æ ¼å¼
 http {
     log_format compression '$remote_addr - $remote_user [$time_local] '
                            '"$request" $status $body_bytes_sent '
@@ -22,8 +24,8 @@ http {
 }
 
 
-upstream¸ñÊ½
-Ôö¼ÓupstreamÏûºÄµÄÊ±¼ä¡£
+upstreamæ ¼å¼
+å¢åŠ upstreamæ¶ˆè€—çš„æ—¶é—´ã€‚
 
 http {
     log_format upstream_time '$remote_addr - $remote_user [$time_local] '
@@ -38,7 +40,7 @@ http {
 }
 
 
-nginx×ª·¢ÇëÇóÊ±¿ÉÒÔ¼ÇÂ¼ÏìÓ¦ÇëÇóµÄ·şÎñÆ÷IP
+nginxè½¬å‘è¯·æ±‚æ—¶å¯ä»¥è®°å½•å“åº”è¯·æ±‚çš„æœåŠ¡å™¨IP
 server {
         listen       80;
         server_name  demo.testcas.com;
@@ -50,13 +52,13 @@ server {
         location / {
             #root   html;
             #index  index.html index.htm;
-	¡¡¡¡    add_header backendIP $upstream_addr;  ###Ôö¼Ó
-¡¡¡¡¡¡¡¡¡¡¡¡add_header backendCode $upstream_status;  ##Ôö¼Ó
+	ã€€ã€€    add_header backendIP $upstream_addr;  ###å¢åŠ 
+ã€€ã€€ã€€ã€€ã€€ã€€add_header backendCode $upstream_status;  ##å¢åŠ 
 	        proxy_pass http://demo;
         }
     }
 
-###ÈÕÖ¾Ê¾Àı
+###æ—¥å¿—ç¤ºä¾‹  ï¼ˆæœ€å¥½é…ç½®æˆjsonæ ¼å¼ï¼‰
     log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
                       '$status $body_bytes_sent "$http_referer" '
                       '"$http_user_agent" "$http_x_forwarded_for"'
@@ -66,61 +68,61 @@ server {
                       '"$upstream_cache_status" "$upstream_http_x_status"';
 
 
-ÔÚnginxµÄÈÕÖ¾ÖĞÌí¼Ó½Ó¿ÚresponseµÄÈÕÖ¾
-1. ÏÂÔØ°²×°LuaJIT
+åœ¨nginxçš„æ—¥å¿—ä¸­æ·»åŠ æ¥å£responseçš„æ—¥å¿—
+1. ä¸‹è½½å®‰è£…LuaJIT
 # cd /usr/local/src
 # wget http://luajit.org/download/LuaJIT-2.0.2.tar.gz
 # tar -xzvf LuaJIT-2.0.2.tar.gz
 # cd LuaJIT-2.0.2
 # make
 
-2. ÏÂÔØ×¼±¸nginx luaÄ£¿é
+2. ä¸‹è½½å‡†å¤‡nginx luaæ¨¡å—
 # cd /usr/local/src
 # wget https://github.com/chaoslawful/lua-nginx-module/archive/v0.8.6.tar.gz
 # tar -xzvf v0.8.6
 
-3. °²×°nginx
+3. å®‰è£…nginx
 # cd /usr/local/src/
 # wget http://nginx.org/download/nginx-1.4.2.tar.gz
 # tar -xzvf nginx-1.4.2.tar.gz
 # cd nginx-1.4.2
-//ÏÈµ¼Èë»·¾³±äÁ¿,¸æËßnginxÈ¥ÄÄÀïÕÒluajit
+//å…ˆå¯¼å…¥ç¯å¢ƒå˜é‡,å‘Šè¯‰nginxå»å“ªé‡Œæ‰¾luajit
 # export LUAJIT_LIB=/usr/local/lib
 # export LUAJIT_INC=/usr/local/include/luajit-2.0
 # ./configure --prefix=/usr/local/nginx-1.4.2 --add-module=../lua-nginx-module-0.8.6
 # make -j2
 # make install
 
-4.²âÊÔ°²×°ÊÇ·ñ³É¹¦
+4.æµ‹è¯•å®‰è£…æ˜¯å¦æˆåŠŸ
 # cd /usr/local/nginx-1.4.2/conf/
 # vi nginx.conf
-luaÖ¸Áî·½Ê½
+luaæŒ‡ä»¤æ–¹å¼
 
-ÔÚserver ÖĞÌí¼ÓÒ»¸ölocaltion
+åœ¨server ä¸­æ·»åŠ ä¸€ä¸ªlocaltion
 location /hello {
             default_type 'text/plain';
             content_by_lua 'ngx.say("hello, lua")';
         }
 		
-È»ºóÆô¶¯nginx
+ç„¶åå¯åŠ¨nginx
 # cd /usr/local/nginx-1.4.2/sbin
 # ./nginx
-ä¯ÀÀÆ÷·ÃÎÊ£º
+æµè§ˆå™¨è®¿é—®ï¼š
 http://127.0.0.1/hello
-ÏÔÊ¾£ºhello, lua
+æ˜¾ç¤ºï¼šhello, lua
 
-×¢Òâµã£º
-1.×¢ÒâÃ¿¸öÄ£¿éµÄ°²×°Ä¿Â¼²»ÄÜ³öÏÖ²î´í
-2.Èç¹ûÖ®Ç°Í¨¹ıapt-get·½Ê½°²×°ÁËnginx,ĞèÒªÏÈÉ¾³ınginx£¬ÒòÎª´Ë·½Ê½ÏÂÔØµÄÈí¼şÎŞ·¨±àÒë
+æ³¨æ„ç‚¹ï¼š
+1.æ³¨æ„æ¯ä¸ªæ¨¡å—çš„å®‰è£…ç›®å½•ä¸èƒ½å‡ºç°å·®é”™
+2.å¦‚æœä¹‹å‰é€šè¿‡apt-getæ–¹å¼å®‰è£…äº†nginx,éœ€è¦å…ˆåˆ é™¤nginxï¼Œå› ä¸ºæ­¤æ–¹å¼ä¸‹è½½çš„è½¯ä»¶æ— æ³•ç¼–è¯‘
 3.
-µ½´ËËµÃ÷µÚÈı·½°²×°³É¹¦£¬
+åˆ°æ­¤è¯´æ˜ç¬¬ä¸‰æ–¹å®‰è£…æˆåŠŸï¼Œ
 
-5.ÏÂÃæ¿ªÊ¼Ìí¼ÓÈÕÖ¾
+5.ä¸‹é¢å¼€å§‹æ·»åŠ æ—¥å¿—
 http {
     log_format  mylog 'response_body:$resp_body';
  
     server {
-        #¼ÇÂ¼nginxÇëÇó·µ»ØÖµ
+        #è®°å½•nginxè¯·æ±‚è¿”å›å€¼
         lua_need_request_body on;
         set $resp_body "";
         body_filter_by_lua '
@@ -130,7 +132,7 @@ http {
                ngx.var.resp_body = ngx.ctx.buffered
             end
         ';
-¡¡¡¡¡¡¡¡
+ã€€ã€€ã€€ã€€
         location / {
             proxy_pass http://127.0.0.1:5000;
             access_log /var/log/nginx/access.log mylog;
@@ -138,8 +140,8 @@ http {
     }
 }
 
-µ½´Ë±ã³É¹¦Ìí¼ÓresponseÈÕÖ¾¡£
-Èç¹û¶®LuaÓïÑÔµÄ£¬¿ÉÒÔ¶ÔÈçÏÂ´úÂë½øĞĞĞŞ¸Ä£¬À´¸ü¼Ó·ûºÏ×Ô¼ºµÄÒªÇó¡£
+åˆ°æ­¤ä¾¿æˆåŠŸæ·»åŠ responseæ—¥å¿—ã€‚
+å¦‚æœæ‡‚Luaè¯­è¨€çš„ï¼Œå¯ä»¥å¯¹å¦‚ä¸‹ä»£ç è¿›è¡Œä¿®æ”¹ï¼Œæ¥æ›´åŠ ç¬¦åˆè‡ªå·±çš„è¦æ±‚ã€‚
         body_filter_by_lua '
             local resp_body = string.sub(ngx.arg[1], 1, 1000)
             ngx.ctx.buffered = (ngx.ctx.buffered or "") .. resp_body
@@ -147,16 +149,16 @@ http {
                ngx.var.resp_body = ngx.ctx.buffered
             end
         ';
-ÈÕÖ¾Êä³öÊ±£¬»á·¢ÏÖÓïÑÔÏìÓ¦½á¹ûÉæ¼°µ½×Ö·ûºº×ÖµÄÊ±ºò×ªÎª16½øÖÆµ¼ÖÂÎŞ·¨Ê¶±ğ¡£
-²¿·ÖÏìÓ¦ÈÕÖ¾ÈçÏÂ£º
+æ—¥å¿—è¾“å‡ºæ—¶ï¼Œä¼šå‘ç°è¯­è¨€å“åº”ç»“æœæ¶‰åŠåˆ°å­—ç¬¦æ±‰å­—çš„æ—¶å€™è½¬ä¸º16è¿›åˆ¶å¯¼è‡´æ— æ³•è¯†åˆ«ã€‚
+éƒ¨åˆ†å“åº”æ—¥å¿—å¦‚ä¸‹ï¼š
 response_body:    {\x22code\x22: 404, \x22message\x22: \x22\xE8\xAF\xB7\xE6\xB1\x82\xE7\x9A\x84\xE8\xB5\x84\xE6\xBA\x90\xE4\xB8\x8D\xE5\xAD\x98\xE5\x9C\xA8\x22, \x22data\x22: {}}
 
-¿ÉÍ¨¹ı¸´ÖÆµ½python½Å±¾½øĞĞ½â¾ö¡£
+å¯é€šè¿‡å¤åˆ¶åˆ°pythonè„šæœ¬è¿›è¡Œè§£å†³ã€‚
 str1='''
 {\x22code\x22: 404, \x22message\x22: \x22\xE8\xAF\xB7\xE6\xB1\x82\xE7\x9A\x84\xE8\xB5\x84\xE6\xBA\x90\xE4\xB8\x8D\xE5\xAD\x98\xE5\x9C\xA8\x22, \x22data\x22: {}}
 '''
 print(str1.encode('raw_unicode_escape').decode('utf-8'))
 
-ÊäÈë½á¹ûÎª£º
-{"code": 404, "message": "ÇëÇóµÄ×ÊÔ´²»´æÔÚ", "data": {}}		
+è¾“å…¥ç»“æœä¸ºï¼š
+{"code": 404, "message": "è¯·æ±‚çš„èµ„æºä¸å­˜åœ¨", "data": {}}		
 
