@@ -3,6 +3,7 @@ linux svn服务器命令行maven打包java代码，最终生成的XXX3.war为我
  a)安装jdk
  b)配置maven环境
 wget http://mirror.bjtu.edu.cn/apache/maven/binaries/apache-maven-3.0.4-bin.zip
+##wget https://mirror.bjtu.edu.cn/apache/maven/maven-3/3.6.1/binaries/apache-maven-3.6.1-bin.tar.gz
  unzip -q apache-maven-3.0.4-bin.zip
  mv apache-maven-3.0.4 /usr/local/maven
  echo ‘export M2_HOME=/usr/local/maven
