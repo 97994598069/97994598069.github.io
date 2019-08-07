@@ -1,4 +1,5 @@
 https://c.lanmit.com/czxt/Linux/5451.html
+https://docs.gluster.org/en/latest/Troubleshooting/troubleshooting-glusterd/
 node1: 192.168.1.1
 node2: 192.168.1.2
 node3: 192.168.1.3
