@@ -26,6 +26,27 @@ client: 192.168.1.5
 192.168.1.4 node4
 
 ###所有节点全部安装
+在开始安装Gluster Native Client之前，您需要验证客户端上是否已加载FUSE模块，并且可以访问所需的模块，如下所示：
+将FUSE可加载内核模块（LKM）添加到Linux内核：
+# modprobe fuse
+
+验证是否已加载FUSE模块：
+# dmesg | grep -i fuse fuse init (API version 7.13)
+
+使用以下命令在客户端上安装必需的先决条件：
+$ sudo yum -y install openssh-server wget fuse fuse-libs openib libibverbs
+
+确保所有Gluster服务器上都打开了TCP和UDP端口24007和24008。除了这些端口之外，您还需要从端口49152开始为每个块打开一个端口（而不是像之前版本那样从24009开始）。砖端口分配方案现在符合IANA准则。例如：如果您有五块砖，则需要打开端口49152到49156。
+
+您可以在iptables中使用以下链：
+sudo iptables -A RH-Firewall-1-INPUT -m state --state NEW -m tcp -p tcp --dport 24007:24008 -j ACCEPT `
+sudo iptables -A RH-Firewall-1-INPUT -m state --state NEW -m tcp -p tcp --dport 49152:49156 -j ACCEPT`
+
+
+
+
+
+
 [root@node1 ~]# yum install centos-release-gluster
 [root@node1 ~]# yum -y install glusterfs glusterfs-server glusterfs-fuse glusterfs-rdma
 #安装GlusterFS软件
