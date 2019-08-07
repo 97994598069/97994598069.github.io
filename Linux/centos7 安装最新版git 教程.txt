@@ -1,0 +1,34 @@
+1、查看已有git版本
+git --version
+git version 1.7.1
+
+2、查看 yum 源仓库的 Git 信息
+yum info git
+
+
+3、卸载低版本git
+yum remove git
+
+4、依赖库安装
+yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel
+yum install  gcc perl-ExtUtils-MakeMaker
+
+5、下载最新版git
+wget https://github.com/git/git/archive/v2.9.2.tar.gz
+
+
+6、解压到相应的目录
+tar zxf git-2.9.2.tar.gz ..
+
+7、安装git
+cd git-2.9.2
+make prefix=/usr/local/git all
+make prefix=/usr/local/git install
+
+8、添加到环境变量
+echo "export PATH=$PATH:/usr/local/git/bin" >> /etc/bashrc
+source /etc/bashrc
+
+9、查看版本号
+git --version
+git version 2.9.2
