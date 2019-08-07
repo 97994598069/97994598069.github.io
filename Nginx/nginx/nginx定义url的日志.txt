@@ -1,0 +1,162 @@
+server {
+        error_log    /var/logs/nginx/example.com.error.log;
+        location /static/ { 
+        error_log /var/logs/nginx/static-error.log debug; 
+    }         
+}
+
+
+
+
+压缩格式
+http {
+    log_format compression '$remote_addr - $remote_user [$time_local] '
+                           '"$request" $status $body_bytes_sent '
+                           '"$http_referer" "$http_user_agent" "$gzip_ratio"';
+
+    server {
+        gzip on;
+        access_log /spool/logs/nginx-access.log compression;
+        ...
+    }
+}
+
+
+upstream格式
+增加upstream消耗的时间。
+
+http {
+    log_format upstream_time '$remote_addr - $remote_user [$time_local] '
+                             '"$request" $status $body_bytes_sent '
+                             '"$http_referer" "$http_user_agent"'
+                             'rt=$request_time uct="$upstream_connect_time" uht="$upstream_header_time" urt="$upstream_response_time"';
+
+    server {
+        access_log /spool/logs/nginx-access.log upstream_time;
+        ...
+    }
+}
+
+
+nginx转发请求时可以记录响应请求的服务器IP
+server {
+        listen       80;
+        server_name  demo.testcas.com;
+
+        #charset koi8-r;
+
+        #access_log  logs/host.access.log  main;
+
+        location / {
+            #root   html;
+            #index  index.html index.htm;
+	　　    add_header backendIP $upstream_addr;  ###增加
+　　　　　　add_header backendCode $upstream_status;  ##增加
+	        proxy_pass http://demo;
+        }
+    }
+
+###日志示例
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"'
+                      '"$request_time" "$upstream_connect_time"'
+                      '"$upstream_header_time" "$upstream_response_time"'
+                      '"$upstream_addr" "$upstream_status"'
+                      '"$upstream_cache_status" "$upstream_http_x_status"';
+
+
+在nginx的日志中添加接口response的日志
+1. 下载安装LuaJIT
+# cd /usr/local/src
+# wget http://luajit.org/download/LuaJIT-2.0.2.tar.gz
+# tar -xzvf LuaJIT-2.0.2.tar.gz
+# cd LuaJIT-2.0.2
+# make
+
+2. 下载准备nginx lua模块
+# cd /usr/local/src
+# wget https://github.com/chaoslawful/lua-nginx-module/archive/v0.8.6.tar.gz
+# tar -xzvf v0.8.6
+
+3. 安装nginx
+# cd /usr/local/src/
+# wget http://nginx.org/download/nginx-1.4.2.tar.gz
+# tar -xzvf nginx-1.4.2.tar.gz
+# cd nginx-1.4.2
+//先导入环境变量,告诉nginx去哪里找luajit
+# export LUAJIT_LIB=/usr/local/lib
+# export LUAJIT_INC=/usr/local/include/luajit-2.0
+# ./configure --prefix=/usr/local/nginx-1.4.2 --add-module=../lua-nginx-module-0.8.6
+# make -j2
+# make install
+
+4.测试安装是否成功
+# cd /usr/local/nginx-1.4.2/conf/
+# vi nginx.conf
+lua指令方式
+
+在server 中添加一个localtion
+location /hello {
+            default_type 'text/plain';
+            content_by_lua 'ngx.say("hello, lua")';
+        }
+		
+然后启动nginx
+# cd /usr/local/nginx-1.4.2/sbin
+# ./nginx
+浏览器访问：
+http://127.0.0.1/hello
+显示：hello, lua
+
+注意点：
+1.注意每个模块的安装目录不能出现差错
+2.如果之前通过apt-get方式安装了nginx,需要先删除nginx，因为此方式下载的软件无法编译
+3.
+到此说明第三方安装成功，
+
+5.下面开始添加日志
+http {
+    log_format  mylog 'response_body:$resp_body';
+ 
+    server {
+        #记录nginx请求返回值
+        lua_need_request_body on;
+        set $resp_body "";
+        body_filter_by_lua '
+            local resp_body = string.sub(ngx.arg[1], 1, 1000)
+            ngx.ctx.buffered = (ngx.ctx.buffered or "") .. resp_body
+            if ngx.arg[2] then
+               ngx.var.resp_body = ngx.ctx.buffered
+            end
+        ';
+　　　　
+        location / {
+            proxy_pass http://127.0.0.1:5000;
+            access_log /var/log/nginx/access.log mylog;
+         }
+    }
+}
+
+到此便成功添加response日志。
+如果懂Lua语言的，可以对如下代码进行修改，来更加符合自己的要求。
+        body_filter_by_lua '
+            local resp_body = string.sub(ngx.arg[1], 1, 1000)
+            ngx.ctx.buffered = (ngx.ctx.buffered or "") .. resp_body
+            if ngx.arg[2] then
+               ngx.var.resp_body = ngx.ctx.buffered
+            end
+        ';
+日志输出时，会发现语言响应结果涉及到字符汉字的时候转为16进制导致无法识别。
+部分响应日志如下：
+response_body:    {\x22code\x22: 404, \x22message\x22: \x22\xE8\xAF\xB7\xE6\xB1\x82\xE7\x9A\x84\xE8\xB5\x84\xE6\xBA\x90\xE4\xB8\x8D\xE5\xAD\x98\xE5\x9C\xA8\x22, \x22data\x22: {}}
+
+可通过复制到python脚本进行解决。
+str1='''
+{\x22code\x22: 404, \x22message\x22: \x22\xE8\xAF\xB7\xE6\xB1\x82\xE7\x9A\x84\xE8\xB5\x84\xE6\xBA\x90\xE4\xB8\x8D\xE5\xAD\x98\xE5\x9C\xA8\x22, \x22data\x22: {}}
+'''
+print(str1.encode('raw_unicode_escape').decode('utf-8'))
+
+输入结果为：
+{"code": 404, "message": "请求的资源不存在", "data": {}}		
+
