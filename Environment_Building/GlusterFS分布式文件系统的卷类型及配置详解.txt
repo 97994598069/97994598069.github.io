@@ -11,8 +11,6 @@ client: 192.168.1.5
 
 2、自己配置防火墙和selinux，我这里为了方便，直接关闭了。
 
-3、下载我提供的本地yum仓库，并上传至各个节点服务器。
-
 二、开始部署：
 1、node1配置如下：
 [root@node1 ~]# vim /etc/hosts         #写入末尾四行，以便添加4个节点的解析
@@ -23,23 +21,15 @@ client: 192.168.1.5
 192.168.1.3 node3
 192.168.1.4 node4
 
-[root@node1 ~]# mount /dev/cdrom /media     #挂载我提供的yum仓库
-mount: /dev/sr0 写保护，将以只读方式挂载
-[root@node1 ~]# rm -rf /etc/yum.repos.d/*       #删除或移走原有yum配置文件
-[root@node1 ~]# yum clean all       #清除yum缓存
-[root@node1 ~]# vim /etc/yum.repos.d/a.repo       #编辑yum配置文件，写入以下内容
-[fd]
-baseurl=file:///media
-gpgcheck=0
-#写完以上三行，保存退出即可。
-
+###所有节点全部安装
+[root@node1 ~]# yum install centos-release-gluster
 [root@node1 ~]# yum -y install glusterfs glusterfs-server glusterfs-fuse glusterfs-rdma
 #安装GlusterFS软件
 [root@node1 ~]# systemctl start glusterd         #启动该服务
 [root@node1 ~]# systemctl enable glusterd     #设置为开机自启动
 
 
-2、node2配置如下：
+2、node2配置如下：  ###将node1节点上的hosts文件拷贝到其余节点，并相互ping主机名确保无误  （略）
 [root@node2 ~]# scp root@192.168.1.1:/etc/hosts /etc/    #将node1的hosts配置文件复制过来
 The authenticity of host 192.168.1.1 (192.168.1.1)cat be established.
 ECDSA key fingerprint is SHA256:BS+lKMN05pYF3F1XeIYU69VnHjzKBiBiMZ1SDKgsxxs.
@@ -48,19 +38,7 @@ Are you sure you want to continue connecting (yes/no)? yes    #输入“yes”
 Warning: Permanently added '192.168.1.1' (ECDSA) to the list of known hosts.
 root@192.168.1.1s password:               #输入对方用户名的密码
 hosts                                             100%  230   286.9KB/s   00:00   
-[root@node1 ~]# rm -rf /etc/yum.repos.d/*       #删除或移走原有yum配置文件
-[root@node1 ~]# yum clean all       #清除yum缓存
-[root@node2 ~]# scp root@192.168.1.1:/etc/yum.repos.d/a.repo /etc/yum.repos.d/
-#将node1的yum文件复制过来
-root@192.168.1.1s password: 
-a.repo                          100%   38    31.1KB/s   00:00   
-[root@node2 ~]# mount /dev/cdrom /media          #挂载我提供的yum仓库
-mount: /dev/sr0 写保护，将以只读方式挂载
-[root@node1 ~]# yum -y install glusterfs glusterfs-server glusterfs-fuse glusterfs-rdma
-#安装GlusterFS软件
-[root@node1 ~]# systemctl start glusterd         #启动该服务
-[root@node1 ~]# systemctl enable glusterd     #设置为开机自启动
-至此，node2配置完成了，node3、node4重复node2的配置即可，我这就不写了，请自行配置。
+
 
 
 3、添加节点（接下来的所有配置，在任意一台节点上执行即可，我这里在node1上执行）：
@@ -85,7 +63,7 @@ State: Peer in Cluster (Connected)
 Hostname: node4
 Uuid: 926b51e9-4599-4fe8-ad2b-11f53a2ffb5a
 State: Peer in Cluster (Connected)
-
+##上述集群的额创建若不通则检查主机名是否错误
 
 4、创建各种类型的卷
 （1）创建分布式卷：
@@ -212,14 +190,7 @@ OK，现在所涉及到的卷已经创建完成，可以在客户端上挂载使
 
 5、部署Gluster客户端：
 （1）部署安装：
-[root@node1 ~]# rm -rf /etc/yum.repos.d/*       #删除或移走原有yum配置文件
-[root@node1 ~]# yum clean all       #清除yum缓存
-[root@node2 ~]# scp root@192.168.1.1:/etc/yum.repos.d/a.repo /etc/yum.repos.d/
-#将node1的yum文件复制过来
-root@192.168.1.1s password: 
-a.repo                          100%   38    31.1KB/s   00:00   
-[root@node2 ~]# mount /dev/cdrom /media          #挂载我提供的yum仓库
-mount: /dev/sr0 写保护，将以只读方式挂载
+[root@client ~]# yum install centos-release-gluster
 [root@client ~]#  yum -y install glusterfs glusterfs-fuse   #安装客户端所需的GlusterFS软件
 [root@client ~]# mkdir -p /test/{dis,stripe,rep,dis_and_stripe,dis_and_rep}        #创建挂载目录
 [root@client ~]# ls /test       #查看挂载目录是否创建
