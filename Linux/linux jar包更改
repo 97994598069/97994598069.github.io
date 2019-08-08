@@ -1,0 +1,30 @@
+背景：
+由于种种原因，不能从git上拉代码打包然后更新项目
+解决思路:从测试环境（测试OK）的jar中取出配置文件替换掉生产上的老的配置文件
+然后再重新打成jar包更新
+
+方法二：（linux下替换或修改配置文件，测试有效）
+1.解压
+unzip test.jar
+2.修改或覆盖配置文件
+3.重新压缩jar包
+jar -cfM0 test.jar .
+
+若第3步提示jar: command not found，那么执行以下步骤
+A、cd /usr/bin
+B、ln -s -f /usr/local/java/jdk1.8.0_171/bin/jar(此处链接实际jdk安装路径下的jar包)
+C、重新执行上述步骤3
+
+
+mysqldump -h192.168.1.21 -P3306 -uroot -p --database wechat >./wechat.sql
+
+Pdmi!1234mySQL
+
+
+
+jar -cfM0 xmt-prod-20190808.jar .
+
+
+yum -y install vim unzip zip
+vim test.jar 选后搜索jar包里的配置文件例如":   /database"；然后enter可以看到database的链接信息
+修改后可保存退出
