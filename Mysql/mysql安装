@@ -72,3 +72,8 @@ mysql5.1安装
 1.配置epel和阿里yum源
 yum -y install mysql mysql-devel 
 
+
++++++++++++++++++++++++++++++++++
+命令启动如下：
+/bin/sh /server/mysql/bin/mysqld_safe --datadir=/server/mysql/data --pid-file=/server/mysql/data/mysql.pid
+
