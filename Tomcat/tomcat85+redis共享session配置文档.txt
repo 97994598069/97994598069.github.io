@@ -1,0 +1,106 @@
+一，安装nginx  略
+
+配置nginx虚拟主机：
+[root@mnode1 conf.d]# cat test.conf 
+upstream abc {
+    server 192.168.1.32:8080;
+    server 192.168.1.34:8080;
+
+}
+server {
+    listen 80;
+    server_name localhost 192.168.1.31;
+
+    location / {
+        proxy_set_header Host $host:$server_port;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Real-PORT $remote_port;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://abc;
+
+    }
+}
+
+
+二，搭建redis  略 （若是yum安装后没有删除配置文件又通过二进制安装则启动的时候需要指定conf文件./src/redis-server ./redis.conf &）
+
+
+二，后端两台tomcat
+安装jdk8  略
+安装tomcat85  略
+
+配置tomcat:
+1.将commons-pool2-2.4.2.jar  jedis-2.9.0.jar  redis-4.0.6.tar.jar这三个包放到tomcat根目录的lib下
+##https://pan.baidu.com/s/1tIlUyWAiUVGnIKpHDfTNqQ
+
+2.编辑context.xml
+[root@mnode2 conf]# tail -10 ./context.xml
+    <!--
+    <Manager pathname="" />
+    -->
+<Valve className="com.orangefunction.tomcat.redissessions.RedisSessionHandlerValve" />   ##新增
+<Manager className="com.orangefunction.tomcat.redissessions.RedisSessionManager"         ##新增
+host="192.168.1.33"    ##新增
+port="6379"    ####新增
+database="0"   ####新增
+maxInactiveInterval="60" />  ##新增
+</Context>
+
+##上述redis若是配置了密码，则需要在port下新增一行password="xxxxxxx"
+##上述若是连接的redis哨兵模式则是:
+<Valve className="com.orangefunction.tomcat.redissessions.RedisSessionHandlerValve" />   ##新增
+<Manager className="com.orangefunction.tomcat.redissessions.RedisSessionManager"         ##新增
+        sentinelMaster="mymaster"  ##主节点的名称
+        sentinels="主机ip:26379,主机ip:26380,主机ip:26381" ##三个sentinel几点的ip和端口
+		database="0"   ####新增
+        maxInactiveInterval="60" />  ##新增
+		
+##redis的集群模式？？
+redis.hosts=192.168.1.111:7111,192.168.1.112:7112,192.168.1.113:7113,192.168.1.114:7114,192.168.1.115:7115,192.168.1.116:7116
+# Redis Passwordredis.password=
+# set true to enable 
+redis cluster moderedis.cluster.enabled=true
+
+
+3.配置测试目录
+cd /usr/local/apache-tomcat-8.5.43/webapps/test
+[root@mnode2 test]# cat index.jsp 
+<%@page language="java" import="java.util.*" pageEncoding="UTF-8"%>
+<html>
+<head>
+<title>tomcat-1</title>
+</head>
+<body>
+<h1><font color="red">Session serviced by tomcat-1</font></h1>
+<table aligh="center" border="1">
+<tr>
+<td>Session ID</td>
+<td><%=session.getId() %></td>
+<% session.setAttribute("abc","abc");%>
+</tr>
+<tr>
+<td>Created on</td>
+<td><%= session.getCreationTime() %></td>
+</tr>
+</table>
+</body>
+<html>
+
+##另外一台配置成tomcat-2
+
+
+4.启动tomcat并查看日志，若报错则安装报错处理
+
+
+
+四，测试功能
+1.访问nginx的ip，出现的界面是不是不同的（tomcat-1和tomcat-2）
+2.上述虽然不同，但是session是一样的
+
+浏览器测试   略   （浏览器中http://192.168.1.31/test）
+
+
+	
+
+
+
