@@ -104,6 +104,7 @@ WantedBy=multi-user.target
 5   搭建kafka集群
 5.1 下载地址
 http://mirror.bit.edu.cn/apache/kafka/2.1.0/kafka_2.12-2.1.0.tgz
+wget http://mirror.bit.edu.cn/apache/kafka/2.3.0/kafka_2.12-2.3.0.tgz
 
 5.2 所有节点上搭建kafka
 1）  新建kafka工作目录
