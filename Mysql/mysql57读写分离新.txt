@@ -1,0 +1,748 @@
+1 Atlas是360的一套基于MySQL-Proxy基础之上的代理，修改了MySQL-Proxy的一些BUG，并优化了性能。
+官方介绍：https://github.com/Qihoo360/Atlas/blob/master/README_ZH.md
+官方下载： https://github.com/Qihoo360/Atlas/releases
+
+本次使用的 mysql一主两从+atlas（mysql使用percona5.7）进行读写分离环境部署测试。先配置mysql的一主两从，然后安装配置atlas。
+
+
+2 环境准备
+机器四台 ，系统centos7.2，2核2G，最小化安装
+mysql主 192.168.0.201
+mysql从 192.168.0.202
+mysql从 192.168.0.203
+Atlas       192.168.0.204
+
+
+先卸载系统自带的mariadb数据库 （）
+yum -y remove mariadb*
+
+3 安装Percona-Server-server-57 （三台机器201,202,203）
+执行yum安装命令
+yum install https://repo.percona.com/yum/percona-release-latest.noarch.rpm
+yum -y install Percona-Server-server-57
+安装后的版本是5.7.26-29（5.7系列的最新版本）
+
+4 配置三台数据库
+server_id三台数据库要设置成不同的
+
+
+主数据库配置（201）：
+[root@localhost ]# vim /etc/my.cnf   增加下面配置
+
+[client]
+default_character_set = utf8mb4
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld]
+port=3306
+socket=/var/lib/mysql/mysql.sock
+datadir = /var/lib/mysql
+pid_file = /var/run/mysqld/mysql.pid
+character_set_server = utf8mb4
+default_storage_engine = InnoDB
+explicit_defaults_for_timestamp
+federated
+skip-name-resolve
+gtid-mode = ON
+enforce-gtid-consistency = ON
+log-slave-updates = ON
+
+innodb_flush_method = O_DIRECT
+innodb_log_files_in_group = 2
+innodb_lock_wait_timeout = 100
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 1
+innodb_file_per_table = 1
+innodb_thread_concurrency = 8
+innodb_buffer_pool_size = 1G
+innodb_read_io_threads = 24
+innodb_write_io_threads = 24
+log_bin_trust_function_creators=1
+innodb_page_cleaners=8
+innodb_lru_scan_depth=256
+
+innodb_locks_unsafe_for_binlog = 1
+innodb_autoinc_lock_mode = 2
+sql_mode=NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+group_concat_max_len = 18446744073709551615
+
+key_buffer_size = 128M
+myisam_recover_options = FORCE,BACKUP
+lower_case_table_names=1
+event_scheduler=1
+
+max_allowed_packet = 128M
+max_connect_errors = 1000000
+skip_name_resolve = 1
+
+
+server_id = 201
+log_bin = mysql-bin
+binlog_format = ROW
+sync_binlog = 1
+
+
+tmp_table_size = 32M
+max_heap_table_size = 32M
+max_connections = 1000
+thread_cache_size = 50
+open_files_limit = 65535
+table_definition_cache = 4096
+table_open_cache = 5000
+
+log_error = /var/log/mysqld.log
+log_queries_not_using_indexes = 0
+slow_query_log = 1
+long_query_time = 1
+slow_query_log_file = /var/lib/mysql/mysql-slow.log
+
+relay_log = relay-bin
+slave_net_timeout = 60
+symbolic-links = 0
+transaction_isolation = READ-COMMITTED 
+
+[mysql]
+no-auto-rehash
+default_character_set = utf8mb4
+
+[xtrabackup]
+default-character-set = utf8mb4
+
+
+从数据库配置（202）:
+[root@localhost ~]# vim /etc/my.cnf 添加如下配置
+[client]
+default_character_set = utf8mb4
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld]
+port=3306
+socket=/var/lib/mysql/mysql.sock
+datadir = /var/lib/mysql
+pid_file = /var/run/mysqld/mysqld.pid
+character_set_server = utf8mb4
+default_storage_engine = InnoDB
+explicit_defaults_for_timestamp
+federated
+skip-name-resolve
+gtid-mode = ON
+enforce-gtid-consistency = ON
+log-slave-updates = ON
+slave_type_conversions="ALL_NON_LOSSY"
+
+innodb_flush_method = O_DIRECT
+innodb_log_files_in_group = 2
+innodb_lock_wait_timeout = 100
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 1
+innodb_file_per_table = 1
+innodb_thread_concurrency = 8
+innodb_buffer_pool_size = 1G
+innodb_read_io_threads = 24
+innodb_write_io_threads = 24
+log_bin_trust_function_creators=1
+innodb_page_cleaners=4
+innodb_lru_scan_depth=256
+innodb_buffer_pool_instances=2
+
+innodb_locks_unsafe_for_binlog = 1
+innodb_autoinc_lock_mode = 2
+sql_mode=NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+group_concat_max_len = 18446744073709551615
+
+key_buffer_size = 128M
+myisam_recover_options = FORCE,BACKUP
+lower_case_table_names=1
+event_scheduler=1
+slave_pending_jobs_size_max = 128M
+
+max_allowed_packet = 128M
+max_connect_errors = 1000000
+skip_name_resolve = 1
+slave-skip-errors=1007,1008,1032,1062
+
+server_id = 202
+log_bin = mysql-bin
+binlog_format = ROW
+sync_binlog = 1
+
+tmp_table_size = 32M
+max_heap_table_size = 32M
+max_connections = 1000
+thread_cache_size = 50
+open_files_limit = 65535
+table_definition_cache = 4096
+table_open_cache = 5000
+
+log_error = /var/log/mysqld.log
+log_queries_not_using_indexes = 0
+slow_query_log = 1
+long_query_time = 1
+slow_query_log_file = /var/lib/mysql/mysql-slow.log
+
+relay_log = relay-bin
+slave_net_timeout = 60
+symbolic-links = 0
+
+slave-parallel-type=LOGICAL_CLOCK
+slave-parallel-workers=16
+master_info_repository=TABLE
+relay_log_info_repository=TABLE
+relay_log_recovery=ON
+
+[mysql]
+no-auto-rehash
+default_character_set = utf8mb4
+
+[xtrabackup]
+default-character-set = utf8mb4
+
+
+
+从数据库配置（203）:
+[root@localhost ~]# vim /etc/my.cnf 添加如下配置
+[client]
+default_character_set = utf8mb4
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld]
+port=3306
+socket=/var/lib/mysql/mysql.sock
+datadir = /var/lib/mysql
+pid_file = /var/run/mysqld/mysqld.pid
+character_set_server = utf8mb4
+default_storage_engine = InnoDB
+explicit_defaults_for_timestamp
+federated
+skip-name-resolve
+gtid-mode = ON
+enforce-gtid-consistency = ON
+log-slave-updates = ON
+slave_type_conversions="ALL_NON_LOSSY"
+
+innodb_flush_method = O_DIRECT
+innodb_log_files_in_group = 2
+innodb_lock_wait_timeout = 100
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 1
+innodb_file_per_table = 1
+innodb_thread_concurrency = 8
+innodb_buffer_pool_size = 1G
+innodb_read_io_threads = 24
+innodb_write_io_threads = 24
+log_bin_trust_function_creators=1
+innodb_page_cleaners=4
+innodb_lru_scan_depth=256
+innodb_buffer_pool_instances=2
+
+innodb_locks_unsafe_for_binlog = 1
+innodb_autoinc_lock_mode = 2
+sql_mode=NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+group_concat_max_len = 18446744073709551615
+
+key_buffer_size = 128M
+myisam_recover_options = FORCE,BACKUP
+lower_case_table_names=1
+event_scheduler=1
+slave_pending_jobs_size_max = 128M
+
+max_allowed_packet = 128M
+max_connect_errors = 1000000
+skip_name_resolve = 1
+slave-skip-errors=1007,1008,1032,1062
+
+server_id = 203
+log_bin = mysql-bin
+binlog_format = ROW
+sync_binlog = 1
+
+tmp_table_size = 32M
+max_heap_table_size = 32M
+max_connections = 1000
+thread_cache_size = 50
+open_files_limit = 65535
+table_definition_cache = 4096
+table_open_cache = 5000
+
+log_error = /var/log/mysqld.log
+log_queries_not_using_indexes = 0
+slow_query_log = 1
+long_query_time = 1
+slow_query_log_file = /var/lib/mysql/mysql-slow.log
+
+relay_log = relay-bin
+slave_net_timeout = 60
+symbolic-links = 0
+
+slave-parallel-type=LOGICAL_CLOCK
+slave-parallel-workers=16
+master_info_repository=TABLE
+relay_log_info_repository=TABLE
+relay_log_recovery=ON
+
+[mysql]
+no-auto-rehash
+default_character_set = utf8mb4
+
+[xtrabackup]
+default-character-set = utf8mb4
+
+
+5 初始化三台机器的数据库
+修改完配置后 初始化数据库
+[root@localhost ~]# mysqld --initialize --user=mysql
+
+启动数据库
+[root@localhost ~]# systemctl start mysqld
+查看数据库进程
+[root@localhost ~]# ps -ef |grep mysql
+mysql  12089  1 13 12:08 ?    00:00:02 /usr/sbin/mysqld --daemonize --pid-file=/var/run/mysqld/mysqld.pid
+root  12174  11932  0 12:08 pts/1    00:00:00 grep --color=auto mysql
+
+
+查询初始化密码
+grep "password" /var/log/mysqld.log
+2019-07-11T04:07:31.642390Z 1 [Note] A temporary password is generated for root@localhost: eF(pg?&wr9,v
+
+
+修改root密码为Pass_123
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'Pass_123';
+
+
+[root@localhost ~]# mysql -uroot -p
+Enter password: eF(pg?&wr9,v 
+mysql> ALTER USER 'root'@'localhost' IDENTIFIED BY 'Pass_123';
+Query OK, 0 rows affected (0.00 sec)
+mysql> flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+
+
+
+
+6 配置主从同步
+在主机器上创建同步账号
+在主数据库机器上创建同步账号repl:123456   同时授权root用户给%
+[root@localhost ~]# mysql -uroot -pPass_123
+
+mysql> grant all on *.* to root@'%' identified by "Pass_123";
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql> grant all on *.* to repl@'%' identified by "123456";
+Query OK, 0 rows affected, 1 warning (0.01 sec)
+
+mysql> flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> create user 'repl'@'192.168.0.202' identified by '123456';
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> create user 'repl'@'192.168.0.203' identified by '123456';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant replication slave on *.* to 'repl'@'192.168.0.202';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant replication slave on *.* to 'repl'@'192.168.0.203';
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> quit
+
+
+
+查看主库状态  （用于从库设置同步参数）
+mysql> show master status;
++------------------+----------+--------------+------------------+------------------------------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                        |
++------------------+----------+--------------+------------------+------------------------------------------+
+| mysql-bin.000002 |     1632 |              |         | 6766c88d-a391-11e9-a0b0-000c2960d4ff:1-7 |
++------------------+----------+--------------+------------------+------------------------------------------+
+1 row in set (0.00 sec)
+
+
+
+在两个slave上执行配置主从:
+mysql> change master to
+    -> master_host='192.168.0.201',
+    -> master_user='repl',
+    -> master_password='123456',
+    -> master_log_file='mysql-bin.000002',
+    -> master_log_pos=1632;
+Query OK, 0 rows affected, 2 warnings (0.06 sec)
+启动slave
+
+mysql> start slave;
+Query OK, 0 rows affected (0.13 sec)
+
+mysql> show slave status\G;
+*************************** 1. row ***************************
+               Slave_IO_State: Waiting for master to send event
+                  Master_Host: 192.168.0.201
+                  Master_User: repl
+                  Master_Port: 3306
+                Connect_Retry: 60
+              Master_Log_File: mysql-bin.000002
+          Read_Master_Log_Pos: 1632
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 320
+        Relay_Master_Log_File: mysql-bin.000002
+             Slave_IO_Running: Yes     ##必须是yes
+            Slave_SQL_Running: Yes     ##必须是yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB:
+		  
+		  
+
+7 测试主从同步是否正常，主库上创建库和表，看从库是否同步成功
+在主库上：：：
+mysql> create database yan;
+Query OK, 1 row affected (0.01 sec)
+
+mysql> create database lili;
+Query OK, 1 row affected (0.00 sec)
+
+mysql> create database masu;
+Query OK, 1 row affected (0.00 sec)
+
+mysql> use yan
+Database changed
+mysql> create table tom (id int not null,name varchar(100)not null ,age tinyint);
+Query OK, 0 rows affected (0.04 sec)
+
+mysql> insert tom (id,name,age) values(1,'zhangshan',20),(2,'wangwu',7),(3,'lisi',23);
+Query OK, 3 rows affected (0.08 sec)
+Records: 3  Duplicates: 0  Warnings: 0
+
+mysql> select * from tom;
++----+-----------+------+
+| id | name      | age  |
++----+-----------+------+
+|  1 | zhangshan |   20 |
+|  2 | wangwu    |    7 |
+|  3 | lisi      |   23 |
++----+-----------+------+
+3 rows in set (0.00 sec)
+
+mysql> 
+
+
+在从库上查询验证
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| lili               |
+| masu               |
+| mysql              |
+| performance_schema |
+| sys                |
+| yan                |
++--------------------+
+7 rows in set (0.01 sec)
+
+mysql> use yan
+Database changed
+mysql> select * from tom;
++----+-----------+------+
+| id | name      | age  |
++----+-----------+------+
+|  1 | zhangshan |   20 |
+|  2 | wangwu    |    7 |
+|  3 | lisi      |   23 |
++----+-----------+------+
+3 rows in set (0.00 sec)
+
+mysql> 
+
+两台slave均同步成功
+
+
+8 使用Atlas实现读写分离
+到204上安装Atlas 
+安装依赖 （204机器不能安装数据库yum remove Percona-Server*）
+yum -y install libevent glib2 lua gcc gcc-c++ autoconf mysql-devel libtool pkgconfig ncurses ncurses-devel libevent-devel
+
+下载Atlas包
+wget https://github.com/Qihoo360/Atlas/releases/download/2.2.1/Atlas-2.2.1.el6.x86_64.rpm
+
+
+安装atlas
+yum install Atlas-2.2.1.el6.x86_64.rpm -y
+
+
+安装后查看软件包内容
+[root@localhost home]# ll /usr/local/mysql-proxy/
+总用量 4
+drwxr-xr-x 2 root root   71 7月  11 13:33 bin
+drwxr-xr-x 2 root root   21 7月  11 13:33 conf
+drwxr-xr-x 3 root root 4096 7月  11 13:33 lib
+drwxr-xr-x 2 root root    6 12月 17 2014 log
+[root@localhost home]# ll /usr/local/mysql-proxy/bin/
+总用量 44
+-rwxr-xr-x 1 root root  9696 12月 17 2014 encrypt
+-rwxr-xr-x 1 root root 23564 12月 17 2014 mysql-proxy
+-rwxr-xr-x 1 root root  1552 12月 17 2014 mysql-proxyd
+-rw-r--r-- 1 root root     6 12月 17 2014 VERSION
+[root@localhost home]# ll /usr/local/mysql-proxy/conf/
+总用量 4
+-rw-r--r-- 1 root root 2810 12月 17 2014 test.cnf
+
+
+bin目录下放的都是可执行文件
+
+“encrypt”是用来生成MySQL密码加密的，在配置的时候会用到
+“mysql-proxy”是MySQL自己的读写分离代理
+“mysql-proxyd”是360弄出来的，后面有个“d”，服务的启动、重启、停止。都是用他来执行的
+conf目录下放的是配置文件
+“test.cnf”只有一个文件，用来配置代理的，可以使用vim来编辑
+lib目录下放的是一些包，以及Atlas的依赖
+log目录下放的是日志，如报错等错误信息的记录
+
+
+9 配置启动 Atlas
+***使用encrypt来对需要代理的数据库的密码进行加密,配置文件里要用，
+账号：repl,密码：123456   账号：root,密码：Pass_123
+[root@localhost home]# /usr/local/mysql-proxy/bin/encrypt 123456
+/iZxz+0GRoA=
+
+[root@localhost yum.repos.d]# /usr/local/mysql-proxy/bin/encrypt Pass_123
+oIqxCTi4FY8a8s/oWZlMvQ==
+那么配置文件中pwds 一项可以设置为 pwds = repl:/iZxz+0GRoA=    或者pwds = root：oIqxCTi4FY8a8s/oWZlMvQ==
+
+
+配置文件：
+vim /usr/local/mysql-proxy/conf/test.cnf
+
+[mysql-proxy]
+admin-username = user
+admin-password = pwd
+proxy-backend-addresses = 192.168.0.201:3306
+proxy-read-only-backend-addresses = 192.168.0.202:3306@1,192.168.0.203:3306@1
+pwds = repl:/iZxz+0GRoA=
+daemon = true
+keepalive = true
+event-threads = 8
+log-level = message
+log-path = /usr/local/mysql-proxy/log
+proxy-address = 0.0.0.0:1234
+admin-address = 0.0.0.0:2345
+charset = utf8
+
+
+
+配置文件参数解读：
+y]
+#带#号的为非必需的配置项目
+#管理接口的用户名
+admin-username = user
+#管理接口的密码
+admin-password = pwd
+#Atlas后端连接的MySQL主库的IP和端口，可设置多项，用逗号分隔
+proxy-backend-addresses = 192.168.0.201:3306
+#Atlas后端连接的MySQL从库的IP和端口，@后面的数字代表权重，用来作负载均衡，若省略则默认为1，可设置多项，用逗号分隔
+proxy-read-only-backend-addresses = 192.168.0.202:3306@1,192.168.0.203:3306@1
+#用户名与其对应的加密过的MySQL密码，密码使用PREFIX/bin目录下的加密程序encrypt加密，下行的user1和user2为示例，将其替换为你的MySQL的用户名和加密密码！
+pwds = repl:/iZxz+0GRoA=
+#设置Atlas的运行方式，设为true时为守护进程方式，设为false时为前台方式，一般开发调试时设为false，线上运行时设为true,true后面不能有空格。
+daemon = true
+#设置Atlas的运行方式，设为true时Atlas会启动两个进程，一个为monitor，一个为worker，monitor在worker意外退出后会自动将其重启，设为false时只有worker，没有monitor，一般开发调试时设为false，线上运行
+时设为true,true后面不能有空格。
+keepalive = true
+#工作线程数，对Atlas的性能有很大影响，可根据情况适当设置
+event-threads = 8
+#日志级别，分为message、warning、critical、error、debug五个级别
+log-level = message
+#日志存放的路径
+log-path = /usr/local/mysql-proxy/log
+#SQL日志的开关，可设置为OFF、ON、REALTIME，OFF代表不记录SQL日志，ON代表记录SQL日志，REALTIME代表记录SQL日志且实时写入磁盘，默认为OFF
+#sql-log = OFF
+#慢日志输出设置。当设置了该参数时，则日志只输出执行时间超过sql-log-slow（单位：ms)的日志记录。不设置该参数则输出全部日志。
+#sql-log-slow = 10
+#实例名称，用于同一台机器上多个Atlas实例间的区分
+#instance = test
+#Atlas监听的工作接口IP和端口
+proxy-address = 0.0.0.0:1234
+#Atlas监听的管理接口IP和端口
+admin-address = 0.0.0.0:2345
+#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔，若不分表则不需要设置该项
+#tables = person.mt.id.3
+#默认字符集，设置该项后客户端不再需要执行SET NAMES语句
+charset = utf8
+#允许连接Atlas的客户端的IP，可以是精确IP，也可以是IP段，以逗号分隔，若不设置该项则允许所有IP连接，否则只允许列表中的IP连接
+#client-ips = 127.0.0.1, 192.168.1
+#Atlas前面挂接的LVS的物理网卡的IP(注意不是虚IP)，若有LVS且设置了client-ips则此项必须设置，否则可以不设置
+#lvs-ips = 192.168.1.1
+
+
+启动atlas
+/usr/local/mysql-proxy/bin/mysql-proxyd test start 
+[root@localhost ]# /usr/local/mysql-proxy/bin/mysql-proxyd test start 
+OK: MySQL-Proxy of test is started
+
+安装数据库（为了使用mysql命令）
+yum install mysql -y     ##安装后不可启动
+
+登陆proxy查看，使用proxy管理接口2345 管理账户 user：pwd
+mysql -h127.0.0.1 -P2345 -uuser -ppwd
+
+[root@localhost ]# mysql -h127.0.0.1 -P2345 -uuser -ppwd
+MySQL [(none)]> select * from help;
++----------------------------+---------------------------------------------------------+
+| command                    | description                                             |
++----------------------------+---------------------------------------------------------+
+| SELECT * FROM help         | shows this help                                         |
+| SELECT * FROM backends     | lists the backends and their state                      |
+| SET OFFLINE $backend_id    | offline backend server, $backend_id is backend_ndx's id |
+| SET ONLINE $backend_id     | online backend server, ...                              |
+| ADD MASTER $backend        | example: "add master 127.0.0.1:3306", ...               |
+| ADD SLAVE $backend         | example: "add slave 127.0.0.1:3306", ...                |
+| REMOVE BACKEND $backend_id | example: "remove backend 1", ...                        |
+| SELECT * FROM clients      | lists the clients                                       |
+| ADD CLIENT $client         | example: "add client 192.168.1.2", ...                  |
+| REMOVE CLIENT $client      | example: "remove client 192.168.1.2", ...               |
+| SELECT * FROM pwds         | lists the pwds                                          |
+| ADD PWD $pwd               | example: "add pwd user:raw_password", ...               |
+| ADD ENPWD $pwd             | example: "add enpwd user:encrypted_password", ...       |
+| REMOVE PWD $pwd            | example: "remove pwd user", ...                         |
+| SAVE CONFIG                | save the backends to config file                        |
+| SELECT VERSION             | display the version of Atlas                            |
++----------------------------+---------------------------------------------------------+
+16 rows in set (0.00 sec)
+
+
+
+使用数据库工作接口1234来访问 mysql -h127.0.0.1 -P1234 -urepl -p123456
+MySQL [(none)]> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| lili               |
+| masu               |
+| mysql              |
+| performance_schema |
+| sys                |
+| yan                |
++--------------------+
+7 rows in set (0.00 sec)
+
+使用代理机器，在代理上访问数据库正常
+
+
+10 验证查询 读的分发负载
+在salve机器上，用下面命令查询访问量
+show  global  status like 'Question%';
+mysql202 > show  global  status like 'Question%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| Questions     | 100   |
++---------------+-------+
+1 row in set (0.01 sec)
+mysql203 > show  global  status like 'Question%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| Questions     | 100   |
++---------------+-------+
+1 row in set (0.01 sec)
+
+该命令每执行一次，量加1，
+当两个机器都调到相等时候比如100，
+去proxy机器执行一次 show databases;查询，
+然后回到salve机器执行查看，步长为2的即为访问的机器）
+
+proxy机器上使用工作接口来访问 mysql -h127.0.0.1 -P1234 -urepl -p123456
+MySQL [(none)]> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| lili               |
+| masu               |
+| mysql              |
+| performance_schema |
+| sys                |
+| yan                |
++--------------------+
+7 rows in set (0.00 sec)
+
+MySQL [(none)]> 
+
+202机器上：
+mysql202 > show  global  status like 'Question%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| Questions     | 101   |
++---------------+-------+
+1 row in set (0.01 sec)
+
+203机器上
+mysql203 > show  global  status like 'Question%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| Questions     | 102   |
++---------------+-------+
+1 row in set (0.01 sec)
+
+上面查询结果说明访问的是203机器
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+然后将202机器调整到102访问量（再执行一次 show  global  status like 'Question%';）
+mysql202 > show  global  status like 'Question%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| Questions     | 102   |
++---------------+-------+
+1 row in set (0.01 sec)
+
+接着去proxy机器执行一次show databases;查询，
+
+MySQL [(none)]> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| lili               |
+| masu               |
+| mysql              |
+| performance_schema |
+| sys                |
+| yan                |
++--------------------+
+7 rows in set (0.00 sec)
+
+MySQL [(none)]>
+
+然后回到salve机器执行查看show  global  status like 'Question%';
+
+mysql202 > show  global  status like 'Question%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| Questions     | 104   |
++---------------+-------+
+1 row in set (0.01 sec)
+
+mysql203 > show  global  status like 'Question%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| Questions     | 103   |
++---------------+-------+
+1 row in set (0.01 sec)
+
+说明这次访问的是202机器，读分发成功正常。
+
+到此atlas 实现了读写分离和读负载均衡，更过内容可以参考atlas和Percona 官网学习。
+
+
+
+
+

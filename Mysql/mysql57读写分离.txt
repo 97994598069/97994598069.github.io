@@ -1,0 +1,296 @@
+centos7.5 mysql5.7.22
+Atlas：Atlas-2.2.1
+服务器内存：8G  服务器cpu 4核
+
+mysql主库: 192.168.253.188
+mysql从库: 192.168.253.189
+mysql从库: 192.168.253.190
+Atlas: 192.168.253.191
+
+Mysql主从搭建:
+主从复制可以使MySQL数据库主服务器的主数据库，复制到一个或多个MySQL从服务器从数据库，默认情况下，复制异步; 根据配置，可以复制数据库中的所有数据库，选定的数据库或甚至选定的表。
+MySQL的工作方式是单进程多线程的方式，那么线程的多寡则会极大的影响到MySQL的效率，而在早期MySQL的主从都是由单线程进行的，使得主从复制除了相关的客观因素外还受到自身的影响；为此在MySQL的5.7版本中对多线程主从复制来进一步的改善，在MySQL 5.7中是按照逻辑时钟（类似CPU的处理机制）来处理多线程，甚至在半同步复制semisync中还是使用Performance Schema表来监控复制线程；
+
+
+先卸载系统自带的mariadb数据库
+yum -y remove mariadb*
+
+Yum安装Percona
+##https://www.percona.com/downloads/Percona-Server-5.7/LATEST/
+wget https://www.percona.com/downloads/Percona-Server-5.7/Percona-Server-5.7.20-18/binary/redhat/7/x86_64/Percona-Server-server-57-5.7.20-18.1.el7.x86_64.rpm
+
+yum install -y  Percona-Server-server-57-5.7.22-22.1.el7.x86_64.rpm  ##版本改成下载的版本
+
+
+192.168.253.188（主库）配置文件
+[client]
+default_character_set = utf8mb4
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld]
+port=3306
+socket=/var/lib/mysql/mysql.sock
+basedir = /data/local/percona5.7.22
+datadir = /data/local/percona5.7.22/data
+pid_file = /var/lib/mysql/mysql-pid.pid
+character_set_server = utf8mb4
+default_storage_engine = InnoDB
+explicit_defaults_for_timestamp
+federated
+skip-name-resolve
+gtid-mode = ON
+enforce-gtid-consistency = ON
+log-slave-updates = ON
+
+#Innodb
+innodb_flush_method = O_DIRECT
+innodb_log_files_in_group = 2
+innodb_lock_wait_timeout = 100
+innodb_log_file_size = 1024M
+innodb_flush_log_at_trx_commit = 1
+innodb_file_per_table = 1
+innodb_thread_concurrency = 8
+innodb_buffer_pool_size = 5G
+innodb_read_io_threads = 24
+innodb_write_io_threads = 24
+log_bin_trust_function_creators=1
+innodb_page_cleaners=8
+innodb_lru_scan_depth=256
+
+innodb_locks_unsafe_for_binlog = 1
+innodb_autoinc_lock_mode = 2
+sql_mode=NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+group_concat_max_len = 18446744073709551615
+
+# MyISAM #
+key_buffer_size = 1344M
+myisam_recover_options = FORCE,BACKUP
+lower_case_table_names=1
+event_scheduler=1
+
+# SAFETY #
+max_allowed_packet = 1024M
+max_connect_errors = 1000000
+skip_name_resolve = 1
+
+# Binary Logging #
+server_id = 200
+log_bin = mysql-bin
+binlog_format = ROW
+sync_binlog = 1
+
+# CACHES AND LIMITS #
+tmp_table_size = 32M
+max_heap_table_size = 32M
+max_connections = 1000
+thread_cache_size = 50
+open_files_limit = 65535
+table_definition_cache = 4096
+table_open_cache = 5000
+
+# LOGGING #
+log_error = /data/logs/mysql/mysql-error.log
+log_queries_not_using_indexes = 0
+slow_query_log = 1
+long_query_time = 1
+slow_query_log_file = /data/logs/mysql/mysql-slow.log
+
+# REPLICATION #
+relay_log = relay-bin
+slave_net_timeout = 60
+symbolic-links = 0
+transaction_isolation = READ-COMMITTED 
+
+[mysql]
+no-auto-rehash
+default_character_set = utf8mb4
+
+[xtrabackup]
+default-character-set = utf8mb4
+
+
+
+192.168.253.189（从库，190从库也是一样配置）配置文件
+[client]
+default_character_set = utf8mb4
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld]
+port=3306
+socket=/var/lib/mysql/mysql.sock
+basedir = /data/local/percona5.7.22
+datadir = /data/local/percona5.7.22/data
+pid_file = /var/lib/mysql/mysql-pid.pid
+character_set_server = utf8mb4
+default_storage_engine = InnoDB
+explicit_defaults_for_timestamp
+federated
+skip-name-resolve
+gtid-mode = ON
+enforce-gtid-consistency = ON
+log-slave-updates = ON
+slave_type_conversions="ALL_NON_LOSSY"
+
+#Innodb
+innodb_flush_method = O_DIRECT
+innodb_log_files_in_group = 2
+innodb_lock_wait_timeout = 100
+innodb_log_file_size = 1024M
+innodb_flush_log_at_trx_commit = 1
+innodb_file_per_table = 1
+innodb_thread_concurrency = 8
+innodb_buffer_pool_size = 5G
+innodb_read_io_threads = 24
+innodb_write_io_threads = 24
+log_bin_trust_function_creators=1
+innodb_page_cleaners=4
+innodb_lru_scan_depth=256
+innodb_buffer_pool_instances=2
+
+innodb_locks_unsafe_for_binlog = 1
+innodb_autoinc_lock_mode = 2
+sql_mode=NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+group_concat_max_len = 18446744073709551615
+
+# MyISAM #
+key_buffer_size = 1344M
+myisam_recover_options = FORCE,BACKUP
+lower_case_table_names=1
+event_scheduler=1
+slave_pending_jobs_size_max = 1344M
+
+# SAFETY #
+max_allowed_packet = 512M
+max_connect_errors = 1000000
+skip_name_resolve = 1
+slave-skip-errors=1007,1008,1032,1062
+
+# Binary Logging #
+server_id = 201
+log_bin = mysql-bin
+binlog_format = ROW
+sync_binlog = 1
+
+# CACHES AND LIMITS #
+tmp_table_size = 32M
+max_heap_table_size = 32M
+max_connections = 1000
+thread_cache_size = 50
+open_files_limit = 65535
+table_definition_cache = 4096
+table_open_cache = 5000
+
+# LOGGING #
+log_error = /data/logs/mysql/mysql-error.log
+log_queries_not_using_indexes = 0
+slow_query_log = 1
+long_query_time = 1
+slow_query_log_file = /data/logs/mysql/mysql-slow.log
+
+# REPLICATION #
+relay_log = relay-bin
+slave_net_timeout = 60
+symbolic-links = 0
+
+# slave
+slave-parallel-type=LOGICAL_CLOCK
+slave-parallel-workers=16
+master_info_repository=TABLE
+relay_log_info_repository=TABLE
+relay_log_recovery=ON
+
+[mysql]
+no-auto-rehash
+default_character_set = utf8mb4
+
+[xtrabackup]
+default-character-set = utf8mb4
+
+##备注：server_id三台数据库要设置成不同
+
+启动mysql 
+systemctl start mysql.service
+
+
+查询初始化密码
+grep "password" /var/log/mysqld.log     
+
+更改密码安全级别：  可不做
+2. 更改密码策略，降低密码的验证标准
+--更改密码策略为LOW   
+mysql> set global validate_password_policy=0;
+
+--更改密码长度   
+mysql> set global validate_password_length=0;
+
+
+修改root密码
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'new_password';
+
+授权：
+GRANT all privileges ON *.* TO 'root'@'%' identified by '123456' WITH GRANT OPTION;
+GRANT all privileges ON xiaoyaoji.* TO 'gaoyanrong'@'%' identified by 'gaoyanrong' WITH GRANT OPTION;
+GRANT all privileges ON *.* TO 'xuxu'@'%' identified by '000000' WITH GRANT OPTION;
+
+
+查询权限：
+mysql> show grants for xujia;
+
+
+
+
+
+使用Atlas实现读写分离：
+环境安装
+yum -y install libevent glib2 lua gcc gcc-c++ autoconf mysql-devel libtool pkgconfig ncurses ncurses-devel libevent-devel 
+
+下载Atlas包：
+wget https://github.com/Qihoo360/Atlas/releases/download/2.2.1/Atlas-2.2.1.el6.x86_64.rpm
+
+安装atlas
+yum install Atlas-2.2.1.el6.x86_64.rpm -y
+
+#ll /usr/local/mysql-proxy/
+total 4
+-rw-r--r-- 1 root root 402 Sep 11 14:59 \
+drwxr-xr-x 2 root root  75 Sep 10 14:24 bin
+drwxr-xr-x 2 root root  22 Sep 11 14:59 conf
+drwxr-xr-x 3 root root 331 Sep 10 14:14 lib
+drwxr-xr-x 2 root root  58 Sep 11 14:59 log
+
+bin目录下放的都是可执行文件
+“encrypt”是用来生成MySQL密码加密的，在配置的时候会用到
+“mysql-proxy”是MySQL自己的读写分离代理
+“mysql-proxyd”是360弄出来的，后面有个“d”，服务的启动、重启、停止。都是用他来执行的
+conf目录下放的是配置文件
+
+“test.cnf”只有一个文件，用来配置代理的，可以使用vim来编辑
+lib目录下放的是一些包，以及Atlas的依赖
+log目录下放的是日志，如报错等错误信息的记录
+使用encrypt来对数据库的密码进行加密,账号：aadminproxy,密码：123456
+
+/usr/local/mysql-proxy/bin/encrypt 123456
+XXfVpJOzMdITLHv26rAgv
+
+
+配置atlas
+vim /usr/local/mysql-proxy/conf/test.cnf
+[mysql-proxy]
+admin-username = root
+admin-password = admin123
+proxy-backend-addresses = 192.168.253.188:3306
+proxy-read-only-backend-addresses = 192.168.253.189:3306@1,192.168.253.190:3306@2
+pwds = aadminproxy:XXfVpJOzMdITLHv26rAgv
+daemon = true
+keepalive = true
+event-threads = 8
+log-level = message
+log-path = /usr/local/mysql-proxy/log
+sql-log=ON
+proxy-address = 0.0.0.0:8066
+admin-address = 0.0.0.0:2345
+charset=utf8
+
+
+启动
+/usr/local/mysql-proxy/bin/mysql-proxyd test start 

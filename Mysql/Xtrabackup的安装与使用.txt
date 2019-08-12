@@ -1,0 +1,90 @@
+https://www.cnblogs.com/youkanyouxiao/p/8335173.html
+
+Xtrabackup的安装与使用
+版本说明：2.3.3之后不备份死锁，如果数据库是mysql 5.7之后的必须要装2.4.4才可以用，当然了， 会向下兼容的。
+
+工具集：软件包安装后，有以下可执行文件
+bin/
+├── innobackupex -> xtrabackup
+├── xbcloud
+├── xbcloud_osenv
+├── xbcrypt
+├── xbstream
+└── xtrabackup
+
+其中最主要的是 innobackupex 和 xtrabackup，前者是一个 perl 脚本，后者是 C/C++ 编译的二进制。Percona 在2.3 版本用C重写了 innobackupex ，innobackupex 功能全部集成到 xtrabackup 里面，只有一个 binary，另外为了使用上的兼容考虑，innobackupex 作为 xtrabackup 的一个软链接。对于二次开发来说，2.3 摆脱了之前2个进程协作的负担，架构上明显要好于之前版本。（Percona XtraBackup 2.3 发布之后，推荐的备份方法是使用 xtrabackup 脚本。 ）
+
+xtrabackup 是用来备份 InnoDB 表的，不能备份非 InnoDB 表，和 mysqld server 没有交互；innobackupex 脚本用来备份非 InnoDB 表，同时会调用 xtrabackup 命令来备份 InnoDB 表，还会和 mysqld server 发送命令进行交互，如加读锁（FTWRL）、获取位点（SHOW SLAVE STATUS）等。简单来说，innobackupex 在 xtrabackup 之上做了一层封装。
+
+一般情况下，我们是希望能备份 MyISAM 表的，虽然我们可能自己不用 MyISAM 表，但是 mysql 库下的系统表是 MyISAM 的，因此备份基本都通过 innobackupex 命令进行；另外一个原因是我们可能需要保存位点信息。
+
+另外几个工具相对小众些，xbcrypt 是加解密备份文件用的；xbstream 类似于tar，是 Percona 自己实现的一种支持并发写的流文件格式；两者在备份和解压时都会用到（如果备份用了加密和并发）。xbcloud 工具的作用是：把全部或部分 xbstream 档案从云上下载或上传到云。
+
+{{
+xtrabackup：是用于热备份innodb, xtradb表中数据的工具，不能备份其他类型的表(Myisam表)，也不能备份数据表结构。
+innobackupex：是将xtrabackup进行封装的perl脚本，可以备份和恢复MyISAM表以及数据表结构。
+但是针对myisam的备份是需要加读锁的，多少会对线上业务影响。但是当前绝大部分Mysql用户，都是用innodb，所以，myisam只是系统表使用，锁的影响，也就可以忽略了。
+}}
+
+
+2.XtraBackup 安装
+官方下载地址：https://www.percona.com/downloads/XtraBackup/LATEST/
+
+系统及版本选择
+（1）CentOS 6
+系统：CentOS 6（Percona 官方建议安装在 RHEL/CentOS 6.5 及以上的系统）
+版本：percona-xtrabackup-24-2.4.6-2.el6.x86_64
+下载地址：https://pan.baidu.com/s/1ONBydCld2FoUfRlshMpBNA
+
+（2）CentOS 7
+系统：CentOS 7
+版本：percona-xtrabackup-24-2.4.10-1.el7.x86_64.rpm
+下载地址：https://pan.baidu.com/s/1yEn6bgloHTw30Edn9BUE4Q
+
+##二进制安装/解压缩安装（下载：链接：https://pan.baidu.com/s/1eCtXkkmaxXVN4mDKjglYew 密码：nxww）
+
+编译安装
+###########{{版本2.1.9的安装示例}}################
+##安装：
+https://pan.baidu.com/s/1smk3AaT
+yum -y  install perl-Time-HiRes
+tar zxvf percona-xtrabackup-2.1.9-744-Linux-x86_64.tar.gz
+mv percona-xtrabackup-2.1.9-Linux-x86_64/ /usr/local/xtrabackup
+echo "export PATH=\$PATH:/usr/local/xtrabackup/bin" >> /etc/profile
+source /etc/profile
+
+
+
+查看安装的版本：
+[root@mysql xtrabackup]#xtrabackup -version
+xtrabackup version 2.4.10 based on MySQL server 5.7.19 Linux (x86_64) (revision id: 3198bce)
+
+
+3.XtraBackup 备份mysql
+cat /home/script/innobackup.sh
+#!/bin/bash
+/usr/bin/innobackupex --defaults-file=/etc/my.cnf --user=root --password=12345556 --socket=/tmp/mysql.sock --compress /home/backup/mysql >> /home/backup/mysql/backup.$(date +%F).log 2>&1
+
+4.定时删除过期备份，只保留一周的备份
+（2）定时删除脚本
+#!/bin/bash
+find /home/backup/mysql -mtime +7 -exec rm -rf {} \;
+
+
+
+基本使用：  一般在从库上进行备份
+全备：一般重搭备库的时候备份主库使用
+innobackup --user=root --host=127.0.0.1 --defaults-file=/my.cnf --no-timestamp /data-backup/`date +%F`_all_databases;
+
+全备恢复：
+1)恢复日志：
+mv /usr/local/mysql/data /usr/local/mysql/data.old
+mkdir /usr/local/mysql/data
+chown -R mysql.mysql /usr/local/mysql/data   ##否则会报找不到pid
+innobackupex --apply-log 2017-11-05_all_databases/   ##检查日志
+innobaclupex --copy-back 2017-11-05_all_databases/
+
+
+
+
+

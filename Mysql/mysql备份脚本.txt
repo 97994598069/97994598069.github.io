@@ -1,0 +1,22 @@
+# 获取当前系统日期，格式为： 2009-2-21
+DATE=`date "+%F"`
+# 定义mysql 服务的主目录 
+DB_DIR=/usr
+# 定义备份后的路径
+BAK_DIR=/usr/local/backup
+BAK_PATH=$BAK_DIR/$DATE
+# 判断备份文件存放的路径是否存在
+if [ ! -d $BAK_PATH ];then
+mkdir -p $BAK_PATH
+fi
+#目录查看有哪些数据库
+cd /var/lib/mysql
+DB_NAME=`ls -dF -1 * | grep "/$" | cut -d/ -f1`
+# 利用mysqldump 对所有数据库进行SQL语句备份
+for db_name in $DB_NAME;
+do
+$DB_DIR/bin/mysqldump -u root -p"*****" $db_name > $BAK_PATH/$db_name-$DATE.sql;
+done
+# 删除15天以前备份的文件
+find $BAK_DIR -name "*" -mtime +15 |xargs rm -rf
+exit 0
