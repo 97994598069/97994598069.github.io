@@ -189,6 +189,41 @@ broker.id=2  ##修改成和server.properties中的相同
 #./bin/kafka-topics.sh --create --zookeeper 192.168.89.11:2181,192.168.89.12:2181,192.168.89.13:2181 --replication-factor 3 --partitions 3 --topic SyslogTopic
 
 
+集群功能测试：
+./bin/kafka-topics.sh --create --zookeeper 192.168.197.85:2181,192.168.197.86:2181,192.168.197.77:2181 --replication-factor 3 --partitions 1 --topic my-replicated-topic
+# 结果：Created topic "my-replicated-topic".
+
+# 检查主题状态
+./bin/kafka-topics.sh --describe --zookeeper 192.168.197.85:2181,192.168.197.86:2181,192.168.197.77:2181 localhost:2181 --topic my-replicated-topic
+# 结果：Topic:my-replicated-topic PartitionCount:1    ReplicationFactor:3 Configs:
+# Topic: my-replicated-topic    Partition: 0    Leader: 3   Replicas: 3,1,2 Isr: 3,1,2
+
+# 一个生产者
+./bin/kafka-console-producer.sh --broker-list 192.168.197.85:9092,192.168.197.86:9092,192.168.197.77:9092 --topic my-replicated-topic
+>fas
+>faf
+>fag
+>
+
+# 三个消费者：
+./bin/kafka-console-consumer.sh --bootstrap-server 192.168.197.85:9092,192.168.197.86:9092,192.168.197.77:9092 --from-beginning --topic my-replicated-topic
+fas
+faf
+fag
+
+
+
+通过监控集群以及生产和消费，来判断高可用情况的测试
+# 通过主题状态监控集群的leader和Replicas和Isr
+./bin/kafka-topics.sh --describe --zookeeper 192.168.197.85:2181,192.168.197.86:2181,192.168.197.77:2181 localhost:2181 --topic my-replicated-topic
+
+# 分别停止leader的服务的kafka服务，来检查是否可以生产和消费的情况
+./bin/kafka-server-start.sh -daemon ./config/server.properties
+./bin/kafka-server-stop.sh
+
+
+
+
 5.5 常用命令
 # cd /data/kafka/kafka_2.12-2.1.0/
 1）  停止kafka
