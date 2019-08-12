@@ -167,6 +167,21 @@ WantedBy=multi-user.target
 # systemctl start kafka
 # systemctl enable kafka
 
+##按照上述在另外两台机子上部署  相同部署  只需如下拷贝过去即可
+ scp -rp /data/kafka/ root@192.168.197.86:/data/
+ scp -rp /data/kafka/ root@192.168.197.77:/data/
+ 
+ 修改两个地方
+ 1）server.properties中
+ broker.id=2   ###全局唯一
+ listeners=PLAINTEXT://192.168.197.86:9092 ##改成本机ip
+
+ 2）[root@localhost kafkalogs]# more /data/kafka/kafkalogs/meta.properties 
+#
+#Mon Aug 12 21:58:34 CST 2019
+version=0
+broker.id=2  ##修改成和server.properties中的相同
+###两外一台可以改成3，总之全局唯一
 
 5.4 创建topic
 创建3分区、3备份
