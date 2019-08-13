@@ -1,0 +1,70 @@
+centos7+tomcat85配置apr协议
+
+在慢速网络上Tomcat线程数开到300以上的水平，不配APR，基本上300个线程狠快就会用满，以后的请求就只好等待。但是配上APR之后，Tomcat将以JNI的形式调用Apache HTTP服务器的核心动态链接库来处理文件读取或网络传输操作，这时并发的线程数量明显下降，从原来的300可能会马上下降到只有几十，新的请求会毫无阻塞的进来。
+
+Tomcat 可以使用 apr 来提供更好的伸缩性、性能和集成到本地服务器技术，用来提高 tomcat 的性能。而tomcat native在具体的运行平台上提供了一种优化技术，它本身是基于 ARP（Apache Portable（轻便） Runtime）技术。在我们应用了tomcat native后，tomcat在跟操作系统级别的交互方面可以做得更好，并且它更像apache一样，可以更好地作为一台 web server。tomcat 可以利用apache的apr接口，使用操作系统的部分本地操作，从而提升性能APR 提升的是静态页面处理能力。
+
+(1).Tomcat的三种运行模式介绍
+Tomcat 有三种 运行模式，bio、nio、apr。
+bio(blocking I/O)，阻塞式I/O操作，表示Tomcat使用的是传统的Java I/O操作(即java.io包及其子包)，对于每一个请求都要创建一个线程来进行处理，所以开销较大不适合处理高并发的场景。Tomcat在默认情况下，就是以bio模式运行的。遗憾的是，就一般而言，bio模式是三种运行模式中性能最低的一种。我们可以通过Tomcat Manager来查看服务器的当前状态。
+
+nio是Java SE 1.4及后续版本提供的一种新的I/O操作方式(即java.nio包及其子包)，基于缓冲区、并能提供非阻塞I/O操作的Java API实现，比传统的I/O处理方式（bio）有更高的并发运行性能。是Tomcat8的默认运行模式。
+
+apr(Apache Portable Runtime/Apache可移植运行库)是Apache HTTP服务器的支持库。从操作系统级别解决异步I/O问题，大幅度提高服务器的并发处理性能，也是Tomcat生产环境运行的首选方式。要tomcat支持apr，必须安装apr和native，这样tomcat才可以利用apache的apr接口，使用操作系统的部分本地操作，从而提升性能。
+
+tomcat8 安装：
+安装jdk 略
+安装tomcat 略
+
+安装apr协议：
+　1）安装依赖包
+　　注意：这里有个apr-devel，作为依赖apr也会被安装。
+[root@youxi1 ~]# yum -y install apr-devel gcc gcc-c++ openssl-devel openssl　　
+
+　2）解压Tomcat Native包，编译安装 （注意：Tomcat Native已经集成到Tomcat8安装目录下的bin目录）
+tar xf /usr/local/apache-tomcat-8.5.43/bin/tomcat-native.tar.gz -C /usr/local/
+cd tomcat-native-1.2.23-src/native/
+./configure --with-apr=/usr/ --with-java-home=/usr/local/jdk --with-ssl
+make && make install
+
+echo $?  ##返回零  OK
+
+vi /etc/ld.so.conf
+include ld.so.conf.d/*.conf /usr/local/apr/lib  ##后面的为新增
+
+ldconfig  ##重新加载
+
+echo "ldconfig" >> /etc/rc.local
+chmod +x /etc/rc.d/rc.local
+
+vi /etc/profile.d/jdk.sh 
+[root@localhost bin]# cat /etc/profile.d/jdk.sh 
+#!/bin/bash
+JAVA_HOME=/usr/local/jdk
+PATH=$PATH:$JAVA_HOME/bin
+CLASSPATH=.:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+export PATH JAVA_HOME CLASSPATH
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/apr/lib   ###新增
+
+source /etc/profile.d/jdk.sh
+
+配置server.xml
+vi server.xml
+<Connector port="8080" protocol="org.apache.coyote.http11.Http11AprProtocol"　　//将HTTP/1.1修改为当前值
+
+
+配置catalina.sh
+vi catalina.sh
+ security policy
+JAVA_OPTS="$JAVA_OPTS -Djava.protocol.handler.pkgs=org.apache.catalina.webresour
+ces"　　//这是第253行，在这下面添加一行参数
+JAVA_OPTS="$JAVA_OPTS -Djava.library.path=/usr/local/apr/lib"　　//只要添加这一行  ##新增这一行
+
+
+重启tomcat startup.sh 
+
+搜索启动日志：
+[root@localhost bin]# cat ../logs/catalina.out |grep "Native"
+13-Aug-2019 23:53:09.316 信息 [main] org.apache.catalina.core.AprLifecycleListener.lifecycleEvent Loaded APR based Apache Tomcat Native library [1.2.23] using APR version [1.4.8].
+
+##看这一行，只有出现这一行才代表成功了。
