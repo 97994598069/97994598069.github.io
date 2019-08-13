@@ -20,3 +20,14 @@ location ~* ^.+\.(css|js|txt|xml|swf|wav)$ {
 location ~* ^.+\.(html|htm)$ {
         expires      1h;
 }
+
+
+
+关于字体
+为静态资源开启缓存能够较少服务器带宽的消耗，特别是在css中使用字体时，同时配合gzip压缩能够大大减少下载字体造成的带宽影响。
+设置字体缓存
+需要注意的是，字体有很多格式，为所有字体格式设置缓存是很有必要的。
+location ~* ^.+\.(eot|ttf|otf|woff|svg)$ {
+        access_log   off;
+        expires max;
+}
