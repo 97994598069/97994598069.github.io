@@ -2,6 +2,18 @@
 1、安装sendmail：
 1) centos下可以安装命令：yum -y install sendmail
 2) 安装完后启动sendmail命令：service sendmail start
+3) 查看sendmail的运行状态：systemctl status sendmail
+##上述第三步若是报错如下：
+8月 15 17:07:43 mnode1 sendmail[1948]: My unqualified host name (mnode1) unknown; sleeping for retry
+8月 15 17:08:43 mnode1 sendmail[1948]: unable to qualify my own domain name (mnode1) -- using short name
+
+则一般是你修改了主机名并且在hosts做了映射，此时需要添加个映射，将你的邮箱地址解析到这里，如下：
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.197.71  mnode1 $qq@qq.com
+
+然后重启sendmail即可
+
 
 2、安装mail
 安装命令：yum install -y mailx
@@ -38,6 +50,26 @@ set bsdcompat
 ###授权信息###
 set from=abcd@126.com smtp=smtp.126.com   
 set smtp-auth-user=abcd@126.com smtp-auth-password=abcd123 smtp-auth=login
+
+
++++++++++++++++++++++++++++++++++++++++++++++
+
+如果不想使用25端口，想使用465端口呢？如下：
+1.配置认证信息
+mkdir -p /root/.certs/
+echo -n | openssl s_client -connect smtp.qq.com:465 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > ~/.certs/qq.crt
+certutil -A -n "GeoTrust SSL CA" -t "C,," -d ~/.certs -i ~/.certs/qq.crt
+certutil -A -n "GeoTrust Global CA" -t "C,," -d ~/.certs -i ~/.certs/qq.crt
+certutil -A -n "GeoTrust SSL CA - G3" -t "Pu,Pu,Pu" -d ~/.certs/./ -i ~/.certs/qq.crt
+certutil -L -d /root/.certs
+
+set from=$qq@qq.com
+set smtp=smtps://smtp.qq.com:465
+set smtp-auth-user=$邮箱
+set smtp-auth-password=znczuvgtbaaobfch（授权码）
+set smtp-auth=login
+set ssl-verify=ignore
+set nss-config-dir=/root/.certs  （证书路径）
 
 
 
