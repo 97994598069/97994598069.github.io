@@ -1,0 +1,34 @@
+input {
+    file {
+		type => "tms_inbound.log"
+		path => "/JavaWeb/tms2.wltest.com/logs/tms_inbound.es.*.log"
+		codec => json {
+				charset => "UTF-8"
+			}
+    }
+ 
+    file {
+		type => "tms_outbound.log"
+		path => "/JavaWeb/tms2.wltest.com/logs/tms_outbound.es.*.log"
+		codec => json {
+				charset => "UTF-8"
+			}
+    }
+}
+ 
+ 
+ 
+output {
+    
+	if [type] == "tms_inbound.log" {
+	   elasticsearch { hosts => "10.230.3.183:9200"
+						index =>  'tms_inbound.log-%{+YYYY.MM.dd}'
+						codec => "json" }
+		}
+	else{
+	  elasticsearch { hosts => "10.230.3.183:9200"
+						index => 'tms_outbound.log-%{+YYYY.MM.dd}'
+						codec => "json" }
+		}
+ 
+}
