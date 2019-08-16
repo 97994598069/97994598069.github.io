@@ -1,0 +1,201 @@
+这里使用yum的方式进行安装
+es：192.168.197.72
+logstash：192.168.197.71
+kibana：192.168.197.73
+1.配置yum源
+[root@mnode2 yum.repos.d]# cat es.repo 
+[elastic-6.x]
+name=Elastic repository for 6.x packages
+baseurl=https://artifacts.elastic.co/packages/6.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-m
+
+##目前最新版本是6.8.2
+
+
+分别在es节点，logstash节点，kibana节点来进行安装不同的应用
+yum -y install elasticsearch 
+yum -y install logstash 
+yum -y install kibana
+
+
+
+配置elasticsearch  
+vi /etc/elasticsearch/elasticsearch.yml
+node.name: 192.168.197.72
+path.data: /home/elasticsearch/data
+path.logs: /home/elasticsearch/data
+network.host: 0.0.0.0
+http.port: 9200
+
+
+
+若是集群则如下：
+cluster.name: elk-es
+node.name: 192.168.2.10
+path.data: /home/elasticsearch/data
+path.logs: /home/elasticsearch/data
+network.host: 0.0.0.0
+http.port: 9200
+discovery.zen.ping.unicast.hosts: ["192.168.2.11", "192.168.2.12", "192.168.2.10"]
+discovery.zen.minimum_master_nodes: 2
+gateway.recover_after_nodes: 2
+
+启动：
+[root@mnode2 elasticsearch]# systemctl start elasticsearch
+[root@mnode2 elasticsearch]# systemctl status elasticsearch
+● elasticsearch.service - Elasticsearch
+   Loaded: loaded (/usr/lib/systemd/system/elasticsearch.service; disabled; vendor preset: disabled)
+   Active: failed (Result: exit-code) since 四 2019-08-15 19:44:00 CST; 3s ago
+     Docs: http://www.elastic.co
+  Process: 2160 ExecStart=/usr/share/elasticsearch/bin/elasticsearch -p ${PID_DIR}/elasticsearch.pid --quiet (code=exited, status=1/FAILURE)
+ Main PID: 2160 (code=exited, status=1/FAILURE)
+
+8月 15 19:44:00 mnode2 systemd[1]: Started Elasticsearch.
+8月 15 19:44:00 mnode2 systemd[1]: Starting Elasticsearch...
+8月 15 19:44:00 mnode2 elasticsearch[2160]: which: no java in (/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin)
+8月 15 19:44:00 mnode2 systemd[1]: elasticsearch.service: main process exited, code=exited, status=1/FAILURE
+8月 15 19:44:00 mnode2 systemd[1]: Unit elasticsearch.service entered failed state.
+8月 15 19:44:00 mnode2 systemd[1]: elasticsearch.service failed.
+
+##找不到java  但是java配置是没有问题，可以在elasticsearch中指定java路径
+vi /etc/sysconfig/elasticsearch
+# Elasticsearch Java path
+JAVA_HOME=/usr/local/jdk
+systemctl restart elasticsearch.service
+
+再次启动OK
+
+安装elasticsearch-head
+yum -y install npm git
+cd /usr/local 
+git clone git://github.com/mobz/elasticsearch-head.git
+cd elasticsearch-head/
+npm install grunt -save --registry=https://registry.npm.taobao.org
+npm install --registry=https://registry.npm.taobao.org
+npm run start &    #后台启动服务
+
+
+
+
+
+
+配置kibana：
+[root@linux-elk1 ~]# vim /etc/kibana/kibana.yml 
+[root@linux-elk1 ~]# grep ^[a-Z] /etc/kibana/kibana.yml 
+server.port: 5601    #监听端口
+server.host: "192.168.1.31"    #监听地址
+elasticsearch.hosts: ["http://192.168.1.31:9200"]    #elasticsearch服务器地址
+i18n.locale: "zh-CN" 
+
+systemctl start kibana 
+systemctl status kibana 
+
+
+
+
+配置logstash
+systemctl start logstsh
+systemctl status logstsh  ##若报错，可以到message下找相关日志，一般是没有找到java
+tail -500 /var/log/message
+
+Aug 15 21:02:56 mnode1 logstash: could not find java; set JAVA_HOME or ensure java is in PATH
+Aug 15 21:02:56 mnode1 systemd: logstash.service: main process exited, code=exited, status=1/FAILURE
+Aug 15 21:02:56 mnode1 systemd: Unit logstash.service entered failed state.
+
+解决如下：
+more /usr/share/logstash/bin/logstash
+[root@mnode1 logstash]# more /usr/share/logstash/bin/logstash
+#!/bin/bash
+# Run logstash from source
+JAVA_HOME=/usr/local/jdk  ###新增一行
+# This is most useful when done from a git checkout.
+
+再次启动OK
+
+
+
+
+
+
+[root@mnode1 conf.d]# cat /etc/logstash/conf.d/system-log.conf 
+input {
+  file {
+    path => "/var/log/messages"
+    type => "systemlog"
+    start_position => "beginning"
+    stat_interval => "2"
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["192.168.197.72:9200"]
+    index => "logstash-%{type}-%{+YYYY.MM.dd}"
+  }
+}
+
+
+查看es中索引：
+[root@mnode1 logstash]# curl http://192.168.197.72:9200/_cat/indices
+green  open kibana_sample_data_logs       jnhEdVJrT-2-EHURayXy4Q 1 0 14005 0   11.4mb   11.4mb
+yellow open logstash-systemlog-2019.08.15 vHHBUlkKTDWwE0ZAewIr5w 5 1  8753 0 1008.2kb 1008.2kb
+green  open .kibana_1                     Zob1ubmBRXa6OKg2yW9e2w 1 0    35 0  976.4kb  976.4kb
+green  open .kibana_task_manager          qpTkCrTpR_umhgPH6vnW_w 1 0     2 0   12.5kb   12.5kb
+green  open kibana_sample_data_ecommerce  SygBi8IyTYuSTnCI8tfJKg 1 0  4675 0    4.7mb    4.7mb
+
+##删除索引：  可以使用通配符
+curl -XDELETE http://172.10.10.43:9200/logstash-2018.11.01 
+
+
+##浏览器查看kibana，若是es为yellow则如下处理：因为es目前是单节点，如果设置了副本集则可能是为yellow状态
+则kibana界面--->管理-->索引管理--->找到yellow状态的索引并且点击进去--->Edit settings--->将里面的"index.number_of_replicas": "0" 设置为0保存即可
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+logstash收集tomcat的访问日志：
+[root@mnode1 conf.d]# cat /etc/logstash/conf.d/tomcat.conf 
+input {		
+  file {  
+    path => "/usr/local/apache-tomcat-8.5.43/logs/localhost_access_log.*.txt"  
+    sincedb_path => "/etc/logstash/conf.d/sincedb_apache_access_log.txt"
+    type => "app01_access_log"
+    add_field => {"tomcatip" => "app01-192.168.197.71"}
+  }  
+}
+
+filter{	
+  if [type] == "app01_access_log" {
+    grok{
+	  match => { "message" => "%{IPORHOST:clientip} %{USER:ident} %{USER:auth} \[%{HTTPDATE:timestamp}\] \"(?:%{WORD:verb} %{URIPATHPARAM:request}(?: HTTP/%{NUMBER:httpversion})?|-)\" %{NUMBER:response} (?:%{NUMBER:bytes}|-) %{NUMBER:responsetime} \"(?:%{URI:referrer}|-)\" %{QS:agent}" }
+	}				
+	date{
+	  match => [ "timestamp", "dd/MMM/yyyy:HH:mm:ss Z" ]
+	  target => ["writetime"]
+	}		
+	mutate {
+	  convert => { 
+		"response" => "integer" 
+		"bytes" => "integer" 
+		"responsetime" => "integer" 
+	  }
+	}
+  }
+}
+
+output {
+  if [type] == "app01_access_log" {		
+	elasticsearch {
+	  hosts => ["192.168.197.72:9200"]
+	  index => "app01accesslog-%{+YYYY.MM.dd}"
+	}		
+  }
+}
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++=
+
+
