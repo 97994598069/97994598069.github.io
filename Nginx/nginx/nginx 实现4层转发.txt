@@ -1,0 +1,27 @@
+nginx从1.9.0开始，新增加了一个stream模块，用来实现四层协议的转发、代理或者负载均衡等。这完全就是抢HAproxy份额的节奏，鉴于nginx在7层负载均衡和web service上的成功，和nginx良好的框架，stream模块前景一片光明。
+查看是否有stream模块
+
+[root@nginx04 local]# nginx -V
+nginx version: nginx/1.10.2
+built by gcc 4.4.7 20120313 (Red Hat 4.4.7-17) (GCC) 
+built with OpenSSL 1.0.1e-fips 11 Feb 2013
+TLS SNI support enabled
+configure arguments: --prefix=/etc/nginx --sbin-path=/usr/sbin/nginx --modules-path=/usr/lib64/nginx/modules --conf-path=/etc/nginx/nginx.conf --error-log-path=/var/log/nginx/error.log --http-log-path=/var/log/nginx/access.log --pid-path=/var/run/nginx.pid --lock-path=/var/run/nginx.lock --http-client-body-temp-path=/var/cache/nginx/client_temp --http-proxy-temp-path=/var/cache/nginx/proxy_temp --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp --http-scgi-temp-path=/var/cache/nginx/scgi_temp --user=nginx --group=nginx --with-file-aio --with-threads --with-ipv6 --with-http_addition_module --with-http_auth_request_module --with-http_dav_module --with-http_flv_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_mp4_module --with-http_random_index_module --with-http_realip_module --with-http_secure_link_module --with-http_slice_module --with-http_ssl_module --with-http_stub_status_module --with-http_sub_module --with-http_v2_module --with-mail --with-mail_ssl_module --with-stream --with-stream_ssl_module --with-cc-opt='-O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector --param=ssp-buffer-size=4 -m64 -mtune=generic'
+
+stream{
+    upstream backend{
+        hash $remote_addr consistent;
+         #设置后端 Redis 连接串和端口，失败超时时间为 10s，最多尝试 3 次。
+        server  r-bp1b294374634044.redis.rds.aliyuncs.com:6379 max_fails=3 fail_timeout=10s;
+    }
+    server{
+        # nginx 访问端口
+        listen 3333;
+        #指定 nginx 连接后端服务器的超时时间，指定为 20s。
+        proxy_connect_timeout 20s;
+         #距离上一次成功访问（连接或读写）后端服务器的时间超过了 5 分钟就判定为超时，断开此连接。
+        proxy_timeout 5m;
+         #将 TCP 连接及数据收发转向叫 "backend" 的后端服务器。
+        proxy_pass backend;
+    }
+}
