@@ -1,0 +1,221 @@
+项目总共分为xmt，zmt,tomcat，nginx四类日志
+
+大致的思路：
+1.filebeat--->es--->kibana
+filebeat按照应用收集java日志，相同的应用多个节点索引使用相同的一个，tomcat的访问日志做json化，catalina.out不用json化，写入到es集群，然后用kibana展示
+
+服务器01上filebeat的配置：
+[root@mnode1 filebeat]# cat filebeat.yml 
+filebeat.prospectors:
+- input_type: log
+  paths:
+    - /usr/local/apache-tomcat-8.5.43/logs/catalina.out
+  fields:
+    type: "catalina"
+    ip: "192.168.197.101"
+  fields_under_root: true
+  multiline.pattern: '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  multiline.negate: true
+  multiline.match: after
+
+- input_type: log
+  paths:
+    - /usr/local/apache-tomcat-8.5.43/logs/localhost_access_log.*.txt
+  fields:
+    type: "access"
+    logtype: "search"
+    ip: "192.168.197.101"
+  fields_under_root: true
+  multiline.pattern: '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  multiline.negate: true
+  multiline.match: after
+
+processors:
+- drop_fields:
+     fields: ["beat", "offset", "source"]
+
+
+setup.template.name: "app01"
+setup.template.pattern: "app01-"
+
+output.elasticsearch:
+  hosts: ["192.168.197.72:9200"]
+  index: "app01-%{[type]}-%{+yyyy.MM.dd}"
+  
+  
+
+  
+服务器02上filebeat的配置：
+[root@localhost filebeat]# cat filebeat.yml 
+filebeat.prospectors:
+- input_type: log
+  paths:
+    - /usr/local/apache-tomcat-8.5.43/logs/catalina.out
+  fields:
+    type: "catalina"
+    ip: "192.168.197.85"
+  fields_under_root: true
+  multiline.pattern: '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}' 
+  multiline.negate: true
+  multiline.match: after
+
+- input_type: log
+  paths:
+    - /usr/local/apache-tomcat-8.5.43/logs/localhost_access_log.*.txt
+  fields:
+    type: "access"
+    logtype: "search"
+    ip: "192.168.197.85"
+  fields_under_root: true
+  multiline.pattern: '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  multiline.negate: true
+  multiline.match: after
+
+processors:
+- drop_fields:
+     fields: ["beat", "offset", "source"]
+
+
+setup.template.name: "app01"
+setup.template.pattern: "app01-"
+
+output.elasticsearch:
+  hosts: ["192.168.197.72:9200"]
+  index: "app01-%{[type]}-%{+yyyy.MM.dd}"
+[root@localhost filebeat]# 
+
+
+###可以看到上述两台服务器上的写入es的索引是一致的
+
+需求增加：
+
+只要error的日志:
+[root@mnode1 filebeat]# cat filebeat.yml 
+filebeat.prospectors:
+- input_type: log
+  paths:
+    - /usr/local/apache-tomcat-8.5.43/logs/catalina.out
+  #include_lines: ['error']  ###增加一行  只匹配带有error的行
+  #exclude_lines: ['^DBG']  ###增加一行， 不匹配debug的行
+  fields:
+    type: "catalina"           ###或者写成这样document_type: "nginx-log-dev-filebeat"  #定义type
+    ip: "192.168.197.101"
+  fields_under_root: true
+  multiline.pattern: '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}'  ##因为catalina.out的日期表示默认的格式是16-Aug-2019
+  multiline.negate: true
+  multiline.match: after
+
+- input_type: log
+  paths:
+    - /usr/local/apache-tomcat-8.5.43/logs/localhost_access_log.*.txt
+  fields:
+    type: "access"
+    logtype: "search"
+    ip: "192.168.197.101"
+  fields_under_root: true
+  multiline.pattern: '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  multiline.negate: true
+  multiline.match: after
+
+processors:
+- drop_fields:
+     fields: ["beat", "offset", "source"]
+
+
+setup.template.name: "app01"
+setup.template.pattern: "app01-"
+
+output.elasticsearch:
+  hosts: ["192.168.197.72:9200"]
+  index: "app01-%{[type]}-%{+yyyy.MM.dd}"
+  
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+  paths:                                     #增加日志收集路径收集系统日志
+    - /var/log/*.log
+    - /var/log/messages
+  exclude_lines: ["^DBG"]                   #以什么开头的不收集
+  #include_lines: ["^ERR", "^WARN"]         #只收集以什么开头的
+  exclude_files: [".gz$"]                   #.gz结尾不收集
+  document_type: "system-log-dev-filebeat"  #增加一个type
+  
+  
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++===
+
+##multiline.pattern详解：
+input_type:输入filebeat的类型，包括log(具体路径的日志)和stdin(键盘输入)两种
+multiline：日志中经常会出现多行日志在逻辑上属于同一条日志的情况，所以需要multiline参数来详细阐述
+multiline.pattern：正则表达式，由大数据工程师进行逻辑设置，比如：用空格开头，值为^[[:space:]]；用C。正则表达式是非常复杂的，详细见filebeat的正则表达式官方链接：https://www.elastic.co/guide/en/beats/filebeat/current/regexp-support.html
+
+multiline.negate：该参数意思是是否否定多行融入
+
+multiline.match：取值为after或before。该值与上面的pattern与negate值配合使用：
+pattern=^b，意思是以b开头。negate有false和true两种取值，match也有after和before两种取值。下面详述
+negate参数为false，表示“否定参数=false”。multiline多行参数负负得正，表示符合pattern、match条件的行会融入多行之中、成为一条完整日志的中间部分。如果match=after，则以b开头的和前面一行将合并成一条完整日志；如果match=before，则以b开头的和后面一行将合并成一条完整日志。
+
+negate参数为true，表示“否定参数=true”。multiline多行参数为负，表示符合match条件的行是多行的开头，是一条完整日志的开始或结尾。如果match=after，则以b开头的行是一条完整日志的开始，它和后面多个不以b开头的行组成一条完整日志；如果match=before，则以b开头的行是一条完整日志的结束，和前面多个不以b开头的合并成一条完整日志。
+
+
+上面几个参数是multiline的最常见配置参数。还有其他一些参数，比如：
+flush_pattern表示符合该正则表达式的，将从内存刷入硬盘。
+max_lines表示如果多行信息的行数炒过该数字，则多余的都会被丢弃。默认值为500行
+timeout表示超时时间，如果炒过timeout还没有新的一行日志产生，则自动结束当前的多行、形成一条日志发出去。
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Filebeat的配置文件是/etc/filebeat/filebeat.yml，遵循YAML语法。具体可以配置如下几个项目：
+Filebeat
+Output
+Shipper
+Logging(可选)
+Run Options（可选）
+
+Filebeat的部分主要定义prospector的列表，定义监控哪里的日志文件，关于如何定义的详细信息可以参考filebeat.yml中的注释，下面主要介绍一些需要注意的地方。
+paths：指定要监控的日志，目前按照Go语言的glob函数处理。没有对配置目录做递归处理，比如配置的如果是：/var/log/* /*.log
+则只会去/var/log目录的所有子目录中寻找以”.log”结尾的文件，而不会寻找/var/log目录下以”.log”结尾的文件。
+
+encoding：指定被监控的文件的编码类型，使用plain和utf-8都是可以处理中文日志的。
+input_type：指定文件的输入类型log(默认)或者stdin。
+exclude_lines：在输入中排除符合正则表达式列表的那些行。
+include_lines：包含输入中符合正则表达式列表的那些行（默认包含所有行），include_lines执行完毕之后会执行exclude_lines。
+exclude_files：忽略掉符合正则表达式列表的文件（默认为每一个符合paths定义的文件都创建一个harvester）。
+fields：向输出的每一条日志添加额外的信息，比如“level:debug”，方便后续对日志进行分组统计。默认情况下，会在输出信息的fields子目录下以指定的新增fields建立子目录，例如fields.level。
+fields: 
+level: debug
+
+
+fields_under_root：如果该选项设置为true，则新增fields成为顶级目录，而不是将其放在fields目录下。自定义的field会覆盖filebeat默认的field。例如添加如下配置：
+fields: 
+level: debug 
+fields_under_root: true
+
+ignore_older：可以指定Filebeat忽略指定时间段以外修改的日志内容，比如2h（两个小时）或者5m(5分钟)。
+close_older：如果一个文件在某个时间段内没有发生过更新，则关闭监控的文件handle。默认1h。
+force_close_files：Filebeat会在没有到达close_older之前一直保持文件的handle，如果在这个时间窗内删除文件会有问题，所以可以把force_close_files设置为true，只要filebeat检测到文件名字发生变化，就会关掉这个handle。
+scan_frequency：Filebeat以多快的频率去prospector指定的目录下面检测文件更新（比如是否有新增文件），如果设置为0s，则Filebeat会尽可能快地感知更新（占用的CPU会变高）。默认是10s。
+document_type：设定Elasticsearch输出时的document的type字段，也可以用来给日志进行分类。
+harvester_buffer_size：每个harvester监控文件时，使用的buffer的大小。
+max_bytes：日志文件中增加一行算一个日志事件，max_bytes限制在一次日志事件中最多上传的字节数，多出的字节会被丢弃。
+
+multiline：适用于日志中每一条日志占据多行的情况，比如各种语言的报错信息调用栈。这个配置的下面包含如下配置：
+
+pattern：多行日志开始的那一行匹配的pattern
+negate：是否需要对pattern条件转置使用，不翻转设为true，反转设置为false
+match：匹配pattern后，与前面（before）还是后面（after）的内容合并为一条日志
+max_lines：合并的最多行数（包含匹配pattern的那一行）
+timeout：到了timeout之后，即使没有匹配一个新的pattern（发生一个新的事件），也把已经匹配的日志事件发送出去
+
+
+
+
+tail_files：如果设置为true，Filebeat从文件尾开始监控文件新增内容，把新增的每一行文件作为一个事件依次发送，而不是从文件开始处重新发送所有内容。
+backoff：Filebeat检测到某个文件到了EOF之后，每次等待多久再去检测文件是否有更新，默认为1s。
+max_backoff：Filebeat检测到某个文件到了EOF之后，等待检测文件更新的最大时间，默认是10秒。
+backoff_factor：定义到达max_backoff的速度，默认因子是2，到达max_backoff后，变成每次等待max_backoff那么长的时间才backoff一次，直到文件有更新才会重置为backoff。比如：
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+常用的时间格式的匹配：
+[XY] 2018-11-01 10:46:38 INFO
+multiline.pattern: '^\[XY\]\s*(\d{4}|\d{2})\-(\d{2}|[a-zA-Z]{3})\-(\d{2}|\d{4})
