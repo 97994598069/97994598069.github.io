@@ -54,6 +54,7 @@ cd /usr/local/src/
 wget 'http://hk1.php.net/distributions/php-5.6.40.tar.gz'
 tar -zxf php-5.6.40.tar.gz
 cd php-5.6.40
+cp -frp /usr/lib64/libldap* /usr/lib/  ##否则有可能报错Cannot find ldap libraries in /usr/lib.
 ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --enable-ctype --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-freetype-dir --with-jpeg-dir --with-png-dir --with-zlib --with-libxml-dir=/usr --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem --enable-inline-optimization --with-curl --enable-mbregex --enable-mbstring --with-mcrypt --with-gd --enable-gd-native-ttf --with-openssl --with-mhash --enable-pcntl --enable-sockets --with-ldap-sasl --with-xmlrpc --enable-zip --enable-soap --with-gettext --enable-fpm --with-ldap
 
 make && make install
