@@ -1,0 +1,184 @@
+Lepus(天兔)数据库监控系统是是一款专业、强大的数据库监控管理系统，通过Lepus可以监控数据库的实时健康和各项性能指标，目前已支持MySQL、Oracle、MongoDB、Redis数据库的全面监控，Lepus能够查看各种实时性能状态指标，并且对监控、性能数据进行统计分析。
+
+配置python环境：
+yum -y install python-pip
+pip -V
+
+##升级到最新版本
+pip install --upgrade pip
+pip -V
+
+2、安装python基础环境
+我这里使用Centos7默认的python就好（Python版本要求为Python2.6以上,不支持Python3），MySQL-python必须安装
+yum -y install mysql-devel
+yum -y install python-devel
+pip install MySQL-python==1.2.5  ##如果不安装上述两个步骤可能会报错
+
+如果需要监控Redis，则安装（可选）
+pip install redis==3.2.1
+
+如果需要监控Mongodb，则安装（可选）
+pip install pymongo==3.8.0
+
+
+
+安装nginx：
+yum install -y wget gcc gcc-c++ make pcre pcre-devel zlib zlib-devel openssl openssl-devel lrzsz 
+cd /usr/local/src
+wget 'http://nginx.org/download/nginx-1.14.2.tar.gz'
+tar -zxvf nginx-1.14.2.tar.gz
+cd nginx-1.14.2
+./configure --prefix=/usr/local/nginx
+make && make install
+
+
+
+安装mysql  略：也可以使用目前已有的mysql节点
+mysql -uroot -p
+mysql> create database lepus default character set utf8;
+mysql> grant select,insert,update,delete,create on lepus.* to 'lepus_user'@'localhost' identified by 'blog.whsir.com';  ##也可以直接使用root账户，或者其他有权限的账户
+mysql> flush privileges;
+mysql> quit
+
+
+
+安装php：
+yum -y install epel-release
+yum -y install  gcc gcc-c++ make pcre pcre-devel zlib zlib-devel openssl openssl-devel libxml2 libxml2-devel libcurl libcurl-devel libjpeg libjpeg-devel libpng libpng-devel freetype freetype-devel openldap openldap-devel libmcrypt libmcrypt-devel
+
+cd /usr/local/src/
+wget 'http://hk1.php.net/distributions/php-5.6.40.tar.gz'
+tar -zxf php-5.6.40.tar.gz
+cd php-5.6.40
+cp -frp /usr/lib64/libldap* /usr/lib/  ##否则有可能报错Cannot find ldap libraries in /usr/lib.
+./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --enable-ctype --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-freetype-dir --with-jpeg-dir --with-png-dir --with-zlib --with-libxml-dir=/usr --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem --enable-inline-optimization --with-curl --enable-mbregex --enable-mbstring --with-mcrypt --with-gd --enable-gd-native-ttf --with-openssl --with-mhash --enable-pcntl --enable-sockets --with-ldap-sasl --with-xmlrpc --enable-zip --enable-soap --with-gettext --enable-fpm --with-ldap
+
+make && make install
+{{针对报错undefined reference to symbol 'ber_strdup'的解决
+编辑MakeFile 
+找到 开头是 'EXTRA_LIBS' 这一行 在结尾加上 '-llber' 然后执行 make && make install }}
+
+cp php.ini-production /usr/local/php/etc/php.ini
+
+
+环境变量：export PATH=$PATH:/usr/local/php/sbin/:/usr/local/php/bin/
+检查配置文件：php-fpm -t
+
+使用默认配置文件：mv /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf
+
+使用默认配置文件：mv /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf
+[Unit]
+Description=php-fpm
+After=network.target
+[Service]
+Type=forking
+ExecStart=/usr/local/php/sbin/php-fpm
+[Install]
+WantedBy=multi-user.target
+
+
+启动php-fpm
+systemctl start php-fpm
+
+nginx的默认配置无法处理php程序/usr/local/nginx/html/test.php
+<?php
+  echo "天兔";
+?>
+
+
+
+nginx+php-fpm结合的配置
+        location / {
+            root   html;   ###根据自己的路径配置
+            index  index.php;
+            
+            if (!-e $request_filename)    ##下面这几行必须添加否则报错404
+            {
+               rewrite  ^(.*)$ /index.php?s=$1 last;
+               break;
+            }
+        }
+		
+		location ~ \.php$ {
+            root     html;  ###根据自己的路径配置
+            fastcgi_pass   localhost:9000;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME  /usr/local/nginx/html$fastcgi_script_name;   ###项目根目录/usr/local/nginx/html
+            include        fastcgi_params; 
+        }
+		
+
+
+安装天兔监控
+yum install  gcc python-devel net-snmp-devel curl-devel perl-DBI php-gd php-mysql php-bcmath php-mbstring php-xml -y
+cd /usr/local/src/
+wget http://down.whsir.com/downloads/Lepus_v3.8_beta.tar.gz
+tar xf Lepus_v3.8_beta.tar.gz
+
+mysql里导入天兔数据  ##或者使用source
+cd /usr/local/src/Lepus_v3.8_beta  ###根据自己的路径
+mysql -uroot -pwhsir lepus < sql/lepus_table.sql
+mysql -uroot -pwhsir lepus < sql/lepus_data.sql
+
+安装Lpeus(天兔)程序
+cd /usr/local/src/Lepus_v3.8_beta/python
+chmod +x ./*
+./install.sh
+[note] lepus will be install on basedir: /usr/local/lepus
+[note] /usr/local/lepus directory does not exist,will be created.
+[note] /usr/local/lepus directory created success.
+[note] wait copy files.......
+[note] change script permission.
+[note] create links.
+[note] install complete.
+
+
+修改lepus配置文件  ##根据自己的数据库配置
+vi /usr/local/lepus/etc/config.ini  ###根据自己的数据库信息进行配置
+[monitor_server]
+host="127.0.0.1"
+port=3306
+user="lepus_user"
+passwd="blog.whsir.com"
+dbname="lepus"
+
+启动Lepus
+启动前设置一个软连接，不然会报错，如果启动报错请查看/usr/local/lepus/logs/lepus.log
+ln -sv /usr/local/mysql/lib/libmysqlclient.so.18 /usr/lib64/libmysqlclient.so.18
+lepus start
+
+
+配置天兔web管理台
+lepus start 
+
+配置lepus的web界面  
+cd /root/Lepus_v3.8_beta/php
+cp -ap * /var/www/html/
+cd /var/www/html/application/config
+vim database.php   ###同样的根据自己的数据库进行配置
+
+----
+$db['default']['hostname'] = '127.0.0.1';  ###根据自己的数据库信息进行配置
+$db['default']['port']     = '3306';
+$db['default']['username'] = 'lepus';
+$db['default']['password'] = 'lepus';
+$db['default']['database'] = 'lepus';
+$db['default']['dbdriver'] = 'mysql';
+----
+
+
+重启php-fpm和nginx
+
+systemctl restart php-fpm 
+./sbin/nginx -s reload 
+
+
+验证：
+浏览器访问：###若访问只有文字没有图形，则可以加上index.php 或者清楚浏览器缓存然后再进行访问（不用添加index.php）
+http://192.168.20.73		
+打开浏览器输入IP地址打开天兔数据库监控系统，默认账号密码为admin/Lepusadmin
+
+
+
+
+
