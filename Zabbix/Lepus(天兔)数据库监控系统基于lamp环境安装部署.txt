@@ -1,0 +1,137 @@
+Lepus(天兔)数据库监控系统是是一款专业、强大的数据库监控管理系统，通过Lepus可以监控数据库的实时健康和各项性能指标，目前已支持MySQL、Oracle、MongoDB、Redis数据库的全面监控，Lepus能够查看各种实时性能状态指标，并且对监控、性能数据进行统计分析。
+https://blog.51cto.com/flyfish225/2351273
+
+提前需要了解的是nginx需要配置一个rewrite规则，并且php版本不支持7.x，本文是以whsir一键包为例进行lnmp基础环境的安装。
+
+安装lamp或者lnmp环境：
+
+这里使用lamp
+1. 配置LAMP 环境 安装php httpd 服务
+yum install -y php httpd 
+systemctl start httpd 
+systemctl enable httpd 
+
+
+
+
+
+yum -y install python-pip
+pip -V
+
+##升级到最新版本
+pip install --upgrade pip
+pip -V
+
+2、安装python基础环境
+我这里使用Centos7默认的python就好（Python版本要求为Python2.6以上,不支持Python3），MySQL-python必须安装
+yum -y install mysql-devel
+yum -y install python-devel
+pip install MySQL-python==1.2.5  ##如果不安装上述两个步骤可能会报错
+
+如果需要监控Redis，则安装（可选）
+pip install redis==3.2.1
+
+如果需要监控Mongodb，则安装（可选）
+pip install pymongo==3.8.0
+
+
+
+3、下载Lepus(天兔)包
+yum install  gcc python-devel net-snmp-devel curl-devel perl-DBI php-gd php-mysql php-bcmath php-mbstring php-xml -y
+
+配置php的环境
+sed -i "s/;date.timezone =/date.timezone = Asia\/Shanghai/g" /etc/php.ini
+sed -i "s#max_execution_time = 30#max_execution_time = 300#g" /etc/php.ini
+sed -i "s#post_max_size = 8M#post_max_size = 32M#g" /etc/php.ini
+sed -i "s#max_input_time = 60#max_input_time = 300#g" /etc/php.ini
+sed -i "s#memory_limit = 128M#memory_limit = 128M#g" /etc/php.ini
+sed -i "/;mbstring.func_overload = 0/ambstring.func_overload = 2\n" /etc/php.ini
+
+
+cd /usr/local/src/
+wget http://down.whsir.com/downloads/Lepus_v3.8_beta.tar.gz
+tar xf Lepus_v3.8_beta.tar.gz
+
+
+4、创建监控数据库并授权
+默认root密码为空，我这里将mysql初始化后，修改root默认密码为whsir
+/etc/init.d/mysql start
+echo -e "\nn\ny\ny\ny\ny" | mysql_secure_installation
+
+mysql -uroot -p
+mysql> set password = password('whsir');
+mysql> create database lepus default character set utf8;
+mysql> grant select,insert,update,delete,create on lepus.* to 'lepus_user'@'localhost' identified by 'blog.whsir.com';
+mysql> flush privileges;
+mysql> quit
+
+
+5、导入sql
+cd /usr/local/src/Lepus_v3.8_beta  ###根据自己的路径
+mysql -uroot -pwhsir lepus < sql/lepus_table.sql
+mysql -uroot -pwhsir lepus < sql/lepus_data.sql
+
+
+
+6、安装Lpeus(天兔)程序
+cd /usr/local/src/Lepus_v3.8_beta/python
+chmod +x ./*
+
+./install.sh
+[note] lepus will be install on basedir: /usr/local/lepus
+[note] /usr/local/lepus directory does not exist,will be created.
+[note] /usr/local/lepus directory created success.
+[note] wait copy files.......
+[note] change script permission.
+[note] create links.
+[note] install complete.
+
+
+7、修改lepus配置文件  ##根据自己的数据库配置
+vi /usr/local/lepus/etc/config.ini
+[monitor_server]
+host="127.0.0.1"
+port=3306
+user="lepus_user"
+passwd="blog.whsir.com"
+dbname="lepus"
+
+
+8、启动Lepus
+启动前设置一个软连接，不然会报错，如果启动报错请查看/usr/local/lepus/logs/lepus.log
+ln -sv /usr/local/mysql/lib/libmysqlclient.so.18 /usr/lib64/libmysqlclient.so.18
+lepus start
+
+
+
+9、配置天兔web管理台
+lepus start 
+
+3.4 配置lepus的web界面  
+cd /root/Lepus_v3.8_beta/php
+cp -ap * /var/www/html/
+cd /var/www/html/application/config
+vim database.php   ###同样的根据自己的数据库进行配置
+
+----
+$db['default']['hostname'] = '127.0.0.1';
+$db['default']['port']     = '3306';
+$db['default']['username'] = 'lepus';
+$db['default']['password'] = 'lepus';
+$db['default']['database'] = 'lepus';
+$db['default']['dbdriver'] = 'mysql';
+----
+
+
+
+重新启动httpd 服务
+systemctl restart httpd  
+
+使用web访问：
+http://192.168.20.73		
+打开浏览器输入IP地址打开天兔数据库监控系统，默认账号密码为admin/Lepusadmin
+
+
+至此Lepus(天兔)数据库监控系统基础环境配置完成
+
+
