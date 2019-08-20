@@ -741,7 +741,7 @@ mysql203 > show  global  status like 'Question%';
 说明这次访问的是202机器，读分发成功正常。
 
 到此atlas 实现了读写分离和读负载均衡，更过内容可以参考atlas和Percona 官网学习。
-
+###常见的异常见官网：https://github.com/Qihoo360/Atlas/wiki/Atlas的运行及常见问题
 
 
 
