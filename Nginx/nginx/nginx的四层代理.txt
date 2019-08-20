@@ -1,0 +1,73 @@
+nginx从1.9.0版本开始，新增了ngx_stream_core_module模块，使nginx支持四层负载均衡。默认编译的时候该模块并未编译进去，需要编译的时候添加--with-stream，使其支持stream代理。
+
+配置Nginx
+stream不可以配置在http标签，需要和events同级，我这里就单独写一份配置文件，也方便后期维护管理
+1.首先需要修改nginx.conf，添加include 引用server标签
+cat >/usr/local/nginx/conf/nginx.conf <<EOF
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+include       i4t.conf;  ####增加四层负载均衡
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+
+    server {
+        listen       80;
+        server_name  localhost;
+
+        location / {
+            root   html;
+            index  index.html index.htm;
+        }
+  }
+}
+EOF
+
+##我们这里只是引用了一行include i4t.conf
+#在这里我们设置长连接为65s，默认时长
+
+
+长连接:
+长连接多用于操作频繁，点对点的通讯，而且连接数不能太多情况，。每个TCP连接都需要三步握手，这需要时间，如果每个操作都是先连接，再操作的话那么处理速度会降低很多，所以每个操作完后都不断开，次处理时直接发送数据包就OK了，不用建立TCP连接。例如：数据库的连接用长连接， 如果用短连接频繁的通信会造成socket错误，而且频繁的socket 创建也是对资源的浪费。 
+
+而像WEB网站的http服务一般都用短链接，因为长连接对于服务端来说会耗费一定的资源，而像WEB网站这么频繁的成千上万甚至上亿客户端的连接用短连接会更省一些资源，如果用长连接，而且同时有成千上万的用户，如果每个用户都占用一个连接的话，那可想而知吧。所以并发量大，但每个用户无需频繁操作情况下需用短连好。 
+
+总之，长连接和短连接的选择要视情况而定。 
+
+具体网络中的应用的话：http 1.0一般就指短连接，smtp,pop3,telnet这种就可以认为是长连接。一般的网络游戏应用都是长连接
+
+
+
+添加配置文件
+cat >/usr/local/nginx/conf/i4t.conf <<EOF
+stream {
+      upstream abcdocker {
+        server smtp.qq.com:25  weight=5 max_fails=3 fail_timeout=30s;
+     }
+
+     server {
+            listen 1998;
+            proxy_pass abcdocker;
+            proxy_connect_timeout 10s;
+            proxy_timeout 24h;
+            }
+  }
+EOF
+
+##参数说明
+#stream是使用tcp的模块
+#weight轮训  
+#max_fails 连接探测，如果发现后端异常，在单位周期为fail_timeout设置的时间，中达到max_fails次数，这个周期次数内，如果后端同一个节点不可用，那么接将把节点标记为不可用，并等待下一个周期（同样时常为fail_timeout）再一次去请求，判断是否连接是否成功。如果成功，将恢复之前的轮询方式，如果不可用将在下一个周期(fail_timeout)再试一次。
+#proxy_connect_timeout 后端服务器连接的超时时间_发起握手等候响应超时时间
+
+温馨提示：tcp代理不支持配置server_name
+
+
+
+
+
