@@ -1,0 +1,117 @@
+三台服务器做个redis哨兵模式
+但是开发这边需要更改客户端的连接方式
+案例：
+http://c.biancheng.net/view/4567.html
+
+
+在 Java 中使用哨兵模式
+在 Java 中使用哨兵模式，加入关于哨兵的信息即可，非常简单，下面代码展示了这样的一个过程。 
+//连接池配置
+JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
+jedisPoolConfig.setMaxTotal(10);
+jedisPoolConfig.setMaxIdle(5);
+jedisPoolConfig.setMinIdle(5);
+//哨兵信息
+Set<String> sentinels = new HashSet<String>(Arrays.asList(
+    "192.168.11.128:26379",
+    "192.168.11.129:26379",
+    "192.168.11.130:26379"
+));
+//创建连接池
+//mymaster是我们配置给哨兵的服务名称
+//sentinels是哨兵信息
+//jedisPoolConfig是连接池配置
+//abcdefg是连接Redis服务器的密码
+JedisSentinelPool pool = new JedisSentinelPool("mymaster", sentinels, jedisPoolConfig, "abcdefg");
+//获取客户端
+Jedis jedis = pool.getResource();
+//执行两个命令
+jedis.set("mykey", "myvalue");
+String myvalue = jedis.get("mykey");
+//打印信息
+System.out.println(myvalue);
+
+
+通过上述的代码就能够连接 Redis 服务器了，这个时候将启动主机（192.168.11.128）提供服务。为了验证哨兵的作用，我们可以把主机上的 Redis 服务器关闭，马上运行，你就可以发现报错，那倒不是因为哨兵失效导致的，而是因为 Redis 哨兵默认超时 3 分钟后才会进行投票切换主机，等超过 3 分钟后再进行测试。
+
+同样的，通过配置也可以实现在 Spring 中使用哨兵的这些功能，代码如下所示。 
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+    xmlns:p="http://www.springframework.org/schema/p"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-3.2.xsd">
+    <bean id="poolConfig" class="redis.clients.jedis.JedisPoolConfig">
+        <!-- 最大空闲数 -->
+        <property name="maxIdle" value="50" />
+        <!-- 最大连接数 -->
+        <property name="maxTotal" value="100" />
+        <!-- 最大等待时间 -->
+        <property name="maxWaitMillis" value="30000" />
+    </bean>
+    <!-- jdk序列化器，可保存对象 -->
+    <bean id="jdkSerializationRedisSerializer"
+        class="org.springframework.data.redis.serializer.JdkSerializationRedisSerializer" />
+    <!-- String序列化器 -->
+    <bean id="stringRedisSerializer"
+        class="org.springframework.data.redis.serializer.StringRedisSerializer" />
+
+    <!-- 哨兵配置 -->
+    <bean id="sentinelConfig"
+        class="org.springframework.data.redis.connection.RedisSentinelConfiguration">
+        <!-- 服务名称 -->
+        <property name="master">
+            <bean class="org.springframework.data.redis.connection.RedisNode">
+                <property name="name" value="mymaster" />
+            </bean>
+        </property>
+        <!-- 哨兵服务IP和端口 -->
+        <property name="sentinels">
+            <set>
+                <bean class="org.springframework.data.redis.connection.RedisNode">
+                    <constructor-arg name="host" value="192.168.11.128" />
+                    <constructor-arg name="port" value="26379" />
+                </bean>
+                <bean class="org.springframework.data.redis.connection.RedisNode">
+                    <constructor-arg name="host" value="192.168.11.129" />
+                    <constructor-arg name="port" value="26379" />
+                </bean>
+                <bean class="org.springframework.data.redis.connection.RedisNode">
+                    <constructor-arg name="host" value="192.168.11.130" />
+                    <constructor-arg name="port" value="26379" />
+                </bean>
+            </set>
+        </property>
+    </bean>
+    <!-- 连接池设置 -->
+    <bean id="connectionFectory"
+        class="org.springframework.data.redis.connection.jedis.JedisConnectionFactory">
+        <constructor-arg name="sentinelConfig" ref="sentinelConfig" />
+        <constructor-arg name="poolConfig" ref="poolConfig" />
+        <property name="password" value="abcdefg" />
+    </bean>
+    <!-- 配置 RedisTemplate -->
+    <bean id="redisTemplate" class="org.springframework.data.redis.core.RedisTemplate">
+        <property name="connectionFactory" ref="connectionFactory" />
+        <property name="keySerializer" ref="stringRedisSerializer" />
+        <property name="defaultSerializer" ref="stringRedisSerializer" />
+        <property name="valueSerializer" ref="jdkSerializationRedisSerializer" />
+    </bean>
+</beans>
+
+
+这样就在 Spring 中配置好了哨兵和其他的内容，使用 Spring 测试哨兵，代码如下所示。 
+public static void testLuaFile() {
+    ApplicationContext applicationContext = new ClassPathXmlApplicationContext("applicationContext.xml");
+    RedisTemplate redisTemplate = applicationContext.getBean(RedisTemplate.class);
+    String retVal = (String)redisTemplate.execute((RedisOperations ops)->{
+        ops.boundValueOps("mykey").set("myvalue");
+        String value = (String)ops.boundValuesOps("mykey").get();
+        return value;
+    });
+    System.out.println(retVal);
+}
+
+
+这样在实际的项目中，就可以使用哨兵模式来提高系统的可用性和稳定了。 
+
