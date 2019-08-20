@@ -8,6 +8,12 @@ PATH=$PATH:$JAVA_HOME/bin
 CLASSPATH=.:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
 export PATH JAVA_HOME CLASSPATH
 
+[root@localhost ~]# cat /etc/profile.d/jdk.sh 
+#!/bin/bash
+JAVA_HOME=/usr/local/jdk
+PATH=$PATH:$JAVA_HOME/bin
+CLASSPATH=.:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+export PATH JAVA_HOME CLASSPATH
 
 二、部署tomcat
 
