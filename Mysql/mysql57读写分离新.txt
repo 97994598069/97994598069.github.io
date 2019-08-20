@@ -467,7 +467,7 @@ yum -y install libevent glib2 lua gcc gcc-c++ autoconf mysql-devel libtool pkgco
 
 下载Atlas包
 wget https://github.com/Qihoo360/Atlas/releases/download/2.2.1/Atlas-2.2.1.el6.x86_64.rpm
-
+##https://pan.baidu.com/s/1U4jvLFoAP80O2IRL5nn5Dg
 
 安装atlas
 yum install Atlas-2.2.1.el6.x86_64.rpm -y
