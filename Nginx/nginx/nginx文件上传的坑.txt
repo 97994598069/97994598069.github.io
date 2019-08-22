@@ -1,0 +1,44 @@
+背景：
+项目需要客户上传图片
+用nginx做的代理，此时需要对nginx能够上传的大小进行设置，否则默认的上传大小是1M
+
+情况如下：用nginx作代理服务器，上传大文件时（本人测试上传50m的文件），提示上传超时或文件过大。
+原因是nginx对上传文件大小有限制，而且默认是1M。另外，若上传文件很大，还要适当调整上传超时时间。
+解决方法是在nginx的配置文件下，加上以下配置：
+client_max_body_size     50m; //文件大小限制，默认1m
+client_header_timeout    1m; 
+client_body_timeout      1m; 
+proxy_connect_timeout     60s; 
+proxy_read_timeout      1m; 
+proxy_send_timeout      1m;
+
+
+参数意思如下:
+client_max_body_size
+限制请求体的大小，若超过所设定的大小，返回413错误。
+
+client_header_timeout
+读取请求头的超时时间，若超过所设定的大小，返回408错误。
+
+client_body_timeout
+读取请求实体的超时时间，若超过所设定的大小，返回413错误。
+
+proxy_connect_timeout
+http请求无法立即被容器(tomcat, netty等)处理，被放在nginx的待处理池中等待被处理。此参数为等待的最长时间，默认为60秒，官方推荐最长不要超过75秒。
+
+proxy_read_timeout
+http请求被容器(tomcat, netty等)处理后，nginx会等待处理结果，也就是容器返回的response。此参数即为服务器响应时间，默认60秒。
+
+proxy_send_timeout
+http请求被服务器处理完后，把数据传返回给Nginx的用时，默认60秒。
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+在上传大文件，造成长时间没有响应的情况的解决方案： 
+上传大文件时，因为http协议的响应问题，造成长时间不能向客户端发送响应请求头。 
+解决方案：
+1. 向服务器发送上传大文件的request
+2. 在客户端采用轮循的方式，向服务器端再次发出一个新的请求，服务器端从request中获得session,判断session中是否存在文件上传的request中放置的文件过大的状态标识。如果存在。轮循的request返回状态给客户端，客户端判断后，重置文件上传的request。这样使文件上传的request，可以比较快的响应页面。
+
+原来，在一个页面发送多个request， 在服务器端获得的session，是同一个session 
