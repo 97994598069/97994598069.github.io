@@ -41,4 +41,40 @@ http请求被服务器处理完后，把数据传返回给Nginx的用时，默�
 1. 向服务器发送上传大文件的request
 2. 在客户端采用轮循的方式，向服务器端再次发出一个新的请求，服务器端从request中获得session,判断session中是否存在文件上传的request中放置的文件过大的状态标识。如果存在。轮循的request返回状态给客户端，客户端判断后，重置文件上传的request。这样使文件上传的request，可以比较快的响应页面。
 
-原来，在一个页面发送多个request， 在服务器端获得的session，是同一个session 
+原来，在一个页面发送多个request， 在服务器端获得的session，是同一个session
+
+==================
+
+PHP配置更改
+除了nginx对文件大小有要求，php也做了限制
+php配置文件php.ini
+我们需要修改配置：
+file_uploads = on ;打开文件上传选项
+upload_max_filesize = 20M;文件上传限制
+post_max_size = 20; post上限
+
+还需要根据实际情况调整下面的选项
+max_execution_time = 180; 脚本最大执行时间（秒），过短会导致文件还没上传完脚本就停止了
+max_input_time = 180; 请求最大传输时间，过短会导致文件还没上传完传输就停止了
+memory_limit = 128M; 内存上限
+修改完成后重启php-fpm或reload配置
+
+一般来说，post_max_size设置要比upload_max_filesize稍大一些 
+
+
+=============================
+
+解决tomcat文件上传的文件大小限制
+如果是使用spring cloud 那估计那边设置也要改
+当服务器是Tomcat时，通过POST上传的文件大小的最大值为2M（2097152）。
+如果想修改该限制，修改方法如下：
+tomcat目录下的conf文件夹下，server.xml 文件中以下的位置中添加maxPostSize参数
+<Connector port="8081"  
+               maxThreads="150" minSpareThreads="25" maxSpareThreads="75"  
+               enableLookups="false" redirectPort="8443" acceptCount="100"  
+               debug="0" connectionTimeout="20000"   
+               disableUploadTimeout="true" URIEncoding="utf-8"  
+               maxPostSize="0"/> 
+               
+当maxPostSize<=0时，POST方式上传的文件大小不会被限制。
+注意：maxPostSize参数只有当request的Content-Type为“application/x-www-form-urlencoded”时起作用。
