@@ -1,0 +1,199 @@
+1. XtraBackup 简介
+　　XtraBackup(PXB) 工具是 Percona 公司用 perl 语言开发的一个用于 MySQL 数据库物理热备的备份工具，支持 MySQl（Oracle）、Percona Server 和 MariaDB，并且全部开源，真可谓是业界良心。阿里的 RDS MySQL 物理备份就是基于这个工具做的。由于是采取物理拷贝的方式来做的备份，所以速度非常快，几十G数据几分钟就搞定了，而它巧妙的利用了mysql 特性做到了在线热备份，不用像以前做物理备份那样必须关闭数据库才行，直接在线就能完成整库或者是部分库的全量备份和增量备份。新版本的xtrabackup改成了cmake安装，和以前有点不一样。
+版本说明：2.3.3之后不备份死锁，如果数据库是mysql 5.7之后的必须要装2.4.4才可以用，当然了， 会向下兼容的。
+
+
+其中最主要的是 innobackupex 和 xtrabackup，前者是一个 perl 脚本，后者是 C/C++ 编译的二进制。Percona 在2.3 版本用C重写了 innobackupex ，innobackupex 功能全部集成到 xtrabackup 里面，只有一个 binary，另外为了使用上的兼容考虑，innobackupex 作为 xtrabackup 的一个软链接。对于二次开发来说，2.3 摆脱了之前2个进程协作的负担，架构上明显要好于之前版本。（Percona XtraBackup 2.3 发布之后，推荐的备份方法是使用 xtrabackup 脚本。 ）
+
+xtrabackup 是用来备份 InnoDB 表的，不能备份非 InnoDB 表，和 mysqld server 没有交互；
+
+innobackupex 脚本用来备份非 InnoDB 表，同时会调用 xtrabackup 命令来备份 InnoDB 表，还会和 mysqld server 发送命令进行交互，如加读锁（FTWRL）、获取位点（SHOW SLAVE STATUS）等。
+
+简单来说，innobackupex 在 xtrabackup 之上做了一层封装。
+一般情况下，我们是希望能备份 MyISAM 表的，虽然我们可能自己不用 MyISAM 表，但是 mysql 库下的系统表是 MyISAM 的，因此备份基本都通过 innobackupex 命令进行；另外一个原因是我们可能需要保存位点信息。
+
+另外几个工具相对小众些，xbcrypt 是加解密备份文件用的；xbstream 类似于tar，是 Percona 自己实现的一种支持并发写的流文件格式；两者在备份和解压时都会用到（如果备份用了加密和并发）。xbcloud 工具的作用是：把全部或部分 xbstream 档案从云上下载或上传到云。
+
+
+2.XtraBackup 安装
+官方下载地址：https://www.percona.com/downloads/XtraBackup/LATEST/
+系统及版本选择
+（1）CentOS 6
+系统：CentOS 6（Percona 官方建议安装在 RHEL/CentOS 6.5 及以上的系统）
+版本：percona-xtrabackup-24-2.4.6-2.el6.x86_64
+下载地址：https://pan.baidu.com/s/1ONBydCld2FoUfRlshMpBNA、
+
+
+（2）CentOS 7
+系统：CentOS 7
+版本：percona-xtrabackup-24-2.4.10-1.el7.x86_64.rpm
+下载地址：https://pan.baidu.com/s/1yEn6bgloHTw30Edn9BUE4Q
+二进制安装/解压缩安装（下载：链接：https://pan.baidu.com/s/1eCtXkkmaxXVN4mDKjglYew 密码：nxww）
+编译安装
+
+
+编译安装  （推荐）
+（3） rpm 安装
+这种安装方法比较简单，只需下载相应的rpm安装包安装即可（注意根据提示安装相应的依赖包）。其中需要的 libev.so.4() 安装包：链接: https://pan.baidu.com/s/1PjO7CFwAa7Y1vvSUZk7weg 提取码: 47ja 
+
+[root@mysql ~]# cd /home/
+[root@mysql home]# mkdir xtarback
+[root@mysql home]# cd xtarback/
+[root@mysql xtarback]# wget https://www.percona.com/downloads/XtraBackup/Percona-XtraBackup-2.4.10/binary/redhat/7/x86_64/percona-xtrabackup-24-2.4.10-1.el7.x86_64.rpm
+--2017-02-23 10:26:14-- https://www.percona.com/downloads/XtraBackup/Percona-XtraBackup-2.4.10/binary/redhat/7/x86_64/percona-xtrabackup-24-2.4.10-1.el7.x86_64.rpm
+正在解析主机 www.percona.com (www.percona.com)... 74.121.199.234
+正在连接 www.percona.com (www.percona.com)|74.121.199.234|:443... 已连接。
+已发出 HTTP 请求，正在等待回应... 200 OK
+长度：7647624 (7.3M) [application/x-redhat-package-manager]
+正在保存至: “percona-xtrabackup-24-2.4.10-1.el7.x86_64.rpm”
+
+16% [====================> ] 1,256,542 52.0KB/s 剩余 76s
+
+
+查看下载完成的包
+[root@mysql xtarback]# ls -la
+总用量 7476
+drwxr-xr-x. 2 root root 57 2月 23 10:28 .
+drwxr-xr-x. 5 root root 4096 2月 23 10:24 ..
+-rw-r--r--. 1 root root 7647624 2月 17 20:02 percona-xtrabackup-24-2.4.10-1.el7.x86_64.rpm
+
+安装依赖
+rpm -ivh libev-4.15-1.el6.rf.x86_64.rpm
+yum install perl-DBI
+yum -y install perl perl-devel libaio libaio-devel perl-Time-HiRes perl-DBD-MySQL
+yum -y install perl-Digest-MD5
+
+安装
+[root@mysql xtrabackup]#rpm -ivh percona-xtrabackup-24-2.4.10-1.el7.x86_64.rpm
+
+查看安装的版本：
+[root@mysql xtrabackup]#xtrabackup -version
+xtrabackup version 2.4.10 based on MySQL server 5.7.19 Linux (x86_64) (revision id: 3198bce)
+
+
+
+
+3.XtraBackup 备份mysql
+（1）设置定时任务
+# crontab -e
+10 0 * * * /home/script/innobackup.sh
+
+
+（2）备份脚本(事先需要手动做一次全备)
+cat /home/script/innobackup.sh
+#!/bin/bash
+/usr/bin/innobackupex --defaults-file=/etc/my.cnf --user=root --password=12345556 --socket=/tmp/mysql.sock --compress /home/backup/mysql >> /home/backup/mysql/backup.$(date +%F).log 2>&1
+
+
+4.定时删除过期备份，只保留一周的备份
+（1）设置定时任务
+#delete mysql backup
+00 00 * * * /home/script/mysql_clear.sh >/dev/null 2>&1
+
+（2）定时删除脚本
+#!/bin/bash
+find /home/backup/mysql -mtime +7 -exec rm -rf {} \;
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+备份恢复验证:
+mysql> create database db2;
+Query OK, 1 row affected (0.00 sec)
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| db1                |
+| db2                |
+| lepus              |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+7 rows in set (0.00 sec)
+
+进行全备份
+[root@localhost home]# pwd
+/home
+[root@localhost home]# ll
+总用量 0
+
+执行备份命令: 备份单个库，单个表
+##innobackupex --defaults-file=/etc/my.cnf --user=root --password=123456 --host=127.0.0.1 --port=3306  /home --databases="mydatabase1.mytable mydatabase2"
+
+全库备份:
+innobackupex --defaults-file=/etc/my.cnf --user=root --password='123456' /home
+
+[root@localhost home]# ll
+总用量 0
+drwxr-x--- 8 root root 228 8月  22 17:17 2019-08-22_17-17-31
+[root@localhost home]# 
+
+
+mysql> drop database db1 db2;
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'db2' at line 1
+mysql> drop database db1;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> drop database db12;
+ERROR 1008 (HY000): Can't drop database 'db12'; database doesn't exist
+mysql> drop database db2;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> show databases;
++------------------------------+
+| Database                     |
++------------------------------+
+| information_schema           |
+| #mysql50#2019-08-22_17-13-18 |
+| lepus                        |
+| mysql                        |
+| performance_schema           |
+| sys                          |
++------------------------------+
+6 rows in set (0.00 sec)
+
+
+恢复
+innobackupex备份mysql的过程，就是文件的拷贝，在拷贝数据的过程中，数据会发生变化，所以备份出来的数据文件是不一致的。为了保证数据的一致性，需要应用这段时间产生的binlog，才能做到备份数据文件的一致性。后续回复才能有效。
+使用--apply-log参数并指定带时间的备份子目录，进行备份一致性合并。想要加快apply-log的进程，推荐使用--use-memory参数。
+这个操作可以在任意机器上执行准备备份动作，并不限定在备份的服务器上。
+
+innobackupex --defaults-file=/etc/my.cnf  --apply-log --user=root --password='123456' /home/2019-08-22_17-17-31
+恢复数据文件到mysql路径下，恢复路径取决于my.cnf中的datadir=/data/mysql 参数。
+需要先清空datadir=/data/mysql 路径才能恢复，不然会报错。默认情况下，--copy-back是不会over write已经存在的文件的，可以通过参数--force-non-empty-directories强制覆盖
+
+##执行之前一定要清空mysql目录或者mv到其他目录中去（mysql目录不能有文件）:
+[root@localhost mysql]# mkdir zz
+[root@localhost mysql]# mv ./* ./zz/
+[root@localhost mysql]# mv ./zz/ ..
+
+##执行恢复命令
+innobackupex --defaults-file=/etc/my.cnf --copy-back /home/2019-08-22_17-17-31
+
+修改路径权限
+[root@localhost lib]# cd mysql
+[root@localhost mysql]# chown -R mysql:mysql ./*
+[root@localhost mysql]# systemctl start mysqld
+
+进数据库验证:
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| db1                |
+| db2                |
+| lepus              |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+7 rows in set (0.00 sec)
+
+成功恢复
+
+
