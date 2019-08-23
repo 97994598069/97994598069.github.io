@@ -13,7 +13,18 @@ yum clean all
 yum makecache
 
 2.安装常用工具
-yum install ntpdate lsof net-tools gcc gcc-c++ make sysstat mtr nethogs iftop lrzsz vim openssh* psmisc openssl* ncurses ncurses-devel -y
+yum install ntpdate lsof net-tools gcc gcc-c++ make mtr nethogs iftop lrzsz vim openssh* psmisc openssl* ncurses ncurses-devel -y
+
+
+安装最新版的sysstat
+cd /usr/local/src
+wget http://ftp5.gwdg.de/pub/linux/archlinux/community/os/x86_64//sysstat-12.1.5-1-x86_64.pkg.tar.xz
+tar xf sysstat-12.1.5-1-x86_64.pkg.tar.xz
+cp /usr/local/src/usr/bin/* /usr/bin
+
+测试使用：
+pidstat -d 1  ##老版本没有io的延迟iodelay，新版本有
+pidstat -d 1 ##也多了好多
 
 
 3.系统时间同步
