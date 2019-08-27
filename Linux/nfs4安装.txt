@@ -1,0 +1,277 @@
+NFS服务端安装配置
+安装rpm包
+yum -y install nfs-utils nfs-utils-lib nfs4-acl-tools rpcbind
+
+新建要导出的目录
+mkdir /web
+
+
+编写/etc/exports文件
+/web/ *(rw,sync,fsid=1)
+
+
+chown -R  nfsnobody:nfsnobody /web/
+
+
+service rpcbind restart
+service nfs restart
+
+
+
+客户端：
+yum -y install nfs-utils nfs-utils-lib nfs4-acl-tools rpcbind
+sudo mount -o vers=4,tcp -t nfs4  128.224.166.113:/ tmp
+/buildarea1 *(async,rw,insecure,insecure_locks,no_root_squash,fsid=1)
+
+这里的fsid=1在nfs文件系统里再mount nfs是必须要的
+
+/nfs  *(rw,sync,no_root_squash,no_subtree_check,fsid=0)
+/nfs  *(rw,sync,no_root_squash,fsid=0)
+
+mount -o vers=3 127.0.0.1:/nfs /mnt -v 
+/nfs  *(rw,sync,no_root_squash)
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++
+nfs-utils - nfs-utils包为内核NFS服务器和相关工具提供了一个守护进程，它提供了比大多数用户使用的传统Linux NFS服务器高得多的性能。
+portmap - portmap包应安装在任何使用RPC作为协议服务器的计算机上。
+nfs4-acl-tools - 该软件包包含Linux NFSv4客户端的命令行和GUI ACL实用程序。
+
+fsid = 0 - 通过NFS v4导出目录。NFSv4具有整个导出文件系统的根的概念。使用fsid = 0导出的导出点将用作此根。/ sales目录将是客户端的root用户。例如，如果你有/ sales / mumbai，/ sales / pune subdir，那么客户端会将它们看作/ mumbai和/ pune目录。请注意，这只能导出一个带有fsid = 0选项的目录。
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++=
+
+NFS读写块大小分析:
+Linux NFS 客户端在挂载服务器的 NFS 共享时可以使用 rsize 和 wsize 参数指定 NFS 读写的块大小，但实际使用时发现并不完全凑效，下面简单分析一下。
+我先在一台 RHEL6 客户端上挂载另一台 RHEL6 服务器上的 NFS 共享：
+[root@localhost ~]# mount -t nfs 192.168.1.122:/nfs/share /mnt/nfs
+[root@localhost ~]# grep /mnt/nfs /proc/mounts
+192.168.1.122:/nfs/share /mnt/nfs nfs rw,relatime,vers=3,rsize=262144,wsize=262144,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,mountaddr=192.168.1.122,mountvers=3,mountport=892,mountproto=udp,local_lock=none,addr=192.168.1.122 0 0
+
+从上面可以看到不指定 rsize 和 wsize 参数时，默认的读写块大小都是 256KB（rsize=262144），而且使用的是 TCP 协议（proto=tcp）。
+
+
+下面使用 UDP 协议挂载 NFS 共享：
+[root@localhost ~]# mount -t nfs -o udp 192.168.1.122:/nfs/share /mnt/nfs
+[root@localhost ~]# grep /mnt/nfs /proc/mounts
+192.168.1.122:/nfs/share /mnt/nfs nfs rw,relatime,vers=3,rsize=32768,wsize=32768,namlen=255,hard,proto=udp,timeo=11,retrans=3,sec=sys,mountaddr=192.168.1.122,mountvers=3,mountport=892,mountproto=udp,local_lock=none,addr=192.168.1.122 0 0
+从结果可以看出，使用 UDP 协议时块大小就只有 32KB 了。
+
+准备在客户端这边修改 mount 参数将 NFS TCP 方式的读写块大小增加到 1MB：
+[root@localhost ~]# mount -t nfs -o rsize=1048576,wsize=1048576 192.168.1.122:/nfs/share /mnt/nfs
+[root@localhost ~]# grep /mnt/nfs /proc/mounts
+192.168.1.122:/nfs/share /mnt/nfs nfs rw,relatime,vers=3,rsize=262144,wsize=262144,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,mountaddr=192.168.1.122,mountvers=3,mountport=892,mountproto=udp,local_lock=none,addr=192.168.1.122 0 0
+
+但从上面的结果来看，实际使用的块大小还是 256KB。
+
+
+
+在客户端这边修改 mount 参数将 NFS UDP 方式的读写块大小增加到 256KB：
+[root@localhost ~]# mount -t nfs -o udp,rsize=262144,wsize=262144 192.168.1.122:/nfs/share /mnt/nfs
+[root@localhost ~]# grep /mnt/nfs /proc/mounts
+192.168.1.122:/nfs/share /mnt/nfs nfs rw,relatime,vers=3,rsize=32768,wsize=32768,namlen=255,hard,proto=udp,timeo=11,retrans=3,sec=sys,mountaddr=192.168.1.122,mountvers=3,mountport=892,mountproto=udp,local_lock=none,addr=192.168.1.122 0 0
+
+UDP 模式下读写的块大小也无法修改，客户端似乎已经使用了最大的读写块大小。
+
+
+没办法，下面来看看 Linux kernel 源代码，找出真正的原因，先在 include/linux/nfs_xdr.h 文件中找到了 NFS I/O 块大小的定义：
+/*
+ * To change the maximum rsize and wsize supported by the NFS client, adjust
+ * NFS_MAX_FILE_IO_SIZE.  64KB is a typical maximum, but some servers can
+ * support a megabyte or more.  The default is left at 4096 bytes, which is
+ * reasonable for NFS over UDP.
+ */
+#define NFS_MAX_FILE_IO_SIZE    (1048576U)
+#define NFS_DEF_FILE_IO_SIZE    (4096U)
+#define NFS_MIN_FILE_IO_SIZE    (1024U)
+这里可以看到 NFS 默认使用 4KB 块大小，客户端实际挂载时会做调整，最小 1KB，最大 1MB。
+
+
+NFS 客户端在挂载时会与 NFS 服务器协商适合的读写块大小值，我们来看看 fs/nfs/client.c 文件中协商设置 NFS 文件系统信息的代码：
+static void nfs_server_set_fsinfo(struct nfs_server *server, struct nfs_fsinfo *fsinfo)
+{
+    unsigned long max_rpc_payload;
+ 
+    /* Work out a lot of parameters */
+    if (server->rsize == 0)
+        server->rsize = nfs_block_size(fsinfo->rtpref, NULL);
+    if (server->wsize == 0)
+        server->wsize = nfs_block_size(fsinfo->wtpref, NULL);
+ 
+    if (fsinfo->rtmax >= 512 && server->rsize > fsinfo->rtmax)
+        server->rsize = nfs_block_size(fsinfo->rtmax, NULL);
+    if (fsinfo->wtmax >= 512 && server->wsize > fsinfo->wtmax)
+        server->wsize = nfs_block_size(fsinfo->wtmax, NULL);
+ 
+    max_rpc_payload = nfs_block_size(rpc_max_payload(server->client), NULL);
+    if (server->rsize > max_rpc_payload)
+        server->rsize = max_rpc_payload;
+    if (server->rsize > NFS_MAX_FILE_IO_SIZE)
+        server->rsize = NFS_MAX_FILE_IO_SIZE;
+    server->rpages = (server->rsize + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+ 
+    server->backing_dev_info.name = "nfs";
+    server->backing_dev_info.ra_pages = server->rpages * NFS_MAX_READAHEAD;
+ 
+    if (server->wsize > max_rpc_payload)
+        server->wsize = max_rpc_payload;
+    if (server->wsize > NFS_MAX_FILE_IO_SIZE)
+        server->wsize = NFS_MAX_FILE_IO_SIZE;
+    /*......*/
+}
+
+从上面 nfs_server_set_fsinfo 函数的代码可以看到 NFS 客户端实际参考了服务器返回的 rtmax 和 wtmax 值，而这个值可以在挂载 NFS 文件系统时用抓包工具看到（NFS 使用的 RPC 协议）。
+下面的图片中显示的就是 NFS 客户端中指定 rsize 和 wsize 参数为 1MB 时 Wireshark 上抓到的 NFS FSINFO 请求的实际数据；
+
+
+上面图片里小椭圆圈表示的是 NFS FSINFO 请求，大椭圆圈里就是服务器传过来的 rtmax 和 wtmax 值了，我们可以看到值就是 256KB。这样也就能解释了为什么客户端增大 NFS 读写块大小也不起作用了。
+
+我们后台登陆到 NFS 服务器上，可以从 /proc/fs/nfsd/max_block_size 文件中看到当前 NFS 服务器的最大块大小，然后尝试修改它：
+~ # cat /proc/fs/nfsd/max_block_size
+262144
+~ # echo 524288 > /proc/fs/nfsd/max_block_size
+~ # cat /proc/fs/nfsd/max_block_size
+262144
+
+
+可以看到当前 NFS 服务器的最大读写块大小确实是 256KB，但是我们想修改它的值的时候，却似乎又修改不了。这样只能再看看修改 max_block_size 的 kernel 源代码了，对应的代码在 nfsd/nfsctl.c 文件中：
+static ssize_t write_maxblksize(struct file *file, char *buf, size_t size)
+{
+    char *mesg = buf;
+    if (size > 0) {
+        int bsize;
+        int rv = get_int(&mesg, &bsize);
+        if (rv)
+            return rv;
+        /* force bsize into allowed range and
+         * required alignment.
+         */
+        if (bsize < 1024)
+            bsize = 1024;
+        if (bsize > NFSSVC_MAXBLKSIZE)
+            bsize = NFSSVC_MAXBLKSIZE;
+        bsize &= ~(1024-1);
+        mutex_lock(&nfsd_mutex);
+        if (nfsd_serv && nfsd_serv->sv_nrthreads) {
+            mutex_unlock(&nfsd_mutex);
+            return -EBUSY;
+        }
+        nfsd_max_blksize = bsize;
+        mutex_unlock(&nfsd_mutex);
+    }
+ 
+    return scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "%d\n",
+                            nfsd_max_blksize);
+}
+
+
+write_maxblksize 函数中判断了传入的参数，如果写入的值超过 NFSSVC_MAXBLKSIZE 值则固定为 NFSSVC_MAXBLKSIZE 值，那我们来看看 NFSSVC_MAXBLKSIZE 的定义：
+/*
+ * Maximum blocksizes supported by daemon under various circumstances.
+ */
+#define NFSSVC_MAXBLKSIZE   RPCSVC_MAXPAYLOAD
+/* NFSv2 is limited by the protocol specification, see RFC 1094 */
+#define NFSSVC_MAXBLKSIZE_V2    (8*1024)
+
+
+linux/nfsd/const.h 中 NFSSVC_MAXBLKSIZE 定义为了 RPCSVC_MAXPAYLOAD 的值，那看看 linux/sunrpc/svc.h 中 RPCSVC_MAXPAYLOAD 的实际值：
+/*
+ * Maximum payload size supported by a kernel RPC server.
+ * This is use to determine the max number of pages nfsd is
+ * willing to return in a single READ operation.
+ *
+ * These happen to all be powers of 2, which is not strictly
+ * necessary but helps enforce the real limitation, which is
+ * that they should be multiples of PAGE_CACHE_SIZE.
+ *
+ * For UDP transports, a block plus NFS,RPC, and UDP headers
+ * has to fit into the IP datagram limit of 64K.  The largest
+ * feasible number for all known page sizes is probably 48K,
+ * but we choose 32K here.  This is the same as the historical
+ * Linux limit; someone who cares more about NFS/UDP performance
+ * can test a larger number.
+ *
+ * For TCP transports we have more freedom.  A size of 1MB is
+ * chosen to match the client limit.  Other OSes are known to
+ * have larger limits, but those numbers are probably beyond
+ * the point of diminishing returns.
+ */
+#define RPCSVC_MAXPAYLOAD   (1*1024*1024u)
+#define RPCSVC_MAXPAYLOAD_TCP   RPCSVC_MAXPAYLOAD
+#define RPCSVC_MAXPAYLOAD_UDP   (32*1024u)
+
+
+从 linux/sunrpc/svc.h 中可以看到 NFS 读写块大小必须为 2 的幂，这样也大概知道读写块大小限制的原因了：
+对于 UDP 来说，由于一个 UDP 包最大才 64KB，因此使用 UDP 协议的 NFS 读写块大小最大不超过 48KB，而 kernel 中则直接限制为 32KB 了；而使用 TCP 协议的 NFS 由于没有这个限制允许更大的读写块大小，但 Linux kernel 还是将其限制为 1MB 了。
+至于 max_block_size 值不能直接修改的现象也找到原因了，在 nfsd/nfsctl.c 文件中高亮显示的第 18 行代码里判断了 NFS 服务器是否在启动运行，如果在运行则不允许修改。
+下面就好办了，先卸载 NFS 共享的挂载，停止服务器的 NFS 服务，修改 max_block_size 值，然后重新启动 NFS 服务，
+~ # service nfs stop
+Shutting down NFS mountd:                                  [  OK  ]
+Shutting down NFS daemon:                                  [  OK  ]
+Shutting down NFS services:                                [  OK  ]
+~ # echo 1048576 > /proc/fs/nfsd/max_block_size
+~ # cat /proc/fs/nfsd/max_block_size
+1048576
+~ # service nfs start
+
+
+可以看到现在 NFS 的最大块大小可以修改了，接着在客户端中指定读写块大小并重新挂载 NFS 共享，这个时候客户端也能正确使用更大的块大小了：
+[root@localhost fs]# mount -t nfs -o rsize=1048576,wsize=1048576 192.168.1.122:/nfs/share /mnt/nfs
+[root@localhost fs]# grep /mnt/nfs /proc/mounts
+192.168.1.122:/nfs/share /mnt/nfs nfs rw,relatime,vers=3,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,mountaddr=192.168.1.122,mountvers=3,mountport=892,mountproto=udp,local_lock=none,addr=192.168.1.122 0 0
+
+
+如果要深究一下 NFS 服务器初始的最大块大小只有 256KB 的原因，可以看看 kernel 中 nfsd/nfssvc.c 文件中的代码：
+int nfsd_create_serv(void)
+{
+    int err = 0;
+ 
+    WARN_ON(!mutex_is_locked(&nfsd_mutex));
+    if (nfsd_serv) {
+        svc_get(nfsd_serv);
+        return 0;
+    }
+    if (nfsd_max_blksize == 0) {
+        /* choose a suitable default */
+        struct sysinfo i;
+        si_meminfo(&i);
+        /* Aim for 1/4096 of memory per thread
+         * This gives 1MB on 4Gig machines
+         * But only uses 32K on 128M machines.
+         * Bottom out at 8K on 32M and smaller.
+         * Of course, this is only a default.
+         */
+        nfsd_max_blksize = NFSSVC_MAXBLKSIZE;
+        i.totalram <<= PAGE_SHIFT - 12;
+        while (nfsd_max_blksize > i.totalram &&
+               nfsd_max_blksize >= 8*1024*2)
+            nfsd_max_blksize /= 2;
+    }
+ 
+    nfsd_serv = svc_create_pooled(&nfsd_program, nfsd_max_blksize,
+                      nfsd_last_thread, nfsd, THIS_MODULE);
+    if (nfsd_serv == NULL)
+        err = -ENOMEM;
+    else
+        set_max_drc();
+ 
+    do_gettimeofday(&nfssvc_boot);      /* record boot time */
+    return err;
+}
+
+从上面的可以看到，NFS 服务器在决定默认的最大读写块大小时考虑到内存占用情况，每个 NFS 内核线程最多只使用 1/4096 的物理内存大小，对于物理内存超过 4GB 的机器才使用最大的 1MB 读写块大小。
+
+
+来看看我们使用的 NFS 服务器的内存情况，可以看到服务器只使用了 2GB 的内存：
+~ # free
+             total       used       free     shared    buffers     cached
+Mem:       2040272     335476    1704796          0       2360      70076
+-/+ buffers/cache:     263040    1777232
+Swap:            0          0          0
+
+
+按照 nfsd/nfssvc.c 文件中的代码，i.totalram 实际值为所有可用的物理内存的页数量，我们这里就是 2040272 / 4KB（默认的 PAGE_SIZE 页大小），按照高亮的第 22 - 24 行代码计算出来的默认最大块大小值就是 262144 了。
+
+
+
+
