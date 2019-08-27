@@ -1,0 +1,41 @@
+mysql的安全警告很恶心:
+[root@localhost mysql]# mysql -uroot -p123456 -e "show databases;"
+mysql: [Warning] Using a password on the command line interface can be insecure.
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| db1                |
+| db2                |
+| lepus              |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+
+mysql: [Warning] Using a password on the command line interface can be insecure.
+总是有这么一条警告信息，但是我需要写脚本来监控数据库，每条sql都会报这个安全信息，很恶心
+
+解决办法：
+/etc/my.cnf中添加client段，如下
+[client]
+password=123456  ###配置数据库root密码
+
+设置my.cnf的权限
+chmod 600 my.cnf
+
+不用重启数据库
+[root@localhost mysql]# mysql --defaults-file=/etc/my.cnf -e "show databases;"
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| db1                |
+| db2                |
+| lepus              |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+
+##可以看到警告信息没有了

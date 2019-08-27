@@ -1,0 +1,115 @@
+第一步安装mysql
+第二步在安装mysql的机子上执行命令mysqlslap -uroot -p123456 -c 100 -i 1 -a --number-of-queries=25000;这是我的成果
+
+###最好远程压测：
+mysqlslap -h192.168.197.85 -uroot -p123456 -c 100 -i 1 -a --number-of-queries=25000;
+
+-c 100是使用100个连接执行
+-i 是迭代次数
+-a 是自动生成sql（为了防止mysql的缓存影响测试结果使用自动生成sql）
+--number-of-queries 是总共执行查询的次数
+-u用户 -p密码
+
+或者如下：查询5000次，并发数1000
+mysqlslap -h192.168.197.85 -uroot -p123456 --concurrency=1000 --iterations=1  --auto-generate-sql --auto-generate-sql-load-type=mixed --auto-generate-sql-add-autoincrement --engine=innodb --number-of-queries=5000
+
+
+[root@localhost ~]# mysqlslap -h192.168.197.85 -uroot -p123456 --concurrency=100 --iterations=1 --auto-generate-sql --auto-generate-sql-load-type=mixed --auto-generate-sql-add-autoincrement --engine=innodb --number-of-queries=5000
+mysqlslap: [Warning] Using a password on the command line interface can be insecure.
+Benchmark
+	Running for engine innodb
+	Average number of seconds to run all queries: 0.636 seconds
+	Minimum number of seconds to run all queries: 0.636 seconds
+	Maximum number of seconds to run all queries: 0.636 seconds
+	Number of clients running queries: 100
+	Average number of queries per client: 50
+
+[root@localhost ~]# mysqlslap -h192.168.197.85 -uroot -p123456 --concurrency=500 --iterations=1 --auto-generate-sql --auto-generate-sql-load-type=mixed --auto-generate-sql-add-autoincrement --engine=innodb --number-of-queries=5000
+mysqlslap: [Warning] Using a password on the command line interface can be insecure.
+Benchmark
+	Running for engine innodb
+	Average number of seconds to run all queries: 1.642 seconds
+	Minimum number of seconds to run all queries: 1.642 seconds
+	Maximum number of seconds to run all queries: 1.642 seconds
+	Number of clients running queries: 500
+	Average number of queries per client: 10
+	
+	
+实例1
+说明:测试100个并发线程，测试次数1次，自动生成SQL测试脚本，读、写、更新混合测试，自增长字段，测试引擎为innodb，共运行5000次查询
+#mysqlslap -h127.0.0.1 -uroot -p123456789 --concurrency=100 --iterations=1 --auto-generate-sql --auto-generate-sql-load-type=mixed --auto-generate-sql-add-autoincrement --engine=innodb --number-of-queries=5000
+Benchmark
+Running for engine innodb
+Average number of seconds to run all queries: 0.351 seconds 　　　　 100个客户端（并发）同时运行这些SQL语句平均要花0.351秒
+Minimum number of seconds to run all queries: 0.351 seconds
+Maximum number of seconds to run all queries: 0.351 seconds
+Number of clients running queries: 100 　　　　　　　　　　　　  总共100个客户端（并发）运行这些sql查询
+Average number of queries per client:50 　　　　　　　　　　　　每个客户端（并发）平均运行50次查询（对应--concurrency=100，--number-of-queries=5000；5000/100=50）
+
+
+
+实例2
+#mysqlslap -h127.0.0.1 -uroot -p123456789 --concurrency=100,500,1000 --iterations=1 --auto-generate-sql --auto-generate-sql-load-type=mixed --auto-generate-sql-add-autoincrement --engine=innodb --number-of-queries=5000 --debug-info
+Benchmark
+Running for engine innodb
+Average number of seconds to run all queries: 0.328 seconds
+Minimum number of seconds to run all queries: 0.328 seconds
+Maximum number of seconds to run all queries: 0.328 seconds
+Number of clients running queries: 100
+Average number of queries per client: 50
+Benchmark
+Running for engine innodb
+Average number of seconds to run all queries: 0.358 seconds
+Minimum number of seconds to run all queries: 0.358 seconds
+Maximum number of seconds to run all queries: 0.358 seconds
+Number of clients running queries: 500
+Average number of queries per client: 10
+Benchmark
+Running for engine innodb
+Average number of seconds to run all queries: 0.482 seconds
+Minimum number of seconds to run all queries: 0.482 seconds
+Maximum number of seconds to run all queries: 0.482 seconds
+Number of clients running queries: 1000
+Average number of queries per client: 5
+
+User time 0.21, System time 0.78
+Maximum resident set size 21520, Integral resident set size 0
+Non-physical pagefaults 12332, Physical pagefaults 0, Swaps 0
+Blocks in 0 out 0, Messages in 0 out 0, Signals 0
+Voluntary context switches 36771, Involuntary context switches 1396
+
+
+
+实例3(自定义sql语句)
+#mysqlslap -h127.0.0.1 -uroot -p123456789 --concurrency=100 --iterations=1 --create-schema=rudao --query='select * from serverlist;' --engine=innodb --number-of-queries=5000 --debug-info
+Benchmark
+Running for engine innodb
+Average number of seconds to run all queries: 0.144 seconds
+Minimum number of seconds to run all queries: 0.144 seconds
+Maximum number of seconds to run all queries: 0.144 seconds
+Number of clients running queries: 100
+Average number of queries per client: 50
+
+User time 0.05, System time 0.09
+Maximum resident set size 6132, Integral resident set size 0
+Non-physical pagefaults 2078, Physical pagefaults 0, Swaps 0
+Blocks in 0 out 0, Messages in 0 out 0, Signals 0
+Voluntary context switches 6051, Involuntary context switches 90
+
+
+实例4(指定sql脚本)
+#mysqlslap -h127.0.0.1 -uroot -p123456789 --concurrency=100 --iterations=1 --create-schema=rudao --query=/tmp/query.sql --engine=innodb --number-of-queries=5000 --debug-info
+Warning: Using a password on the command line interface can be insecure.
+Benchmark
+Running for engine innodb
+Average number of seconds to run all queries: 0.157 seconds
+Minimum number of seconds to run all queries: 0.157 seconds
+Maximum number of seconds to run all queries: 0.157 seconds
+Number of clients running queries: 100
+Average number of queries per client: 50
+
+User time 0.07, System time 0.08
+Maximum resident set size 6152, Integral resident set size 0
+Non-physical pagefaults 2107, Physical pagefaults 0, Swaps 0
+Blocks in 0 out 0, Messages in 0 out 0, Signals 0
+Voluntary context switches 6076, Involuntary context switches 89
