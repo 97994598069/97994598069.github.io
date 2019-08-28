@@ -1,0 +1,61 @@
+性能排查工具：
+
+负载的升高，最能体现的是cpu的升高，虽然也可能是内存或者io造成的，但是io或者内存的升高并不会直接造成负载的升高，他们只会造成cpu的升高，进而造成系统负载的升高
+
+
+
+一般排查思路:
+首先使用uptime查看平均负载
+然后使用mpstat和pidstat分别观察每个cpu和每个进程cpu的使用情况，进而找出导致平均负载升高的进程，也就是我们的压测工具stress
+mpstat -P ALL 5
+pidstat -u 5 1
+
+top查看到负载的升高的原因（user/iowait/sy/ni）--->pidstat查看异常进程--->然后使用动态工具进行分析排查（例如strace/perf top/perf record + perf report）
+
+ 
+
+引起的原因一般如下几种：
+1.进程异常  也就是top中us使用率较高：
+比如说php-fpm不断重启   
+top查看到负载的升高的原因（us/iowait/sy/ni）--->pidstat查看异常进程--->然后使用动态工具进行分析排查（例如strace/perf top/perf record + perf report） [库函数sqrt()]
+
+
+2.系统导致cpu升高  也就是top中的sy使用率较高
+top查看到负载的升高的原因（us/iowait/sy/ni），但是此时用pidstat查找不到异常进程，此时重点查看Running状态的进程入手，找到异常之后使用perf record + perf report 来确定源头，一般为短进程的搞的鬼  （也可以使用动态工具execsnoop来实时监控进程pid是否重启）
+
+
+3.iowait升高
+一般会有大量的D状态或者Z状态存在  一般呈现的是iowait胜概
+top查看到有大量的D状态或者Z状态，  一般为磁盘io出了问题，一般排查
+top查看到D和Z状态---->dstat命令查看io交互情况（可以发现iowait升高时，磁盘读请求（read）升高所以推断iowait升高是磁盘读导致）---->pidstat -u 1/pidstat -d 1 找到相关的进程，---->strace -p 动态追踪/perf record -g + perf record 来分析进程调度链，一般根源为I/O没有走缓存造成
+
+Z状态处理：
+下面，我们用ps和grep命令寻找僵尸进程
+ps -A -ostat,ppid,pid,cmd | grep -e '^[Zz]'
+一般如下格式：
+运行结果参考如下
+Z 12334 12339 /path/cmd
+这时，我们可以使用kill -HUP 12339来杀掉这个僵尸进程
+运行后，可以再次运行ps -A -ostat,ppid,pid,cmd | grep -e '^[Zz]'来确认是否将僵尸进程杀死
+如果kill 子进程的无效，可以尝试kill 其父进程来解决问题，例如上面例子父进程pid是 12334，那么我们就运行
+kill -HUP 12334
+
+
+
+
+4.上下文切换造成的cpu飙升：
+vmstat中cs, 表示每秒上下文切换的次数(in表示中断超过1w有问题)----> pidstat(pidstat -w -u 5 ),查看每个进程的上下文切换情况，cswch表示每秒自愿上下文切换次数，nvcswch表示每秒非自愿上下文切换的次数（确定是哪个进程引起的）
+----->pidstat -wt -p 1460 1  查看异常进程----->动态查看/proc/interrupts watch -d cat /proc/interrupts （    RES: 2450431 5279697 Rescheduling interrupts
+）   观察一段时间，发现变化速度最快的是重调度中断，这个中断类型表示，唤醒空闲状态的CPU来调度新的任务运行。这是多处理器系统(SMP)中，调度器用来分散任务到不同CPU的机制，通常也被称为处理器间中断
+
+ 上下文切换指标：
+ (1).上下文切换次数取决于系统本身的CPU性能，如果系统的上下文切换次数比较稳定，那么从数百到1万以内都是正常的
+ (2).当上下文切换次数超过1万次，或者切换次数出现数量级增长时，就很可能已经出现了性能问题
+ 同一个进程下线程上下文切换，因为共享虚拟内存，切换过程中，虚拟内存这些资源保持不变，只需要切换线程的私有数据，寄存器等不共享的数据。(多线程代替多进程)
+ 自愿上下文切换变多了，说明进程都在等待资源，有可能发生IO等其他问题
+ 非自愿上下文切换变多了，说明进程都在被强制调度，都在争抢CPU,说明CPU的确成了瓶颈
+ 中断上下文切换变多了，说明CPU被中断处理程序占用，需要通过查看 /proc/interrupts文件分析具体的中断类型
+
+
+5.软中断的案例
+通过top观察到系统软中断cpu使用率升高；接着查看/proc/softirqs,找到了几种变化速率较快的软中断；然后通过sar命令，发现是网络小包的问题，最后再用tcpdump，找出网络帧的类型和来源，确定是一个SYN FLOOD攻击导致的
