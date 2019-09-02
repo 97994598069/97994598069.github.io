@@ -1,0 +1,37 @@
+注意前提： 是有进程在使用这个文件，如果是个单文件没有进程在使用是恢复不了的
+当系统中的某个文件被意外删除了，只要这个时候系统中有进程正在访问这个文件，那么可以通过lsof 从/proc目录下恢复文件的内容
+
+假如/var/log/messages文件被删了，恢复这个文件的方法：
+首先使用lsof 查看当前是否有进程打开/var/log/messages文件，
+#lsof |grep /var/log/messages
+
+[root@localhost ~]# rm /var/log/messages
+rm：是否删除普通文件 "/var/log/messages"？y
+
+[root@localhost ~]# lsof |grep /var/log/messages
+rsyslogd  5925      root    1w      REG        8,2     4369     266184 /var/log/messages (deleted)
+从上面的信息可以看到PID 5925（syslogd)打开文件的文件描述符为1，同时发现/var/log/messages已经被删除了。
+因此可以通过/var/log/messages文件描述符来查看文件信息。
+
+最后通过重定向的方法恢复被删除的/var/log/messages
+cat /pro/5925/fd/1 >/var/log/messages
+
+
+如果不小心删除了目录，则没有办法挨个恢复吧
+[root@localhost var]# cat /proc/630/fd/5 >/var/log/audit/audit.log
+-bash: /var/log/audit/audit.log: 没有那个文件或目录
+[root@localhost var]# mkdir -p /var/log/audit
+[root@localhost var]# cat /proc/630/fd/5 >/var/log/audit/audit.log
+[root@localhost var]# cat /proc/657/fd/2 >/var/log/vmware-vgauthsvc.log.0
+[root@localhost var]# cat /proc/657/fd/4 >>/var/log/vmware-vgauthsvc.log.0
+[root@localhost var]# cat /proc/664/fd/3 >/var/log/vmware-vmsvc.log
+[root@localhost var]# cat /proc/664/fd/3 >/var/log/v^Care-vmsvc.log
+[root@localhost var]# cat /proc/1057/fd/3 >/var/log/tuned/tuned.log
+-bash: /var/log/tuned/tuned.log: 没有那个文件或目录
+[root@localhost var]# mkdir /var/log/tuned/
+[root@localhost var]# cat /proc/1057/fd/3 >/var/log/tuned/tuned.log
+[root@localhost var]# cat /proc/1062/fd/4 >/var/log/messages
+[root@localhost var]# cat /proc/1062/fd/6 >>/var/log/messages
+[root@localhost var]# cat /proc/1062/fd/7 >>/var/log/messages
+[root@localhost var]# cat /proc/1062/fd/9 >>/var/log/messages
+
