@@ -72,5 +72,9 @@ set ssl-verify=ignore
 set nss-config-dir=/root/.certs  （证书路径）
 
 
-
+++++++场景三
+你的应用服务器有程序再调用25端口发送邮件（比如说有邮箱注册功能）；；比如说是用的126的服务
+此时如果你在mail.rc里配置qq服务的话，则不会发送邮件
+(启动的时候可能会报错port in use 或者直接没有报错只有一个提示PID file /run/sendmail.pid not readable (yet?) after start.)，
+因为冲突，此时除非你使用其他端口例如465，或者将应用里的邮箱配置拿出来配置到mail.rc里，可以直接使用（yum -y install unzip vim ,  vim abc.jar  搜索:/sms）
 
