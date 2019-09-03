@@ -1,17 +1,87 @@
-shell中写循环一般会有两种方式：
-1.for
-2.while 
+正确:
+
+[root@localhost ~]# cat /etc/passwd |awk -F ':' '{print $1}' |wc -l
+26
+
+[root@localhost ~]# awk -F ':' '{print $1}' /etc/passwd |wc -l
+26
+
+[root@localhost ~]# cat /etc/passwd |while read line;do echo $line |awk -F ':' '{print $1}';done |wc -l
+26
+[root@localhost ~]# cat /etc/passwd |while read line;do echo $line |awk -F ':' '{print $1}';done
+root
+bin
+daemon
+adm
+lp
+sync
+shutdown
+halt
+mail
+operator
+games
+ftp
+nobody
+systemd-network
+dbus
+polkitd
+sshd
+postfix
+chrony
+ntp
+elk
+rpc
+rpcuser
+nfsnobody
+redis
+mysql
 
 
-但是当处理文件的时候必须使用while 不能使用for   否则会出现错误结果
+++++++++++++++++++++++++++++++++++++++++++++++++
 
-测试：
-[root@localhost scripts]# cat /etc/passwd |wc -l
-34
-
-[root@localhost scripts]# for i in $(cat /etc/passwd);do echo $i;done |wc -l
-52  ###多个几个？为什么？ 看结果
-
-
-[root@localhost scripts]# cat /etc/passwd |while read -r log;do echo $log;done |wc -l
-34  ###正确的，谨记
+错误如下：
+[root@localhost ~]# for i in $(cat /etc/passwd);do echo $i |awk -F ':' '{print $1}';done |wc -l
+42
+[root@localhost ~]# for i in $(cat /etc/passwd);do echo $i |awk -F ':' '{print $1}';done
+root
+bin
+daemon
+adm
+lp
+sync
+shutdown
+halt
+mail
+operator
+games
+ftp
+User ##多余
+nobody
+systemd-network
+Network ##多余
+Management  ##多余
+dbus
+message  ##多余
+bus ##多余
+polkitd
+for ##多余
+polkitd ##重复
+sshd
+SSH
+postfix
+chrony
+ntp
+elk
+rpc
+Daemon  ##多余
+rpcuser
+Service ##多余
+User  ##多余且重复
+nfsnobody  
+NFS
+User
+redis
+Database
+Server
+mysql
+Server
