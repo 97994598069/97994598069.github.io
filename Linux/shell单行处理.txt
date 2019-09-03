@@ -1,0 +1,17 @@
+shell中写循环一般会有两种方式：
+1.for
+2.while 
+
+
+但是当处理文件的时候必须使用while 不能使用for   否则会出现错误结果
+
+测试：
+[root@localhost scripts]# cat /etc/passwd |wc -l
+34
+
+[root@localhost scripts]# for i in $(cat /etc/passwd);do echo $i;done |wc -l
+52  ###多个几个？为什么？ 看结果
+
+
+[root@localhost scripts]# cat /etc/passwd |while read -r log;do echo $log;done |wc -l
+34  ###正确的，谨记
