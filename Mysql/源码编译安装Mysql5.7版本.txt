@@ -20,26 +20,7 @@ mysql-libs-5.1.73-5.el6_6.x86_64
 #安装必要的资源包
 建议使用网络yum源，RHEL6.5光盘中自带的软件包版本不够，mysql-boost-5.7.18.tar.gz的编译对软件包的版本要求比较高，其中cmake的版本要不低于2.8
 #安装依赖包
-[root@Wg64 ~]# yum install -y cmake make gcc gcc-c++ bison ncurses ncurses-devel
-yum install \
-vim \
-git \
-gcc \
-gcc-c++ \
-wget \
-make \
-cmake \
-automake \
-autoconf \
-libaio \
-libtool \
-net-tools \
-bison-devel \
-libaio-devel \
-ncurses-devel \
-perl-Data-Dumper \
--y
-
+[root@Wg64 ~]# yum -y install vim git gcc gcc-c++ wget make cmake automake autoconf libaio libtool net-tools bison bison-devel libaio-devel ncurses ncurses-devel perl-Data-Dumper
 
 
 （2）添加用户和组
