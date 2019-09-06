@@ -1,0 +1,65 @@
+yum -y install innotop
+yum -y install mytop
+
+
+使用：
+[root@localhost ~]# mytop -uroot -p123456 -h 127.0.0.1 -d abc 
+MySQL on 127.0.0.1 (5.7.19-log)                                                                                                                            up 1+15:21:17 [13:53:21]
+ Queries: 10.1M  qps:   74 Slow:    3.0k         Se/In/Up/De(%):    71/02/01/00 
+
+ Cache Hits: 5.8M  Hits/s: 42.8 Hits now:   0.0  Ratio: 81.1% Ratio now:  0.0% 
+ Key Efficiency: 84.1%  Bps in/out: 11.9k/692.8k   
+
+      Id      User         Host/IP         DB      Time    Cmd Query or State                                                                                                     
+       --      ----         -------         --      ----    --- ----------                                                                                                         
+    48183      root   10.43.112.184     xmt_db         0  Sleep                                                                                                                    
+   135616      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
+   135617      root   10.43.112.178     xmt_db         0  Sleep                                                                                                                    
+   135618      root   10.43.112.178     xmt_db         0  Sleep                                                                                                                    
+   135620      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
+   135621      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
+   135622      root   10.43.112.178     xmt_db         0  Sleep                                                                                                                    
+   135623      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
+   135624      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
+   135915      root   10.43.112.177      hkdb2         0  Sleep                                                                                                                    
+   135916      root   10.43.112.177      hkdb2         0  Sleep                                                                                                                    
+   135917      root   10.43.112.177      hkdb2         0  Sleep                                                                                                                    
+   135918      root       localhost     xmt_db         0  Query show full processlist                                                                                              
+    48513      root   10.43.112.180     xmt_db         1  Sleep                                                                                                                    
+   135619      root   10.43.112.178     xmt_db         1  Sleep                                                                                                                    
+   135849      root   10.43.112.228      hkdb2         1  Sleep                                                                                                                    
+   135850      root   10.43.112.228      hkdb2         1  Sleep                                                                                                                    
+   135895      root   10.43.112.228      hkdb2         2  Sleep                                                                                                                    
+   115358      root   10.43.112.180     xmt_db         3  Sleep                                                                                                                    
+   135896      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
+   135897      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
+   135898      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
+   135899      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
+   135900      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
+   135901      root   10.43.112.228      hkdb2         3  Sleep
+   
+##通过和sar对比可以查看到吃资源的sql
+
+监控画面参数意义： 
+第一行显示了主机名称，还有至今 MySQL 的运行时间 (以 days hour:minutes:seconds 为格式)。 
+第二、三行的 Queries 显示了至今执行的 SQL 查询语句总数，另外还有目前每秒处理的查询数和速度。 
+第四行的 Key Efficiency 就是传说中的缓存命中率了，如果太低了你可能要调整你的 MySQL 设置，或者调整一下表的结构，后面还有目前的进出速度。 
+最下方的区域就是目前链接到数据库的各个线程，你可以按 k 杀死一个线程，或者按 f 了解特定线程的信息
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+yum -y install innotop
+
+innotop -uroot -p123456 -h127.0.0.1
+shift+B:显示有关InnoDB缓冲池，页面统计，插入缓冲，自适应哈希索引。这些数据来自展示InnoDB的状态。
+shift+C:汇总表通过提取STATUS_VARIABLES变量。变量必须是数字，必须匹配给定的cmd_filter配置变量的前缀。百分比列是在表中的所有变量总数的百分比，所以你可以看到变数的相对比例。默认的前缀是“Com_”。你可以选择的‘s‘键改变过滤前缀。
+shift+D:在过去InnoDB的死锁中涉及的事务。第二个表显示等待事务。
+shift+F:显示最后InnoDB的外键的错误信息,没有就不显示
+shift+I:显示InnoDB的I/O信息，包括I/O线程，挂起的I/O，文件I/O，日志统计。
+shift+L:显示了当前锁的信息。目前只支持InnoDB，并在默认情况下你只看到那些锁等待的事务
+shift+M:输出了SHOW SLAVE STATUS和SHOW MASTER STATUS的信息成3张表，前两个显示从的sql和I/O的状态，最后显示主的状态
+shift+O:来自SHOW OPEN TABLES命令的输出，默认情况下，筛选出正由一个或多个查询使用的表，这样可以快速得到哪些表是‘热‘。也可以猜测哪些表可能被锁。
+shift+Q:此模式显示从SHOW FULL PROCESSLIST的信息，就像mytop的查询列表模式。有一个信息头，显示有关服务器的一般状态信息。可以用‘h‘切换开或关。默认情况下，innotop隐藏不活动的进程和它自己的进程。您可以切换和关闭这些用‘i‘和‘a‘键。按e并输入thread ID显示执行计划或者按f显示完整sql语句，或者按o显示系统优化过的语句.
+shift+R:显示InnoDB行操作、row operation miscellaneous、信号、innodb等待信息
+shift+S:每秒查询的统计信息。您可以显示绝对值之间，或增量值。‘s‘ 键是没一定时间打印数字到前面.‘g‘ 键是打印图像.‘v‘ 键是以一个表格的形式显示，定期刷新值。
+shift+T:从innodb监视器中输出事务。你可以杀掉一个查询或进程，通过‘k‘和‘x‘键，也可以explain一个查询，通过‘e‘或‘f‘键。不会输出所有的查询事务，如果查询太长被截断。信息头可以用‘h‘键打开或关闭，默认情况下，innotop隐藏不活动的进程和它自己的进程。您可以切换和关闭这些用‘i‘和‘a‘键。
