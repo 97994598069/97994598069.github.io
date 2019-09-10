@@ -1,0 +1,113 @@
+nginx 缓存机制
+Nginx缓存的基本思路 
+利用请求的局部性原理，将请求过的内容在本地建立一个副本，下次访问时不再连接到后端服务器，直接响应本地内容
+Nginx服务器启动后，会对本地磁盘上的缓存文件进行扫描，在内存中建立缓存索引，并有专门的进程对缓存文件进行过期判断、更新等进行管理
+
+对于缓存，我们大概会有以下问题：
+（1）缓存文件放在哪儿？
+（2）缓存的空间大小是否可以限定?
+（3）如何指定哪些请求被缓存？
+（4）缓存的有效期是多久？
+（5）对于某些请求，是否可以不走缓存？
+
+
+解决这些问题后，nginx的缓存也就基本配置完成了，下面看详细配置过程
+
+开启缓存
+要使用缓存，首先要使用 proxy_cache_path 这个指令（必须放在 http 上下文的顶层位置），然后在目标上下文中使用 proxy_cache 指令
+
+配置示例
+http {
+...
+proxy_cache_path /data/nginx/cache keys_zone=one:10m;
+
+server {
+proxy_cache one;
+location / {
+proxy_pass http://localhost:8000;
+}
+}
+}
+
+
+
+proxy_cache_path 有两个必填参数，第一个参数为 缓存目录，第二个参数keys_zone指定缓存名称和占用内存空间的大小（注：示例中的10m是对内存中缓存内容元数据信息大小的限制，如果想限制缓存总量大小，需要用 max_size 参数）
+
+proxy_cache 的参数为之前指定的缓存名称
+缓存管理的相关进程
+在缓存工作中有两个附加进程：
+（1）缓存管理器
+定期检查缓存状态，看缓存总量是否超出限制，如果超出，就移除其中最少使用的部分
+
+（2）缓存加载器
+加载器只在nginx启动后运行一次，把缓存内容的元数据信息加载到内存空间，如果一次性加载全部缓存信息，会大量消耗资源，使nginx在启动后的几分钟里变慢，为避免此问题，有3种加载策略：
+loader_threshold – 指定每次加载执行的时间
+loader_files – 每次最多加载的数量
+loader_sleeps – 每次加载的延时
+
+例如：
+proxy_cache_path /data/nginx/cache keys_zone=one:10m loader_threshold=300 loader_files=200;
+
+
+指定缓存哪些请求
+nginx默认会缓存所有 get 和 head 方法的请求结果，缓存的key默认使用请求字符串
+（1）自定义key
+例如 proxy_cache_key "$host$request_uri$cookie_user";
+
+（2）指定请求至少被发送了多少次以上时才缓存，可以防止低频请求被缓存
+例如 proxy_cache_min_uses 5;
+
+（3）指定哪些方法的请求被缓存
+例如 proxy_cache_methods GET HEAD POST;
+
+
+缓存有效期
+默认情况下，缓存内容是长期存留的，除非缓存的总量超出限制
+可以指定缓存有效时间，例如
+proxy_cache_valid 200 302 10m; //响应状态码为200 302时，10分钟有效
+proxy_cache_valid any 5m; //对应任何状态码，5分钟有效
+
+
+绕开缓存
+例如 proxy_cache_bypass $cookie_nocache $arg_nocache$arg_comment;
+如果任何一个参数值不为空，或者不等于0，nginx就不会查找缓存，直接进行代理转发
+
+综合示例
+http {
+...
+
+// 缓存目录：/data/nginx/cache
+// 缓存名称：one
+// 缓存占用内存空间：10m
+// 加载器每次迭代过程最多执行300毫秒
+// 加载器每次迭代过程中最多加载200个文件
+// 缓存硬盘空间最多为 200m
+proxy_cache_path /data/nginx/cache keys_zone=one:10m loader_threshold=300 
+loader_files=200 max_size=200m;
+
+
+server {
+listen 8080;
+
+// 使用名称为one的缓存
+proxy_cache one; 
+
+location / {
+// 此location中使用默认的缓存配置
+proxy_pass http://backend1;
+}
+
+location /some/path {
+proxy_pass http://backend2;
+
+// 缓存有效期为1分钟
+proxy_cache_valid any 1m;
+
+// 被请求3次以上时才缓存
+proxy_cache_min_uses 3;
+
+// 请求中有下面参数值时不走缓存
+proxy_cache_bypass $cookie_nocache $arg_nocache$arg_comment;
+}
+}
+}

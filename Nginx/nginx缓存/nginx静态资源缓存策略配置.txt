@@ -1,0 +1,123 @@
+1. 问题-背景
+以前也经常用nginx，但用的不深，通常是简单的设置个location用来做反向代理。直到今天给客户做项目碰到缓存问题：客户有个app，只是用原生做了个壳，里面的内容都是用h5写的，我们半途接手将新版本静态资源部署到服务器上后，发现手机端一直显示老的页面，一抓包，发现手机端根本就没有去请求新的html页面，定位是缓存问题。
+
+2. 配置
+乍一看，客户原来的配置好像没什么问题，该有的也全有了
+# 这是客户原来的配置
+server {
+    listen       80 default_server;
+    server_name  xxx.xxx.com;
+    root         /app/xxx/html/mobile/;
+
+    location ~ .*\.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm)$
+    {
+        expires      7d;
+    }
+
+    location ~ .*\.(?:js|css)$
+    {
+        expires      7d;
+    }
+
+    location ~ .*\.(?:htm|html)$
+    {
+        add_header Cache-Control "private, no-store, no-cache, must-revalidate, proxy-revalidate";
+    }
+
+    location ^~/mobile/
+    {
+        alias /app/xxx/html/mobile/;
+    }
+}
+
+乍看没问题，但就是没有生效，由于查找nginx文档，发现nginx的location有优先级之分（是否生效与放置的位置没有关系）。
+
+2.1 nginx location的四种类别
+【=】模式: location = path,此种模式优先级最高（但要全路径匹配） 
+【^~】模式:location ^~ path,此种模式优先级第二高于正则； 
+【~  or  ~*】模式:location ~ path,正则模式，优先级第三，【~】正则匹配区分大小写，【~*】正则匹配不区分大小写； 
+【path】模式: location path,中间什么都不加，直接跟路径表达式； 
+
+注意：一次请求只能匹配一个location，一旦匹配成功后，便不再继续匹配其余location;
+
+
+一对照，发现location ^~优先级高于那些正则的缓存策略，所以缓存策略肯定不会对其生效，一翻查找下，终于解决了，配置如下：
+server {
+    listen       80 default_server;
+    server_name  xxx.xxx.com;
+    root         /app/xxx/html/mobile/;
+
+    location ~ .*\.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm)$
+    {
+        expires      7d;
+    }
+
+    location ~ .*\.(?:js|css)$
+    {
+        expires      7d;
+    }
+
+    location ~ .*\.(?:htm|html)$
+    {
+        add_header Cache-Control "private, no-store, no-cache, must-revalidate, proxy-revalidate";
+    }
+
+    location ^~/mobile/
+    {
+        alias /app/xxx/html/mobile/;
+    # 将缓存策略用if语句写在location里面，生效了
+        if ($request_filename ~* .*\.(?:htm|html)$)
+        {
+            add_header Cache-Control "private, no-store, no-cache, must-revalidate, proxy-revalidate";
+        }
+
+        if ($request_filename ~* .*\.(?:js|css)$)
+        {
+            expires      7d;
+        }
+
+        if ($request_filename ~* .*\.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm)$)
+        {
+            expires      7d;
+        }
+    }
+}
+
+
+3. 配置优化
+上面的配置虽然解决了缓存问题，但一看就发现冗余代码较多，应该不是最佳实践，于是请教了前公司专业运维同事，优化后的配置如下：
+server {
+    listen       80 default_server;
+    server_name  xxx.xxx.com;
+    # 通过此语句来映射静态资源
+    # 查找客户最初的配置，发现也有此项，但配置错误，后面多加了一个mobile, 解析时目录变成了/app/xxx/html/mobile/mobile，报404
+    # 估计也是因为此处配置错误不生效，后面才又加了个location来映射，但location又不能继承外层的缓存策略
+    # 估计原来配置此nginx的人也是个半吊子
+    root         /app/xxx/html/;
+
+    location ~ .*\.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm)$
+    {
+        expires      7d;
+    }
+
+    location ~ .*\.(?:js|css)$
+    {
+        expires      7d;
+    }
+
+    location ~ .*\.(?:htm|html)$
+    {
+        add_header Cache-Control "private, no-store, no-cache, must-revalidate, proxy-revalidate";
+    }
+}    
+
+
+4. 深化
+项目通常就是静态资源与接口，接口一般都很少碰到缓存问题（因为很少有人去给接口配置缓存策略，不配置的话就不缓存），碰到缓存问题的通常都是静态资源。 
+
+静态资源——html: 
+html文件最容易碰到缓存问题，重新发版后，一旦客户端继续使用原来的缓存，那么在原来的缓存过期之前，没有任何办法去触使客户端更新，除非一个个通知android客户手动清除app缓存数据，通知IOS用户卸载重装。所以配置html缓存策略时要格外小心，我们项目是不缓存html文件； 
+
+静态资源——js/css/各种类型的图片: 
+此类资源改动较少，为了提升用户体验，一般都需要配置缓存，但反而不容易碰到缓存问题。因为现在的前程工程也都需要build，在build时工具会自动在文件名上加时间戳，这样一发新版时，只要客户端请求了新版的html，里面引用的js/css/jpg等都已经换了路径，肯定也就不会使用本地的缓存了。
+

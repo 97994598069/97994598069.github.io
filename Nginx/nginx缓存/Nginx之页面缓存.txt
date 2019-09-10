@@ -1,0 +1,45 @@
+定义一个简单nginx缓存服务器
+[root@nginx ~]# vim /etc/nginx/nginx.conf
+proxy_cache_path /data/nginx/cache/webserver levels=1:2 keys_zone=webserver:20m max_size=1g;
+   server {
+       listen       80;
+       server_name  localhost;
+       #charset koi8-r;
+       #access_log  logs/host.access.log  main;
+       location / {
+               proxy_pass      http://webservers;
+               proxy_set_header  X-Real-IP  $remote_addr;
+               proxy_cache webserver;
+               proxy_cache_valid 200 10m;
+       }
+}
+
+新建缓存目录
+[root@nginx ~]# mkdir -pv /data/nginx/cache/webserver
+
+
+f12调式respond的时候：
+MISS 未命中
+EXPIRED - expired。请求被传送到后端
+UPDATING - expired。由于proxy/fastcgi_cache_use_stale正在更新，将使用旧的应答。
+STALE - expired。由于proxy/fastcgi_cache_use_stale，后端将得到过期的应答。
+HIT 命中
+
+
+[root@nginx ~]# vim /etc/nginx/nginx.conf
+proxy_cache_path /data/nginx/cache/webserver levels=1:2 keys_zone=webserver:20m max_size=1g;
+    server {
+        listen       80;
+        server_name  localhost;
+        #charset koi8-r;
+        #access_log  logs/host.access.log  main;
+       #增加两头部
+        add_header X-Via $server_addr;
+        add_header X-Cache $upstream_cache_status;
+        location / {
+                proxy_pass      http://webservers;
+                proxy_set_header  X-Real-IP  $remote_addr;
+                proxy_cache webserver;
+                proxy_cache_valid 200 10m;
+        }
+}
