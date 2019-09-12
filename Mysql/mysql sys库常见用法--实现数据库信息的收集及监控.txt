@@ -1,0 +1,364 @@
+MySQL5.7的新特性中，非常突出的特性之一就是sys库，不仅可以通过sys库完成MySQL信息的收集，还可以用来监控和排查问题。下面介绍一些常用的用法。
+
+一、用户、连接类
+1、查看每个客户端IP过来的连接消耗资源情况。
+mysql> select * from sys.host_summary;
++-----------+------------+-------------------+-----------------------+-------------+----------+-----------------+---------------------+-------------------+--------------+----------------+------------------------+
+| host      | statements | statement_latency | statement_avg_latency | table_scans | file_ios | file_io_latency | current_connections | total_connections | unique_users | current_memory | total_memory_allocated |
++-----------+------------+-------------------+-----------------------+-------------+----------+-----------------+---------------------+-------------------+--------------+----------------+------------------------+
+| localhost |    1112356 | 1.86 h            | 6.02 ms               |        2069 |  3437928 | 5.71 h          |                   7 |                69 |            1 | 0 bytes        | 0 bytes                |
++-----------+------------+-------------------+-----------------------+-------------+----------+-----------------+---------------------+-------------------+--------------+----------------+------------------------+
+1 row in set (0.01 sec)
+
+
+2、查看每个用户消耗资源情况
+mysql> select * from sys.user_summary;
++------------+------------+-------------------+-----------------------+-------------+----------+-----------------+---------------------+-------------------+--------------+----------------+------------------------+
+| user       | statements | statement_latency | statement_avg_latency | table_scans | file_ios | file_io_latency | current_connections | total_connections | unique_hosts | current_memory | total_memory_allocated |
++------------+------------+-------------------+-----------------------+-------------+----------+-----------------+---------------------+-------------------+--------------+----------------+------------------------+
+| root       |    1112692 | 1.86 h            | 6.02 ms               |        2070 |  3438947 | 5.71 h          |                   7 |                69 |            1 | 0 bytes        | 0 bytes                |
+| background |          0 | 0 ps              | 0 ps                  |           0 |  3127151 | 16.82 h         |                  22 |                31 |            0 | 0 bytes        | 0 bytes                |
++------------+------------+-------------------+-----------------------+-------------+----------+-----------------+---------------------+-------------------+--------------+----------------+------------------------+
+2 rows in set (0.01 sec)
+
+
+3、查看当前连接情况（有多少连接就应该有多少行）
+mysql> select host,current_connections,statements from sys.host_summary;
++-----------+---------------------+------------+
+| host      | current_connections | statements |
++-----------+---------------------+------------+
+| localhost |                   7 |    1113119 |
++-----------+---------------------+------------+
+1 row in set (0.01 sec)
+
+
+4、查看当前正在执行的SQL
+和执行show full processlist的结果差不多
+mysql> select conn_id,pid,user,db,command,current_statement,last_statement,time,lock_latency from sys.session;
++---------+------+---------------------+------+---------+-------------------------------------------------------------------+-------------------------------------------------------------------+--------+--------------+
+| conn_id | pid  | user                | db   | command | current_statement                                                 | last_statement                                                    | time   | lock_latency |
++---------+------+---------------------+------+---------+-------------------------------------------------------------------+-------------------------------------------------------------------+--------+--------------+
+|      12 | NULL | sql/slave_io        | NULL | Connect | NULL                                                              | NULL                                                              | 403000 | NULL         |
+|      17 | NULL | sql/slave_worker    | NULL | Connect | NULL                                                              | insert into ZDUserOperateLog ( ... gApplicationContext@20fa23c... |     26 | 87.00 us     |
+|      16 | NULL | sql/slave_worker    | NULL | Connect | NULL                                                              | insert into ZDUserOperateLog ( ... gApplicationContext@20fa23c... |     10 | 76.00 us     |
+|      15 | NULL | sql/slave_worker    | NULL | Connect | NULL                                                              | insert into ZPCatalogRela (Con ... 966728900,0,0,0,0,null,null,0) |      5 | 28.00 us     |
+|      13 | NULL | sql/slave_sql       | NULL | Connect | NULL                                                              | NULL                                                              |      4 | NULL         |
+|      14 | NULL | sql/slave_worker    | NULL | Connect | NULL                                                              | insert into ZPCatalogRela (Con ... 968166600,0,0,0,0,null,null,0) |      1 | 34.00 us     |
+|      77 | 759  | root@localhost      | NULL | Query   | select conn_id,pid,user,db,com ... ,lock_latency from sys.session | NULL                                                              |      0 | 2.38 ms      |
+|       1 | NULL | sql/event_scheduler | NULL | Sleep   | NULL                                                              | NULL                                                              |   NULL | NULL         |
++---------+------+---------------------+------+---------+-------------------------------------------------------------------+-------------------------------------------------------------------+--------+--------------+
+8 rows in set (0.04 sec)
+
+
+
+二、SQL 和io类
+1、查看发生IO请求前5名的文件。
+mysql> select * from sys.io_global_by_file_by_bytes order by total limit 5;
++----------------------------------+------------+------------+----------+-------------+---------------+-----------+---------+-----------+
+| file                             | count_read | total_read | avg_read | count_write | total_written | avg_write | total   | write_pct |
++----------------------------------+------------+------------+----------+-------------+---------------+-----------+---------+-----------+
+| @@basedir/logs/mysql-bin.index   |          0 | 0 bytes    | 0 bytes  |           0 | 0 bytes       | 0 bytes   | 0 bytes |      0.00 |
+| @@datadir/mysql/columns_priv.MYD |          0 | 0 bytes    | 0 bytes  |           0 | 0 bytes       | 0 bytes   | 0 bytes |      0.00 |
+| @@datadir/mysql/procs_priv.MYD   |          0 | 0 bytes    | 0 bytes  |           0 | 0 bytes       | 0 bytes   | 0 bytes |      0.00 |
+| @@datadir/mysql/func.MYD         |          0 | 0 bytes    | 0 bytes  |           0 | 0 bytes       | 0 bytes   | 0 bytes |      0.00 |
+| @@datadir/mysql/event.MYD        |          0 | 0 bytes    | 0 bytes  |           0 | 0 bytes       | 0 bytes   | 0 bytes |      0.00 |
++----------------------------------+------------+------------+----------+-------------+---------------+-----------+---------+-----------+
+5 rows in set (1.04 sec)
+
+
+
+
+三、buffer pool 、内存类
+1、查看总共分配了多少内存
+mysql> select * from sys.memory_global_total;
++-----------------+
+| total_allocated |
++-----------------+
+| 142.21 MiB      |
++-----------------+
+1 row in set (0.00 sec)
+
+mysql> select * from sys.memory_global_by_current_bytes;
++--------------------------------------------------------------------------------+---------------+---------------+-------------------+------------+-------------+----------------+
+| event_name                                                                     | current_count | current_alloc | current_avg_alloc | high_count | high_alloc  | high_avg_alloc |
++--------------------------------------------------------------------------------+---------------+---------------+-------------------+------------+-------------+----------------+
+| memory/performance_schema/events_statements_history_long                       |             1 | 13.66 MiB     | 13.66 MiB         |          1 | 13.66 MiB   | 13.66 MiB      |
+| memory/performance_schema/events_statements_summary_by_digest.tokens           |             1 | 9.77 MiB      | 9.77 MiB          |          1 | 9.77 MiB    | 9.77 MiB       |
+| memory/performance_schema/events_statements_history_long.tokens                |             1 | 9.77 MiB      | 9.77 MiB          |          1 | 9.77 MiB    | 9.77 MiB       |
+| memory/performance_schema/events_statements_history_long.sqltext               |             1 | 9.77 MiB      | 9.77 MiB          |          1 | 9.77 MiB    | 9.77 MiB       |
+| memory/performance_schema/table_handles                                        |             1 | 9.06 MiB      | 9.06 MiB          |          1 | 9.06 MiB    | 9.06 MiB       |
+| memory/performance_schema/events_statements_summary_by_thread_by_event_name    |             1 | 8.67 MiB      | 8.67 MiB          |          1 | 8.67 MiB    | 8.67 MiB       |
+| memory/performance_schema/memory_summary_by_thread_by_event_name               |             1 | 5.62 MiB      | 5.62 MiB          |          1 | 5.62 MiB    | 5.62 MiB       |
+| memory/performance_schema/events_statements_summary_by_digest                  |             1 | 4.88 MiB      | 4.88 MiB          |          1 | 4.88 MiB    | 4.88 MiB       |
+| memory/performance_schema/events_statements_summary_by_account_by_event_name   |             1 | 4.33 MiB      | 4.33 MiB          |          1 | 4.33 MiB    | 4.33 MiB       |
+| memory/performance_schema/events_statements_summary_by_user_by_event_name      |             1 | 4.33 MiB      | 4.33 MiB          |          1 | 4.33 MiB    | 4.33 MiB       |
+| memory/performance_schema/events_statements_summary_by_host_by_event_name      |             1 | 4.33 MiB      | 4.33 MiB          |          1 | 4.33 MiB    | 4.33 MiB       |
+| memory/performance_schema/table_shares                                         |             1 | 4.00 MiB      | 4.00 MiB          |          1 | 4.00 MiB    | 4.00 MiB       |
+| memory/performance_schema/events_statements_current                            |             1 | 3.50 MiB      | 3.50 MiB          |          1 | 3.50 MiB    | 3.50 MiB       |
+| memory/performance_schema/events_statements_history                            |             1 | 3.50 MiB      | 3.50 MiB          |          1 | 3.50 MiB    | 3.50 MiB       |
+| memory/performance_schema/events_transactions_history_long                     |             1 | 3.28 MiB      | 3.28 MiB          |          1 | 3.28 MiB    | 3.28 MiB       |
+| memory/performance_schema/events_waits_summary_by_thread_by_event_name         |             1 | 3.23 MiB      | 3.23 MiB          |          1 | 3.23 MiB    | 3.23 MiB       |
+| memory/performance_schema/memory_summary_by_account_by_event_name              |             1 | 2.81 MiB      | 2.81 MiB          |          1 | 2.81 MiB    | 2.81 MiB       |
+| memory/performance_schema/memory_summary_by_host_by_event_name                 |             1 | 2.81 MiB      | 2.81 MiB          |          1 | 2.81 MiB    | 2.81 MiB       |
+| memory/performance_schema/memory_summary_by_user_by_event_name                 |             1 | 2.81 MiB      | 2.81 MiB          |          1 | 2.81 MiB    | 2.81 MiB       |
+| memory/performance_schema/file_instances                                       |             1 | 2.75 MiB      | 2.75 MiB          |          1 | 2.75 MiB    | 2.75 MiB       |
+| memory/performance_schema/table_io_waits_summary_by_index_usage                |             1 | 2.75 MiB      | 2.75 MiB          |          1 | 2.75 MiB    | 2.75 MiB       |
+| memory/performance_schema/events_statements_history.sqltext                    |             1 | 2.50 MiB      | 2.50 MiB          |          1 | 2.50 MiB    | 2.50 MiB       |
+| memory/performance_schema/events_statements_history.tokens                     |             1 | 2.50 MiB      | 2.50 MiB          |          1 | 2.50 MiB    | 2.50 MiB       |
+| memory/performance_schema/events_statements_current.sqltext                    |             1 | 2.50 MiB      | 2.50 MiB          |          1 | 2.50 MiB    | 2.50 MiB       |
+| memory/performance_schema/events_statements_current.tokens                     |             1 | 2.50 MiB      | 2.50 MiB          |          1 | 2.50 MiB    | 2.50 MiB       |
+| memory/performance_schema/events_waits_history_long                            |             1 | 1.68 MiB      | 1.68 MiB          |          1 | 1.68 MiB    | 1.68 MiB       |
+| memory/performance_schema/events_waits_summary_by_user_by_event_name           |             1 | 1.62 MiB      | 1.62 MiB          |          1 | 1.62 MiB    | 1.62 MiB       |
+| memory/performance_schema/events_waits_summary_by_host_by_event_name           |             1 | 1.62 MiB      | 1.62 MiB          |          1 | 1.62 MiB    | 1.62 MiB       |
+| memory/performance_schema/events_waits_summary_by_account_by_event_name        |             1 | 1.62 MiB      | 1.62 MiB          |          1 | 1.62 MiB    | 1.62 MiB       |
+| memory/performance_schema/table_lock_waits_summary_by_table                    |             1 | 1.34 MiB      | 1.34 MiB          |          1 | 1.34 MiB    | 1.34 MiB       |
+| memory/performance_schema/events_stages_summary_by_thread_by_event_name        |             1 | 1.17 MiB      | 1.17 MiB          |          1 | 1.17 MiB    | 1.17 MiB       |
+| memory/performance_schema/events_stages_history_long                           |             1 | 1015.62 KiB   | 1015.62 KiB       |          1 | 1015.62 KiB | 1015.62 KiB    |
+| memory/performance_schema/threads                                              |             1 | 928.00 KiB    | 928.00 KiB        |          1 | 928.00 KiB  | 928.00 KiB     |
+| memory/performance_schema/events_transactions_history                          |             1 | 860.00 KiB    | 860.00 KiB        |          1 | 860.00 KiB  | 860.00 KiB     |
+| memory/performance_schema/events_stages_summary_by_host_by_event_name          |             1 | 600.00 KiB    | 600.00 KiB        |          1 | 600.00 KiB  | 600.00 KiB     |
+| memory/performance_schema/events_stages_summary_by_account_by_event_name       |             1 | 600.00 KiB    | 600.00 KiB        |          1 | 600.00 KiB  | 600.00 KiB     |
+| memory/performance_schema/events_stages_summary_by_user_by_event_name          |             1 | 600.00 KiB    | 600.00 KiB        |          1 | 600.00 KiB  | 600.00 KiB     |
+| memory/performance_schema/rwlock_instances                                     |             4 | 512.00 KiB    | 128.00 KiB        |          4 | 512.00 KiB  | 128.00 KiB     |
+| memory/performance_schema/events_statements_summary_by_program                 |             1 | 448.00 KiB    | 448.00 KiB        |          1 | 448.00 KiB  | 448.00 KiB     |
+| memory/performance_schema/events_waits_history                                 |             1 | 440.00 KiB    | 440.00 KiB        |          1 | 440.00 KiB  | 440.00 KiB     |
+| memory/performance_schema/events_stages_history                                |             1 | 260.00 KiB    | 260.00 KiB        |          1 | 260.00 KiB  | 260.00 KiB     |
+| memory/performance_schema/mutex_instances                                      |             2 | 256.00 KiB    | 128.00 KiB        |          2 | 256.00 KiB  | 128.00 KiB     |
+| memory/performance_schema/file_handle                                          |             1 | 256.00 KiB    | 256.00 KiB        |          1 | 256.00 KiB  | 256.00 KiB     |
+| memory/performance_schema/session_connect_attrs                                |             1 | 128.00 KiB    | 128.00 KiB        |          1 | 128.00 KiB  | 128.00 KiB     |
+| memory/performance_schema/accounts                                             |             1 | 88.00 KiB     | 88.00 KiB         |          1 | 88.00 KiB   | 88.00 KiB      |
+| memory/performance_schema/socket_instances                                     |             1 | 80.00 KiB     | 80.00 KiB         |          1 | 80.00 KiB   | 80.00 KiB      |
+| memory/performance_schema/users                                                |             1 | 80.00 KiB     | 80.00 KiB         |          1 | 80.00 KiB   | 80.00 KiB      |
+| memory/performance_schema/hosts                                                |             1 | 72.00 KiB     | 72.00 KiB         |          1 | 72.00 KiB   | 72.00 KiB      |
+| memory/performance_schema/memory_class                                         |             1 | 60.00 KiB     | 60.00 KiB         |          1 | 60.00 KiB   | 60.00 KiB      |
+| memory/performance_schema/setup_objects                                        |             1 | 56.00 KiB     | 56.00 KiB         |          1 | 56.00 KiB   | 56.00 KiB      |
+| memory/performance_schema/mutex_class                                          |             1 | 50.00 KiB     | 50.00 KiB         |          1 | 50.00 KiB   | 50.00 KiB      |
+| memory/performance_schema/setup_actors                                         |             1 | 40.00 KiB     | 40.00 KiB         |          1 | 40.00 KiB   | 40.00 KiB      |
+| memory/performance_schema/stage_class                                          |             1 | 37.50 KiB     | 37.50 KiB         |          1 | 37.50 KiB   | 37.50 KiB      |
+| memory/performance_schema/statement_class                                      |             1 | 36.19 KiB     | 36.19 KiB         |          1 | 36.19 KiB   | 36.19 KiB      |
+| memory/performance_schema/events_statements_summary_global_by_event_name       |             1 | 34.68 KiB     | 34.68 KiB         |          1 | 34.68 KiB   | 34.68 KiB      |
+| memory/performance_schema/file_class                                           |             1 | 25.00 KiB     | 25.00 KiB         |          1 | 25.00 KiB   | 25.00 KiB      |
+| memory/performance_schema/memory_summary_global_by_event_name                  |             1 | 22.50 KiB     | 22.50 KiB         |          1 | 22.50 KiB   | 22.50 KiB      |
+| memory/performance_schema/events_transactions_summary_by_thread_by_event_name  |             1 | 22.00 KiB     | 22.00 KiB         |          1 | 22.00 KiB   | 22.00 KiB      |
+| memory/performance_schema/cond_class                                           |             1 | 20.00 KiB     | 20.00 KiB         |          1 | 20.00 KiB   | 20.00 KiB      |
+| memory/performance_schema/cond_instances                                       |             1 | 16.00 KiB     | 16.00 KiB         |          1 | 16.00 KiB   | 16.00 KiB      |
+| memory/performance_schema/events_transactions_summary_by_user_by_event_name    |             1 | 11.00 KiB     | 11.00 KiB         |          1 | 11.00 KiB   | 11.00 KiB      |
+| memory/performance_schema/events_transactions_summary_by_host_by_event_name    |             1 | 11.00 KiB     | 11.00 KiB         |          1 | 11.00 KiB   | 11.00 KiB      |
+| memory/performance_schema/events_transactions_summary_by_account_by_event_name |             1 | 11.00 KiB     | 11.00 KiB         |          1 | 11.00 KiB   | 11.00 KiB      |
+| memory/performance_schema/rwlock_class                                         |             1 | 10.00 KiB     | 10.00 KiB         |          1 | 10.00 KiB   | 10.00 KiB      |
+| memory/performance_schema/thread_class                                         |             1 | 9.38 KiB      | 9.38 KiB          |          1 | 9.38 KiB    | 9.38 KiB       |
+| memory/performance_schema/events_stages_summary_global_by_event_name           |             1 | 4.69 KiB      | 4.69 KiB          |          1 | 4.69 KiB    | 4.69 KiB       |
+| memory/performance_schema/socket_class                                         |             1 | 3.12 KiB      | 3.12 KiB          |          1 | 3.12 KiB    | 3.12 KiB       |
+| memory/performance_schema/scalable_buffer                                      |            20 | 2.11 KiB      | 108 bytes         |         20 | 2.11 KiB    | 108 bytes      |
++--------------------------------------------------------------------------------+---------------+---------------+-------------------+------------+-------------+----------------+
+68 rows in set (0.00 sec)
+
+
+
+
+2、每个库（database）占用多少buffer pool
+mysql> select * from sys.innodb_buffer_stats_by_schema order by allocated desc;
++---------------+-----------+------------+--------+--------------+-----------+-------------+
+| object_schema | allocated | data       | pages  | pages_hashed | pages_old | rows_cached |
++---------------+-----------+------------+--------+--------------+-----------+-------------+
+| xmtdb         | 87.95 MiB | 71.16 MiB  |   5629 |            0 |      5629 |       71687 |
+| InnoDB System | 61.23 MiB | 56.02 MiB  |   3919 |           55 |        91 |       59771 |
+| wechat        | 48.00 KiB | 318 bytes  |      3 |            1 |         2 |           2 |
+| hkdb2         | 47.14 MiB | 42.10 MiB  |   3017 |          935 |       325 |       34037 |
+| zmt_db        | 24.41 MiB | 19.27 MiB  |   1562 |            0 |       456 |       16795 |
+| xmt_db        | 2.92 GiB  | 2.31 GiB   | 191328 |        27166 |     71310 |      313675 |
+| sys           | 16.00 KiB | 338 bytes  |      1 |            0 |         1 |           6 |
+| mysql         | 1.28 MiB  | 680.14 KiB |     82 |           39 |        53 |        3831 |
++---------------+-----------+------------+--------+--------------+-----------+-------------+
+8 rows in set (10.86 sec)
+
+##
+pages是指在buffer pool中的page数量；pages_old指在LUR 列表中处于后37%位置的page。
+当出现buffer page不够用时，就会征用这些page所占的空间。37%是默认位置，具体可以自定义。
+
+
+3、统计每张表具体在InnoDB中具体的情况，比如占多少页？
+注意和前面的pages的总数都是相等的，也可以借用sum（pages）运算验证一下。
+mysql> select * from sys.innodb_buffer_stats_by_table;
++---------------+----------------------------+------------+------------+--------+--------------+-----------+-------------+
+| object_schema | object_name                | allocated  | data       | pages  | pages_hashed | pages_old | rows_cached |
++---------------+----------------------------+------------+------------+--------+--------------+-----------+-------------+
+| xmt_db        | zparticle                  | 1.57 GiB   | 1.26 GiB   | 103109 |         2261 |     33548 |      537886 |
+| xmt_db        | zduseroperatelog           | 605.39 MiB | 395.10 MiB |  38745 |        20948 |      7824 |      205589 |
+| xmt_db        | zccontent                  | 291.95 MiB | 259.19 MiB |  18685 |         1462 |     15286 |      221365 |
+| xmt_db        | zpcatalogrela              | 206.42 MiB | 181.69 MiB |  13211 |         1539 |      4215 |      570835 |
+| xmt_db        | zccontentlog               | 110.70 MiB | 100.91 MiB |   7085 |          721 |      2346 |     1186505 |
+| xmt_db        | zpmessageboardcontent      | 89.02 MiB  | 79.36 MiB  |   5697 |            0 |      5697 |      103521 |
+| xmtdb         | zduseroperatelog           | 59.80 MiB  | 46.23 MiB  |   3827 |            0 |      3827 |       11465 |
+| InnoDB System | SYS_TABLES                 | 59.77 MiB  | 54.97 MiB  |   3825 |            6 |        10 |      169063 |
+| hkdb2         | t_api_log                  | 43.02 MiB  | 38.69 MiB  |   2753 |          752 |       289 |       52606 |
+| zmt_db        | zpcontent                  | 17.95 MiB  | 14.18 MiB  |   1149 |            0 |       310 |        7414 |
+| xmt_db        | zduserlog                  | 17.62 MiB  | 11.93 MiB  |   1128 |          204 |       340 |       74769 |
+
+
+
+4、查询每个连接分配了多少内存
+利用session表和memory_by_thread_by_current_bytes分配表进行关联查询。
+mysql> SELECT
+    ->  b.USER,
+    ->  current_count_used,
+    ->  current_allocated,
+    ->  current_avg_alloc,
+    ->  current_max_alloc,
+    ->  total_allocated,
+    ->  current_statement 
+    -> FROM
+    ->  sys.memory_by_thread_by_current_bytes a,
+    ->  sys.SESSION b 
+    -> WHERE
+    ->  a.thread_id = b.thd_id;
++---------------------+--------------------+-------------------+-------------------+-------------------+-----------------+-------------------------------------------------------------------+
+| user                | current_count_used | current_allocated | current_avg_alloc | current_max_alloc | total_allocated | current_statement                                                 |
++---------------------+--------------------+-------------------+-------------------+-------------------+-----------------+-------------------------------------------------------------------+
+| sql/slave_io        |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | NULL                                                              |
+| sql/slave_worker    |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | NULL                                                              |
+| sql/slave_worker    |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | NULL                                                              |
+| root@localhost      |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | SELECT  b.USER,  current_count ...  WHERE  a.thread_id = b.thd_id |
+| sql/slave_worker    |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | NULL                                                              |
+| sql/slave_worker    |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | NULL                                                              |
+| sql/slave_sql       |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | NULL                                                              |
+| sql/event_scheduler |                  0 | 0 bytes           | 0 bytes           | 0 bytes           | 0 bytes         | NULL                                                              |
++---------------------+--------------------+-------------------+-------------------+-------------------+-----------------+-------------------------------------------------------------------+
+8 rows in set (0.07 sec)
+
+
+
+
+四、字段、索引、锁 类
+1、查看表自增字段最大值和当前值，有时候做数据增长的监控，可以作为参考。
+mysql> select * from sys.schema_auto_increment_columns;
++--------------+-------------------+-------------+-----------+------------------+-----------+-------------+---------------------+----------------+----------------------+
+| table_schema | table_name        | column_name | data_type | column_type      | is_signed | is_unsigned | max_value           | auto_increment | auto_increment_ratio |
++--------------+-------------------+-------------+-----------+------------------+-----------+-------------+---------------------+----------------+----------------------+
+| xmt_db       | wx_attachment     | aid         | int       | int(10) unsigned |         0 |           1 |          4294967295 |         382183 |               0.0001 |
+| xmtdb        | wx_attachment     | aid         | int       | int(10) unsigned |         0 |           1 |          4294967295 |         382183 |               0.0001 |
+| wechat       | content           | id          | int       | int(11)          |         1 |           0 |          2147483647 |              1 |               0.0000 |
+| wechat       | applicationcache  | id          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |              5 |               0.0000 |
+| wechat       | users             | id          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |              1 |               0.0000 |
+| xmt_db       | watermark         | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |              3 |               0.0000 |
+| xmt_db       | zacatalog         | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |           1391 |               0.0000 |
+| xmt_db       | zacatalogcontent  | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |           5053 |               0.0000 |
+| xmt_db       | zcmember          | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |         448982 |               0.0000 |
+| xmt_db       | zpstudiorecommend | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |             32 |               0.0000 |
+| xmtdb        | watermark         | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |              3 |               0.0000 |
+| xmtdb        | zacatalog         | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |            498 |               0.0000 |
+| xmtdb        | zacatalogcontent  | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |           1584 |               0.0000 |
+| xmtdb        | zcmember          | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |         436027 |               0.0000 |
+| xmtdb        | zpstudiorecommend | ID          | bigint    | bigint(20)       |         1 |           0 | 9223372036854775807 |             27 |               0.0000 |
++--------------+-------------------+-------------+-----------+------------------+-----------+-------------+---------------------+----------------+----------------------+
+15 rows in set (0.14 sec)
+
+
+2、MySQL索引使用情况统计
+mysql> select * from sys.schema_index_statistics order by rows_selected desc;
++--------------+------------------+---------------+---------------+----------------+---------------+----------------+--------------+----------------+--------------+----------------+
+| table_schema | table_name       | index_name    | rows_selected | select_latency | rows_inserted | insert_latency | rows_updated | update_latency | rows_deleted | delete_latency |
++--------------+------------------+---------------+---------------+----------------+---------------+----------------+--------------+----------------+--------------+----------------+
+| xmt_db       | zacatalogcontent | PRIMARY       |        350578 | 209.28 ms      |             0 | 0 ps           |           70 | 1.82 s         |            4 | 0 ps           |
+| xmt_db       | zpcatalogrela    | idx_OrderFlag |        208042 | 365.03 ms      |             0 | 0 ps           |            0 | 0 ps           |            0 | 0 ps           |
+| xmt_db       | zdmaxno          | PRIMARY       |         84596 | 24.63 s        |             0 | 0 ps           |        84596 | 32.39 m        |            0 | 0 ps           |
+| xmt_db       | zpcontentstat    | PRIMARY       |         21723 | 1.51 s         |             0 | 0 ps           |        21723 | 23.72 s        |            0 | 0 ps           |
+| xmt_db       | zpappstat        | PRIMARY       |         13541 | 771.86 ms      |             0 | 0 ps           |        13541 | 1.28 m         |            0 | 0 ps           |
+| xmt_db       | zpnavigate       | PRIMARY       |          4536 | 19.18 ms       |             0 | 0 ps           |        12749 | 1.91 s         |           32 | 0 ps           |
+| xmt_db       | zpcatalogrela    | PRIMARY       |          4062 | 77.28 ms       |             0 | 0 ps           |         1170 | 3.22 s         |         2212 | 0 ps           |
+| xmt_db       | zpuserdeviceinfo | PRIMARY       |          2646 | 120.70 ms      |             0 | 0 ps           |         2646 | 6.16 s         |            0 | 0 ps           |
+| xmt_db       | zccontent        | PRIMARY       |          1322 | 80.37 ms       |             0 | 0 ps           |          246 | 3.19 s         |         1075 | 0 ps           |
+| xmt_db       | zccontentcollect | PRIMARY       |          1078 | 9.94 ms        |             0 | 0 ps           |            0 | 0 ps           |            0 | 0 ps           |
++--------------+------------------+---------------+---------------+----------------+---------------+----------------+--------------+----------------+--------------+----------------+
+10 rows in set (0.02 sec)
+
+3、MySQL中有哪些冗余索引和无用索引
+若库中展示没有冗余索引，则没有数据；当有联合索引idx_abc(a,b,c)和idx_a(a)，那么idx_a就算冗余索引了。
+mysql> select * from sys.schema_redundant_indexes;
++--------------+------------+----------------------+-------------------------+----------------------------+---------------------+----------------------------+---------------------------+----------------+-------------------------------------------------------------+
+| table_schema | table_name | redundant_index_name | redundant_index_columns | redundant_index_non_unique | dominant_index_name | dominant_index_columns     | dominant_index_non_unique | subpart_exists | sql_drop_index                                              |
++--------------+------------+----------------------+-------------------------+----------------------------+---------------------+----------------------------+---------------------------+----------------+-------------------------------------------------------------+
+| xmtdb        | bzccontent | idx_article1         | CatalogID,Status        |                          1 | idx_article12       | CatalogID,Status,OrderFlag |                         1 |              0 | ALTER TABLE `xmtdb`.`bzccontent` DROP INDEX `idx_article1`  |
+| xmtdb        | zccontent  | idx_article1         | CatalogID,Status        |                          1 | idx_article12       | CatalogID,Status,OrderFlag |                         1 |              0 | ALTER TABLE `xmtdb`.`zccontent` DROP INDEX `idx_article1`   |
+| xmtdb        | zccontent  | idx_article13        | ID,TopFlag,OrderFlag    |                          1 | PRIMARY             | ID                         |                         0 |              0 | ALTER TABLE `xmtdb`.`zccontent` DROP INDEX `idx_article13`  |
+| xmt_db       | bzccontent | idx_article1         | CatalogID,Status        |                          1 | idx_article12       | CatalogID,Status,OrderFlag |                         1 |              0 | ALTER TABLE `xmt_db`.`bzccontent` DROP INDEX `idx_article1` |
+| xmt_db       | zccontent  | idx_article1         | CatalogID,Status        |                          1 | idx_article12       | CatalogID,Status,OrderFlag |                         1 |              0 | ALTER TABLE `xmt_db`.`zccontent` DROP INDEX `idx_article1`  |
+| xmt_db       | zccontent  | idx_article13        | ID,TopFlag,OrderFlag    |                          1 | PRIMARY             | ID                         |                         0 |              0 | ALTER TABLE `xmt_db`.`zccontent` DROP INDEX `idx_article13` |
++--------------+------------+----------------------+-------------------------+----------------------------+---------------------+----------------------------+---------------------------+----------------+-------------------------------------------------------------+
+6 rows in set (1.06 sec)
+
+
+4、查看INNODB 锁信息
+在未来的版本将被移除，可以采用其他方式
+mysql> select * from sys.innodb_lock_waits;
+Empty set, 3 warnings (0.01 sec)
+
+5、查看库级别的锁信息，这个需要先打开MDL锁的监控：
+--打开MDL锁监控
+update performance_schema.setup_instruments set enabled='YES',TIMED='YES' where name='wait/lock/metadata/sql/mdl';
+select * from sys.schema_table_lock_waits;
+
+
+
+五、线程类
+1、MySQL内部有多个线程在运行，线程类型及数量
+mysql> select user,count(*) from sys.`processlist` group by user;
++---------------------------------+----------+
+| user                            | count(*) |
++---------------------------------+----------+
+| innodb/buf_dump_thread          |        1 |
+| innodb/dict_stats_thread        |        1 |
+| innodb/io_ibuf_thread           |        1 |
+| innodb/io_log_thread            |        1 |
+| innodb/io_read_thread           |        2 |
+| innodb/io_write_thread          |        2 |
+| innodb/page_cleaner_thread      |        1 |
+| innodb/srv_error_monitor_thread |        1 |
+| innodb/srv_lock_timeout_thread  |        1 |
+| innodb/srv_master_thread        |        1 |
+| innodb/srv_monitor_thread       |        1 |
+| innodb/srv_purge_thread         |        1 |
+| innodb/srv_worker_thread        |        3 |
+| root@localhost                  |        1 |
+| sql/compress_gtid_table         |        1 |
+| sql/event_scheduler             |        1 |
+| sql/main                        |        1 |
+| sql/signal_handler              |        1 |
+| sql/slave_io                    |        1 |
+| sql/slave_sql                   |        1 |
+| sql/slave_worker                |        4 |
+| sql/thread_timer_notifier       |        1 |
++---------------------------------+----------+
+22 rows in set (0.03 sec)
+
+
+
+六、主键自增 类
+查看MySQL自增id的使用情况
+mysql> SELECT
+    ->  table_schema,
+    ->  table_name,
+    ->  ENGINE,
+    ->  Auto_increment 
+    -> FROM
+    ->  information_schema.TABLES 
+    -> WHERE
+    ->  TABLE_SCHEMA NOT IN ( "INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "SYS" );
++------------------+-----------------------------------+--------+----------------+
+| table_schema     | table_name                        | ENGINE | Auto_increment |
++------------------+-----------------------------------+--------+----------------+
+| app_build_client | app_column                        | InnoDB |           NULL |
+| app_build_client | app_config                        | InnoDB |           NULL |
+| app_build_client | app_push_msg                      | InnoDB |           NULL |
+| app_build_client | app_splash                        | InnoDB |           NULL |
+| app_build_client | app_tab                           | InnoDB |           NULL |
+| app_build_client | app_version                       | InnoDB |           NULL |
+| app_build_client | build_conf                        | InnoDB |           NULL |
+| app_build_client | build_config                      | InnoDB |           NULL |
+| app_build_client | file_storage                      | InnoDB |           NULL |
+| app_build_client | storage_file                      | InnoDB |           NULL |
+| app_build_client | sys_role                          | InnoDB |           NULL |
+
+
+
+
