@@ -1,0 +1,31 @@
+要在 MySQL 5.7获取 information_schema 获取到更准确的实时信息，需要做两件事：
+1.禁用 innodb_stats_persistent
+2.启用 innodb_stats_on_metadata
+
+这两者都会带来严重的代价。
+禁用持久性统计信息意味着每次服务器启动时 InnoDB 都必须刷新统计信息，这代价很大，并且可能会在重新启动之间产生不稳定的查询计划。那有没有更好的办法呢？事实证明有。
+
+可以通过 INNODB_SYS_TABLESPACES 查看表空间信息表以查看实际文件大小。与 index_length 和 data_length 不同， INNODB_SYS_TABLESPACES 实时更新，无需特殊配置：
+mysql> select * from INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES where name='db1/zpwmaterial' \G
+*************************** 1. row ***************************
+         SPACE: 473
+          NAME: db1/zpwmaterial
+          FLAG: 33
+   FILE_FORMAT: Barracuda
+    ROW_FORMAT: Dynamic
+     PAGE_SIZE: 16384
+ ZIP_PAGE_SIZE: 0
+    SPACE_TYPE: Single
+ FS_BLOCK_SIZE: 4096
+     FILE_SIZE: 98304
+ALLOCATED_SIZE: 98304
+1 row in set (0.00 sec)
+
+
+使用这个表的好处是，它还处理新功能 “InnoDB 页压缩”，正确显示了 file_size （磁盘上的逻辑文件大小）和 allocated_size（为此文件分配的空间，并且可以显着缩小）之间的区别。
+如果您使用旧的 InnoDB 压缩（InnoDB 表压缩），您将看到 data_length 和 index_length 中显示的压缩数据大小作为结果。例如， avg_row_length 将远低于您的预期。
+
+如果在 MySQL 5.7 中使用新的 InnoDB 压缩（InnoDB 页压缩），您将看到与文件大小相对应的值，而不是如 information_schema 中所示的分配大小。
+
+查看 INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES 以获取 InnoDB 表的实际文件大小值。
+
