@@ -1,0 +1,254 @@
+使用innobackupex完整备份中恢复单表
+
+MySQL目前采取的备份策略都是xtrabackup全备+binlog备份，如果当某天某张表意外的删除，那么如何快速从xtrabackup全备中恢复单表呢？从MySQL 5.6版本开始，支持可传输表空间（Transportable Tablespace），那么利用这个功能就可以实现单表的恢复，同样利用这个功能还可以把innodb表移动到另外一台服务器上。
+
+下面进行从xtrabackup全备恢复单表的测试。
+
+环境介绍
+数据库版本：MySQL-5.7.22
+
+前期准备：
+1. 数据库要求： 
+innodb_file_per_table=1
+
+当导入表空间时，目的库的页大小要和源库的页大小相匹配。
+DISCARD TABLESPACE 不支持分区表。如果你在分区表上使用命令 ALTER TABLE ... DISCARD TABLESPACE 你会看到如下错误: ERROR 1031 (HY000): 表引擎没有这个选项。
+DISCARD TABLESPACE 命令不支持有父子关系的表。如果 FOREIGN_KEY_CHECKS 被设置成1. 在使用命令之前我们可以将这一参数设置为0. FOREIGN_KEY_CHECKS=0.
+ALTER TABLE ... IMPORT TABLESPACE 命令在导入表时不会检查主外键关系。
+
+
+2.安装工具mysql-utilities：
+yum install mysql-utilities -y
+或者
+wget -c https://downloads.mysql.com/archives/get/file/mysql-utilities-1.6.5.tar.gz
+tar -xvf mysql-utilities-1.6.5.tar.gz
+cd mysql-utilities-1.5.3
+python ./setup.py build
+python ./setup.py install
+
+
+使用innobackupex进行全备
+[root@localhost db1]# innobackupex --defaults-file=/etc/my.cnf --user=root --password='123456' /home
+[root@localhost db1]# cd /home/2019-09-17_12-57-37/
+[root@localhost 2019-09-17_12-57-37]# ll
+总用量 77920
+-rw-r----- 1 root root      426 9月  17 12:57 backup-my.cnf
+drwxr-x--- 2 root root    24576 9月  17 13:32 db1
+drwxr-x--- 2 root root       20 9月  17 12:57 db2
+-rw-r----- 1 root root      742 9月  17 12:57 ib_buffer_pool
+-rw-r----- 1 root root 79691776 9月  17 12:57 ibdata1
+drwxr-x--- 2 root root     4096 9月  17 12:57 lepus
+drwxr-x--- 2 root root     4096 9月  17 12:57 mysql
+drwxr-x--- 2 root root     8192 9月  17 12:57 performance_schema
+drwxr-x--- 2 root root     8192 9月  17 12:57 sys
+-rw-r----- 1 root root      119 9月  17 12:57 xtrabackup_checkpoints
+-rw-r----- 1 root root      447 9月  17 12:57 xtrabackup_info
+-rw-r----- 1 root root     2560 9月  17 12:57 xtrabackup_logfile
+[root@localhost 2019-09-17_12-57-37]# cd db1/
+
+
+查看原表中的数据：
+mysql> select * from zpvideo limit 5;
++-------+-----------+---------+-----------+--------+------+----------+------------------+-----------+----------+--------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+---------------------+---------------+
+| ID    | ContentID | VideoID | VideoName | Format | Size | Duration | TranscodingState | DataState | PlayTime | CoverUrl                                                                       | VideoUrl                                                                                                                                | AddTime             | ExternalLinks |
++-------+-----------+---------+-----------+--------+------+----------+------------------+-----------+----------+--------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+---------------------+---------------+
+| 14301 |         0 | NULL    | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | ["https://www.hubpd.com/upload/resources/image/2019/02/28/125196_500x500.png"] | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fb72c7b25285890786240613658/HLuPB7WQG54A.mp4","width":"default"}] | 2019-02-28 15:35:01 | NULL          |
+| 14302 |         0 | NULL    | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | ["https://www.hubpd.com/upload/resources/image/2019/02/28/125195_500x500.png"] | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fb723fad5285890786240612762/Z1k1dv2domIA.mp4","width":"default"}] | 2019-02-28 15:35:01 | NULL          |
+| 14303 |         0 | NULL    | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | ["https://www.hubpd.com/upload/resources/image/2019/02/28/125194_500x500.png"] | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fbce63125285890786240665822/mKTEnNUKIbcA.mp4","width":"default"}] | 2019-02-28 15:35:01 | NULL          |
+| 14312 |         0 |         | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | NULL                                                                           | [{"url":"http://1252018592.vod2.myqcloud.com/8bab076avodtransgzp1252018592/556da9505285890786153409092/v.f30.mp4","width":"default"}]   | 2019-02-28 16:23:02 | Y             |
+| 14314 |         0 |         | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | NULL                                                                           | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fb72c7b25285890786240613658/HLuPB7WQG54A.mp4","width":"default"}] | 2019-02-28 16:36:38 | Y             |
++-------+-----------+---------+-----------+--------+------+----------+------------------+-----------+----------+--------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+---------------------+---------------+
+5 rows in set (0.00 sec)
+
+#drop掉这个表
+mysql> drop table zpvideo;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> select * from zpvideo limit 5;
+ERROR 1146 (42S02): Table 'db1.zpvideo' doesn't exist
+
+##切到备份目录
+[root@localhost db1]# cd /home/2019-09-17_12-57-37/
+[root@localhost 2019-09-17_12-57-37]# ll
+总用量 77920
+-rw-r----- 1 root root      426 9月  17 12:57 backup-my.cnf
+drwxr-x--- 2 root root    24576 9月  17 13:12 db1
+drwxr-x--- 2 root root       20 9月  17 12:57 db2
+-rw-r----- 1 root root      742 9月  17 12:57 ib_buffer_pool
+-rw-r----- 1 root root 79691776 9月  17 12:57 ibdata1
+drwxr-x--- 2 root root     4096 9月  17 12:57 lepus
+drwxr-x--- 2 root root     4096 9月  17 12:57 mysql
+drwxr-x--- 2 root root     8192 9月  17 12:57 performance_schema
+drwxr-x--- 2 root root     8192 9月  17 12:57 sys
+-rw-r----- 1 root root      119 9月  17 12:57 xtrabackup_checkpoints
+-rw-r----- 1 root root      447 9月  17 12:57 xtrabackup_info
+-rw-r----- 1 root root     2560 9月  17 12:57 xtrabackup_logfile
+[root@localhost 2019-09-17_12-57-37]# cd db1/
+
+
+mysqlfrm相关参数介绍：
+--basedir ：如 --basedir=/usr/local/percona-5.6.21
+--server ： 如 --server=user:password@192.168.1.100:3306
+--diagnostic ： 开启按字节模式来恢复frm结构
+--user ：启动MySQL用户，通常为mysql
+
+[root@localhost db1]# mysqlfrm --diagnostic zpvideo.frm 
+# WARNING: Cannot generate character set or collation names without the --server option.
+# CAUTION: The diagnostic mode is a best-effort parse of the .frm file. As such, it may not identify all of the components of the table correctly. This is especially true for damaged files. It will also not read the default values for the columns and the resulting statement may not be syntactically correct.
+# Reading .frm file for zpvideo.frm:
+# The .frm file is a TABLE.
+# CREATE TABLE Statement:
+
+CREATE TABLE `zpvideo` (
+  `ID` bigint(20) NOT NULL, 
+  `ContentID` bigint(20) DEFAULT NULL, 
+  `VideoID` varchar(60) DEFAULT NULL, 
+  `VideoName` varchar(900) DEFAULT NULL, 
+  `Format` varchar(150) DEFAULT NULL, 
+  `Size` varchar(150) DEFAULT NULL, 
+  `Duration` varchar(150) DEFAULT NULL, 
+  `TranscodingState` bigint(20) DEFAULT NULL, 
+  `DataState` bigint(20) DEFAULT NULL, 
+  `PlayTime` varchar(150) DEFAULT NULL, 
+  `CoverUrl` varchar(600) DEFAULT NULL, 
+  `VideoUrl` varchar(7500) DEFAULT NULL, 
+  `AddTime` datetime DEFAULT NULL, 
+  `ExternalLinks` varchar(3) DEFAULT NULL, 
+PRIMARY KEY `PRIMARY` (`ID`) USING BTREE
+) ENGINE=InnoDB;
+
+#...done.
+
+###mysql中创建表
+mysql> CREATE TABLE `zpvideo` (
+    ->   `ID` bigint(20) NOT NULL, 
+    ->   `ContentID` bigint(20) DEFAULT NULL, 
+    ->   `VideoID` varchar(60) DEFAULT NULL, 
+    ->   `VideoName` varchar(900) DEFAULT NULL, 
+    ->   `Format` varchar(150) DEFAULT NULL, 
+    ->   `Size` varchar(150) DEFAULT NULL, 
+    ->   `Duration` varchar(150) DEFAULT NULL, 
+    ->   `TranscodingState` bigint(20) DEFAULT NULL, 
+    ->   `DataState` bigint(20) DEFAULT NULL, 
+    ->   `PlayTime` varchar(150) DEFAULT NULL, 
+    ->   `CoverUrl` varchar(600) DEFAULT NULL, 
+    ->   `VideoUrl` varchar(7500) DEFAULT NULL, 
+    ->   `AddTime` datetime DEFAULT NULL, 
+    ->   `ExternalLinks` varchar(3) DEFAULT NULL, 
+    -> PRIMARY KEY `PRIMARY` (`ID`) USING BTREE
+    -> ) ENGINE=InnoDB;
+Query OK, 0 rows affected (0.01 sec)
+
+##新创建的表加写锁
+mysql> lock tables sbtest2 write;
+Query OK, 0 rows affected (0.00 sec)
+
+##这时候查询是个空表 正常
+mysql> select * from zpvideo limit 5;
+Empty set (0.00 sec)
+
+
+[root@localhost db1]# mysqlfrm --basedir=/usr zpvideo.frm --user=root --port=3307
+# Spawning server with --user=root.
+# Starting the spawned server on port 3307 ... done.
+# Reading .frm files
+#
+# Reading the zpvideo.frm file.
+#
+# CREATE statement for zpvideo.frm:
+#
+
+CREATE TABLE `zpvideo` (
+  `ID` bigint(20) NOT NULL,
+  `ContentID` bigint(20) DEFAULT NULL,
+  `VideoID` varchar(20) DEFAULT NULL,
+  `VideoName` varchar(300) DEFAULT NULL,
+  `Format` varchar(50) DEFAULT NULL,
+  `Size` varchar(50) DEFAULT NULL,
+  `Duration` varchar(50) DEFAULT NULL,
+  `TranscodingState` bigint(20) DEFAULT NULL,
+  `DataState` bigint(20) DEFAULT NULL,
+  `PlayTime` varchar(50) DEFAULT NULL,
+  `CoverUrl` varchar(200) DEFAULT NULL,
+  `VideoUrl` varchar(2500) DEFAULT NULL,
+  `AddTime` datetime DEFAULT NULL,
+  `ExternalLinks` varchar(1) DEFAULT NULL,
+  PRIMARY KEY (`ID`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+#...done.
+
+
+[root@localhost db1]# mysqlfrm --server=root:123456@127.0.0.1:3306 zpvideo.frm --user=root --port=3307
+WARNING: Using a password on the command line interface can be insecure.
+# Source on 127.0.0.1: ... connected.
+# Spawning server with --user=root.
+# Starting the spawned server on port 3307 ... done.
+# Reading .frm files
+#
+# Reading the zpvideo.frm file.
+#
+# CREATE statement for zpvideo.frm:
+#
+
+CREATE TABLE `zpvideo` (
+  `ID` bigint(20) NOT NULL,
+  `ContentID` bigint(20) DEFAULT NULL,
+  `VideoID` varchar(20) DEFAULT NULL,
+  `VideoName` varchar(300) DEFAULT NULL,
+  `Format` varchar(50) DEFAULT NULL,
+  `Size` varchar(50) DEFAULT NULL,
+  `Duration` varchar(50) DEFAULT NULL,
+  `TranscodingState` bigint(20) DEFAULT NULL,
+  `DataState` bigint(20) DEFAULT NULL,
+  `PlayTime` varchar(50) DEFAULT NULL,
+  `CoverUrl` varchar(200) DEFAULT NULL,
+  `VideoUrl` varchar(2500) DEFAULT NULL,
+  `AddTime` datetime DEFAULT NULL,
+  `ExternalLinks` varchar(1) DEFAULT NULL,
+  PRIMARY KEY (`ID`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+#...done.
+[root@localhost db1]# 
+
+
+
+##丢弃表空间
+mysql> alter table zpvideo discard tablespace;
+Query OK, 0 rows affected (0.00 sec)
+
+
+从备份中拷贝ibd文件，并且修改权限
+[root@localhost db1]# cp /home/2019-09-17_12-57-37/db1/zpvideo.ibd .
+[root@localhost db1]# chown mysql.mysql ./zpvideo.ibd 
+
+
+##不需要重启mysql进行验证
+mysql> select * from zpvideo limit 5;  
+ERROR 1814 (HY000): Tablespace has been discarded for table 'zpvideo'
+mysql> alter table zpvideo import tablespace;
+Query OK, 0 rows affected, 1 warning (0.07 sec)
+
+mysql> select * from zpvideo limit 5;
++-------+-----------+---------+-----------+--------+------+----------+------------------+-----------+----------+--------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+---------------------+---------------+
+| ID    | ContentID | VideoID | VideoName | Format | Size | Duration | TranscodingState | DataState | PlayTime | CoverUrl                                                                       | VideoUrl                                                                                                                                | AddTime             | ExternalLinks |
++-------+-----------+---------+-----------+--------+------+----------+------------------+-----------+----------+--------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+---------------------+---------------+
+| 14301 |         0 | NULL    | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | ["https://www.hubpd.com/upload/resources/image/2019/02/28/125196_500x500.png"] | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fb72c7b25285890786240613658/HLuPB7WQG54A.mp4","width":"default"}] | 2019-02-28 15:35:01 | NULL          |
+| 14302 |         0 | NULL    | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | ["https://www.hubpd.com/upload/resources/image/2019/02/28/125195_500x500.png"] | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fb723fad5285890786240612762/Z1k1dv2domIA.mp4","width":"default"}] | 2019-02-28 15:35:01 | NULL          |
+| 14303 |         0 | NULL    | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | ["https://www.hubpd.com/upload/resources/image/2019/02/28/125194_500x500.png"] | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fbce63125285890786240665822/mKTEnNUKIbcA.mp4","width":"default"}] | 2019-02-28 15:35:01 | NULL          |
+| 14312 |         0 |         | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | NULL                                                                           | [{"url":"http://1252018592.vod2.myqcloud.com/8bab076avodtransgzp1252018592/556da9505285890786153409092/v.f30.mp4","width":"default"}]   | 2019-02-28 16:23:02 | Y             |
+| 14314 |         0 |         | NULL      | NULL   | NULL | NULL     |                0 |         0 | NULL     | NULL                                                                           | [{"url":"http://1252018592.vod2.myqcloud.com/d78364c2vodgzp1252018592/fb72c7b25285890786240613658/HLuPB7WQG54A.mp4","width":"default"}] | 2019-02-28 16:36:38 | Y             |
++-------+-----------+---------+-----------+--------+------+----------+------------------+-----------+----------+--------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+---------------------+---------------+
+5 rows in set (0.00 sec)
+
+
+恢复成功
+
+最后解锁：
+mysql> unlock tables;
+Query OK, 0 rows affected (0.00 sec)
+
+
+
+同理备份单表，也是如此恢复
