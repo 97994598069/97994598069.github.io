@@ -196,4 +196,16 @@ mysql> show databases;
 
 成功恢复
 
-
+{{
+注释一下，常用的参数。
+--user=root                                         备份操作用户名，一般都是root用户  
+--password=root123                             密码
+--host=172.17.210.112                         主机ip，本地可以不加
+--parallel=4 --throttle=400                      并行个数，根据主机配置选择合适的，默认是1个，多个可以加快备份速度。
+--stream=tar                                        压缩类型，这里选择tar格式，可以加，可不加。加上文件就小一点，在备份的时候就已经打包好了。（这里是打包，不是压缩）
+/mysqlbak/innobackupex                        备份存放的目录
+2>/mysqlbak/innobackupex/bak.log         备份日志，将备份过程中的输出信息重定向到bak.log
+1>/mysqlbak/innobackupex/fullbak.tar      备份文件压缩后的名字
+给出不压缩的全备：
+./innobackupex --user=root --password=root --host=172.17.210.112 --parallel=4 --throttle=400 /mysqlbak/innobackupex 2>/mysqlbak/innobackupex/bak.log 1>/mysqlbak/innobackupex/
+}}
