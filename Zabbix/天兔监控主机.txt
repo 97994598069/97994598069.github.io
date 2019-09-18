@@ -1,0 +1,43 @@
+﻿天兔(Lepus)监控操作系统(OS)安装配置
+
+监控和被监控端都要安装和配置snmp：
+
+[root@yoon]# yum install net-snmp*
+[root@yoon]# vi /etc/snmp/snmpd.conf
+
+41行将default均改为监控服务器ip;团体名被监控机和监控机一致，示例如下：  可以使用默认的public
+com2secnotConfigUser 192.168.11.100  yoon123456
+
+62行将systemview改为all,供所有snmp访问权限 
+access notConfigGroup "" any noauth exact all none none
+85行将#注释符号去掉
+viewall included .1 80
+
+
+修改snmp级别以减少日志输出
+[root@HE1 home]# vi /etc/init.d/snmpd
+#OPTIONS="-LS0-6d-Lf /dev/null -p /var/run/snmpd.pid"
+OPTIONS="-LS 4 d -p /var/run/snmpd.pid -a"
+
+[root@yoon]# /etc/init.d/snmpd restart
+Stoppingsnmpd: [ OK ]
+Startingsnmpd: [ OK ]
+
+验证snmp服务
+[root@HE1 bin]# ps-ef | grep 'snmpd'
+root 26100 1 0 11:20 ? 00:00:00 /usr/sbin/snmpd -LS 4 d -p/var/run/snmpd.pid -a
+root 26114 25540 0 11:30 pts/0 00:00:00 grep snmpd
+
+
+监控机修改lepus配置文件添加44,45,46行内容
+[root@HE3lepus]# vi /usr/local/lepus/check_os.sh 
+在43行后添加44,45,46行内容
+mem_buffered=`/usr/bin/snmpwalk -v1 -c ${community} ${ip} UCD-SNMP-MIB::memBuffer.0 |cut -d= -f2 |awk -F ' ' '{print $2}'`
+mem_cached=`/usr/bin/snmpwalk -v1 -c ${community} ${ip} UCD-SNMP-MIB::memCached.0 |cut -d= -f2 |awk -F ' ' '{print $2}'`
+mem_usage_rate=`/usr/bin/snmpdf -v1 -c ${community} ${ip} |grep "Physical"|awk '{print $6}'`
+mem_available=$[$mem_free+$mem_buffered+$mem_cached]
+if [ -z $mem_shared ]; then
+mem_shared=0
+fi
+
+[root@HE3 lepus]#python check_os.py  ##可以后台启动python check_os.py
