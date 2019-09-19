@@ -1,0 +1,147 @@
+基于网络的内核调忧    实现大并发【充分利用计算机的资源】
+
+思考一个问题【WEB服务器为例子】
+    client 访问一次 SERVER 需要经历哪些步骤
+  
+  
+      和服务器相关的 【HTTP属于TCP协议 tcp协议是可靠协议（三次握手   窗口1协商机制 窗口确认机制 四次断开机制 ）】 
+          1.三次握手  
+
+
+  http://www.a.com/1.jpg
+client [close]								server[listen]  
+                    ----------------syn=1---->
+       [SYN_SENT]                                            [SYN_RCVD]   
+                            1.服务器可维护的syn队列长度               
+                             net.ipv4.tcp_max_syn_backlog = 102400
+                            2.如果服务器做为客户端向其他服务器请求数据的时候 也需要发起SYN请求  重试次数 
+					 net.ipv4.tcp_syn_retries  = 2   如果网络没问题
+                           <------------syn+ack=1-----------
+				    	服务器会在缓冲区中申请两个区域来存放通信数据  发送  接收   协商窗口大小
+                             3.服务器向客户端发送ACK包的重试次数   
+                               net.ipv4.tcp_synack_retries = 2      危险 半连接攻击     netstat -antpl
+			     4.放弃一个TCP链接之前重试次数
+                               net.ipv4.tcp_retries1 = 3  放弃一个TCP连接前 重试次数
+				       net.ipv4.tcp_retries2 = 5  放弃一个激活的连接 重试次数
+              		     5.服务器为每个连接分配的发送和接收缓冲区的大小
+					最小   默认    最大
+					net.ipv4.tcp_rmem    接收缓冲区大小  32768   131072  16777216
+					net.ipv4.tcp_wmem    发送缓冲区	      8192   131072  16777216
+
+					low  pressure  hight
+					net.ipv4.tcp_mem     阈值      786432    1047576    1572864
+				当所有的连接使用的读或写的缓冲区空间。小于pressure的时候 如果再有新的连接 那么按默认分配空间。
+                                                                          大于                                           最小
+
+
+			     6.服务器【发送和接收】默认 最大 窗口大小
+				接收窗口大小
+				net.core.rmem_default	 229376			
+				net.core.rmem_max        873200
+		                发送窗口大小           
+				net.core.wmem_default    229376				
+				net.core.wmem_max        873200	
+				
+
+			------------------ack=1--------------->	
+		[ESTABLISHED]								[ESTABLISHED]
+                                      数据就可以传输了   数据包又4层到7层应用  
+					需要调7层应用的LISTEN队列长度
+					/proc/sys/net/core/somaxconn    调大  
+
+			     
+
+
+
+
+
+、				7.TCP的长连接[默认是开启状态]
+				net.ipv4.tcp_keepalive_time  1800    长连接时间
+				net.ipv4.tcp_keepalive_probes 3	 探针返回多少次失败后认为失效
+				net.ipv4.tcp_keepalive_intvl  30	 探针探测时间间隔	
+		四次断开  TCP是一个双工协议   断开是双向的   谁都可以先断开
+		
+		 	-----------------FIN-------------> 
+               [FIN-WAIT-1]								[CLOSE-WAIT]
+			<-------------------data------------
+			<-------------------------ACK-------		      [last-ack]	
+			<---------------------------FIN-----
+			-------------------ACK-------------->
+	         [close]								      [time-wait]
+	
+			
+			8.TW快速回收
+				net.ipv4.tcp_fin_timeout 30  TW状态在TCP队列中持续的时间
+				net.ipv4.tcp_tw_recycle	 1   启用TW快速回收机制	
+				net.ipv4.tcp_tw_reuse	1   TW复用
+
+
+
+				
+
+网卡IO优化方案
+   1.实际流量比网卡的承载量大
+   2.网卡不会掉线 [网卡坏了 网线掉了]		
+
+解决方案：bonding bond       网卡的阵列
+   思路：将多块物理网卡做成一块逻辑网卡  实现负载均衡 或 容错 
+   
+   bond模式  常用两种  0  和 1 模式 
+    0   负载均衡模式 
+   1  active-backup模式
+
+
+需要两个或以上的网卡  一个IP   
+查看硬件信息   lspci    dmidecode
+网卡是否插了网线  ethtool eth0         &&  mii-tool -v eth0
+
+
+[root@rhel6_2 ~]# uname -r     确保内核是2.6
+2.6.32-431.el6.x86_64
+
+[root@rhel6_2 ~]# grep -i "bond" /boot/config-2.6.32-431.el6.x86_64   查看当前内核是否支持该功能
+# CONFIG_PATA_WINBOND is not set
+CONFIG_BONDING=m             m代表该模块是以模块化集成的  用时自己手动加载
+CONFIG_WINBOND_840=m
+CONFIG_INPUT_WINBOND_CIR=m
+CONFIG_IR_WINBOND_CIR=m
+
+[root@rhel6_2 ~]# lsmod |grep -i "bonding"    查看是否加载了模块
+[root@rhel6_2 ~]# 
+[root@rhel6_2 ~]# modprobe bonding			手动加载模块
+[root@rhel6_2 ~]# 
+[root@rhel6_2 ~]# lsmod |grep -i "bonding"
+bonding               128245  0 
+8021q                  25349  1 bonding
+ipv6                  317340  156 bonding,ip6t_REJECT,nf_conntrack_ipv6,nf_defrag_ipv6
+
+[root@rhel6_2 ~]# rmmod bonding        手动卸载当前正在运行的模块
+[root@rhel6_2 ~]# 
+[root@rhel6_2 ~]# 
+[root@rhel6_2 ~]# lsmod |grep -i "bonding"
+
+
+
+
+
+
+硬件   你有几块网卡  网卡的速率  网卡的芯片   lspci|grep -i "ethernet"
+       是否连接了网线   mii-tool  ethtool
+
+
+性能指标
+TCP 三次握手优化  四次断开等优化
+    bond
+
+监控  网卡流量流入流出  est syn_recv tw数量
+
+DDOS  ARP攻击的应对方法
+
+
+
+
+
+
+
+
+

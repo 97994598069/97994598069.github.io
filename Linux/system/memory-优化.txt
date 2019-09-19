@@ -1,0 +1,147 @@
+memory 调优
+
+内存  32bit   2 32次幂    4G   64bit   256T
+
+物理内存 
+交换内存
+
+内存管理
+虚拟内存   物理内存   交换空间
+内核负责创建管理虚拟内存 
+内核将物理内存和交换空间按照数据块分组，这里叫做“分页” 
+内核建立内存分页跟踪表，用于跟踪内存分页的使用情况
+内核跟踪使用的内存分页，并自动将一段时间内没有访问过的内存分页复制到交换空间区域，称为“换出”
+
+当有程序需要访问已经换出的内存分页的时候，内核首先需要将物理内存中的一个分页换出，腾出空间后再从交换空间换入需要的分页，这样的缺点是：换入换出比较耗时
+
+linux 下1页是4k 
+
+程序在启动的时候申请的是虚内存，虚内存表中会将虚内存和物理内存地址做映射【CPU MMU负责工作】
+当物理内存不足 可以映射swap内存
+虚内存表中保存内的就是该进程映射到的物理内存地址
+
+
+
+cat /proc/meminfo 
+看到。其中的Cached 指用于pagecache的内存大小（diskcache-SwapCache）。随着写入缓存页，Dirty 的值会增加。
+一旦开始把缓存页写入硬盘,Writeback的值会增加直到写入结束。
+
+    Active: 在活跃使用中的缓冲或高速缓冲存储器页面文件的大小，除非非常必要否则不会被移作他用.
+    Inactive: 在不经常使用中的缓冲或高速缓冲存储器页面文件的大小，可能被用于其他途径.
+    HighTotal:
+    HighFree: 该区域不是直接映射到内核空间。内核必须使用不同的手法使用该段内存。
+    LowTotal:
+     LowFree: 低位可以达到高位内存一样的作用，而且它还能够被内核用来记录一些自己的数据结构。Among many
+              other things, it is where everything from the Slab is
+              allocated.  Bad things happen when you're out of lowmem.
+   SwapTotal: 交换空间的总大小
+    SwapFree: 未被使用交换空间的大小
+    Dirty: 等待被写回到磁盘的内存大小。
+     
+   Writeback: 正在被写回到磁盘的内存大小。
+   AnonPages：未映射页的内存大小
+   Mapped: 设备和文件等映射的大小。
+   Slab: 内核数据结构缓存的大小，可以减少申请和释放内存带来的消耗。
+   SReclaimable:可收回Slab的大小
+   SUnreclaim：不可收回Slab的大小（SUnreclaim+SReclaimable＝Slab)
+   PageTables：管理内存分页页面的索引表的大小
+   NFS_Unstable:不稳定页表的大小
+
+
+
+
+内存什么时候将数据写到硬盘  pdflush 线程  负责将内存中的数据写入硬盘
+/proc/sys/vm/nr_pdflush_threads  查看当前有多少pdflush threads
+线程的数量会跟据要写入的数量
+
+
+什么时候写入
+第一种写入   
+/proc/sys/vm/dirty_writeback_centisecs (default 500): 
+1/100秒, 多长时间唤醒pdflush将缓存页数据写入硬盘。默认5秒唤醒2个（更多个）线程。
+该刷新是日常维护刷新  不管有没有需要刷新的都会启动线程
+
+如果在5S内出现以下情况也会立马启动线程刷新
+/proc/sys/vm/dirty_background_ratio (default 10)     百分比
+or
+/proc/sys/vm/dirty_background_bytes    字节
+当有dirty_background_bytes存在的时候，dirty_background_ratio是被自动计算的
+百分值，保留过期页缓存（脏页缓存）的最大值。是以MmeFree+Cached-Mapped的值为基准的
+
+/proc/sys/vm/dirty_ratio (default 40)
+or
+/proc/sys/vm/dirty_bytes
+
+总内存的最大百分比，系统所能拥有的最大脏页缓存的总量。超过这个值，开启pdflush写入硬盘。如果cache增长快于pdflush，那么整个系统在40%的时候遇到I/O瓶颈，所有的I/O都要等待cache被pdflush进硬盘后才能重新开始。
+
+哪些数据会被刷入硬盘
+/proc/sys/vm/dirty_expire_centiseconds (default 3000)
+1/100秒。缓存页里数据的过期时间(旧数据)，在下一个周期内被写入硬盘。默认30秒是一个很长的时间。
+如果内存紧张，不到30S的也会被刷到硬盘释放内存
+
+调优思路举例
+
+如果有大量的写操作，为避免I/O的长时间等待，可以设置：
+$ echo 5 > /proc/sys/vm/dirty_background_ratio
+$ echo 10 > /proc/sys/vm/dirty_ratio
+
+
+
+/proc/sys/vm/vfs_cache_pressure
+
+表示内核回收用于directory和inode   cache内存的倾向；缺省值100表示内核将根据pagecache和swapcache，把directory和inode   cache保持在一个合理的百分比；降低该值低于100，将导致内核倾向于保留directory和inode   cache；增加该值超过100，将导致内核倾向于回收directory和inode   cache
+
+$ echo 65536 > /proc/sys/vm/min_free_kbytes
+
+文件系统数据缓冲需要频繁的内存分配。加大保留内存的值能提升系统速度和稳定。
+建议
+小于8G的内存，保留内存为64M，大于8G的设置为256M
+
+
+内存过载使用
+/proc/sys/vm/overcommit_memory
+指定了内核针对内存分配的策略，其值可以是0、1、2。
+0，   表示内核将检查是否有足够的可用内存供应用进程使用；如果有足够的可用内存，内存申请允许；否则，内存申请失败，并把错误返回给应用进程。
+1，   表示内核允许分配所有的物理内存，而不管当前的内存状态如何。
+2，   表示内核允许分配超过所有物理内存和交换空间总和的内存（参照overcommit_ratio）。
+缺省设置：0
+
+/proc/sys/vm/overcommit_ratio  
+如果overcommit_memory=2，可以过载内存的百分比，通过以下公式来计算系统整体可用内存。系统可分配内存=交换空间+物理内存*overcommit_ratio/100
+缺省设置：50（%）
+
+
+
+swap 交换内存
+Swapping参数
+/proc/sys/vm/swappiness
+默认，linux倾向于从物理内存映射到硬盘缓存，保持硬盘缓存尽可能大。未用的页缓存会被放进swap区。
+数值为0，将会避免使用swapping
+100，将会尽量使用swapping
+少用swapping会增加程序的响应速度；多用swapping将会提高系统的可用性。
+
+/proc/sys/vm/page-cluster
+表示在写一次到swap区的时候写入的页面数量，0表示1页，1表示2页，2表示4页。
+缺省设置：3（2的3次方，8页）
+
+/proc/sys/vm/swapiness
+表示系统进行交换行为的程度，数值（0-100）越高，越可能发生磁盘交换。
+
+
+监控内存使用率
+
+单个程序使用大量内存    通过ps找前十个     加内存
+大量进程使用 httpd     定位找到那个进程  使用pmap + PID找到进程使用哪些模块不用   分发器
+
+
+
+
+
+
+说明：
+如何将数据写入配置文件  sysctl.conf
+echo 600 > /proc/sys/vm/dirty_writeback_centisecs   
+写入内核文件应该这么写  取最后两段
+vm/dirty_writeback_centisecs     vm.dirty_writeback_centisecs = 600
+
+ratio 比例

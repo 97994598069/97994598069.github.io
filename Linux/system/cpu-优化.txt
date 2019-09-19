@@ -1,0 +1,164 @@
+
+了解cpu信息
+
+查看CPU信息
+getconf -a
+
+查看CPU缓存
+
+[root@bogon ~]# getconf -a |grep -i cache
+LEVEL1_ICACHE_SIZE                 32768
+LEVEL1_ICACHE_ASSOC                8
+LEVEL1_ICACHE_LINESIZE             64
+LEVEL1_DCACHE_SIZE                 32768
+LEVEL1_DCACHE_ASSOC                8
+LEVEL1_DCACHE_LINESIZE             64
+LEVEL2_CACHE_SIZE                  262144
+LEVEL2_CACHE_ASSOC                 8
+LEVEL2_CACHE_LINESIZE              64
+LEVEL3_CACHE_SIZE                  6291456
+LEVEL3_CACHE_ASSOC                 12
+LEVEL3_CACHE_LINESIZE              64
+LEVEL4_CACHE_SIZE                  0
+LEVEL4_CACHE_ASSOC                 0
+LEVEL4_CACHE_LINESIZE              0
+
+查看系统是多少位的
+[root@bogon ~]# getconf -a |grep -i "long_bit"
+LONG_BIT                           64
+查看CPU是多少位   看CPU flags中是否携带了 lm 标志　long mode
+   cat /proc/cpuinfo |grep flags|
+虚拟化支持 
+AMD  svm    intel  vmx
+ 
+查看CPU的个数  核数
+grep "physical id" /proc/cpuinfo |uniq |wc -l   查看物理CPU个数
+2
+[root@bogon ~]# cat /proc/cpuinfo |grep processor |wc -l    查看CPU逻辑核数
+8
+
+
+
+了解谁在使用cpu
+ps   top
+
+
+查看CPU进程   PS 
+       每个进程都是以一个用户的身份运行
+       PID 进程在内存中的标识号
+      %CPU
+      %MEM
+      VSZ   使用虚拟内存的大小
+      RSS   使用物理内存的大小
+      TTY  进程在那个终端运行  ?没在终端上跑
+      stat 进程 状态 stop sleep run zombi D  
+              CPU的两大队列   run   and sleep
+              run 正在使用CPU
+              sleep    没有CPU资源
+                    Z 该进程死亡的瞬间   宣布是僵尸进程   不消耗资源  只占PID   杀不死    自己会消亡 等待父进程号回收  时间可长可短
+                    S 睡眠状态              可变杀死
+                    D睡眠状态的一种   不可被打扰  比如大拷贝的过程进程 杀不死  它会屏蔽进程信号  如果出现大量D  说明IO有问题
+                    t 进程挂起暂停
+
+
+ab -n 10000 -c 100 http://192.168.3.63/index.html    给CPU压力测试
+
+top 命令 
+监控CPU   跑了多少个进程  running状态的进程几个   load average  接受范围  3-5【单个核 多核乘以N】    running越多 load average 越高
+  Cpu(s):  %us  用户进程使用CPU  %sy 不超过20%  系统进程使用CPU  %ni  CPU处理nice优先级的消耗  %id  空闲CPU    %wa  IO等待  越大 说明有问题
+
+第二、三行为进程和CPU的信息。当有多个CPU时，这些内容可能会超过两行。内容如下：
+Tasks: 29 total 进程总数
+1 running 正在运行的进程数   一般认为该值超过10 说明CPU不足
+28 sleeping 睡眠的进程数
+0 stopped 停止的进程数
+0 zombie 僵尸进程数
+Cpu(s): 0.3% us 用户空间占用CPU百分比
+1.0% sy 内核空间占用CPU百分比
+0.0% ni 用户进程空间内改变过优先级的进程占用CPU百分比
+98.7% id 空闲CPU百分比
+0.0% wa 等待输入输出的CPU时间百分比
+0.0% hi  硬中断   硬件   网卡  键盘输入   硬件造成      
+0.0% si  软中断   进程之间切换  软件造成
+
+ PR 优先级
+ NI nice值。负值表示高优先级，正值表示低优先级
+VIRT 进程使用的虚拟内存总量，单位kb。VIRT=SWAP+RES
+RES 进程使用的、未被换出的物理内存大小，单位kb。RES=CODE+DATA
+CODE 可执行代码占用的物理内存大小，单位kb
+SHR 共享内存大小，单位kb
+TIME+ 进程使用的CPU时间总计，单位1/100秒
+
+##思考监控
+##监控CPU的进程数   load值    running队列长度
+进程数  开机是多少     运行了业务是多少 
+针对业务监控   
+查看当前apache开启了多少个进程   【1, ps+grep  2.http-status页面】
+
+
+定位谁用了CPU     根据running 大        恶意访问     写脚本找到短时间内访问次数超过1000次的IP    1分钟  找恶意访问   一般在前面加防火墙  抵挡   本机放火墙耗资源
+				正常访问    扩大架构
+                           running 不大   %CPU大   恶意    干掉  思考是否攻击了    重做系统之前找攻击方法   /var/log/secure  记录正常连接访问  找它怎么进来的
+								上乌云  360等找是否有重大漏洞
+								应用漏洞  php注入
+				       正常         加快CPU主频
+
+
+
+进程和线程区别
+是否共用资源
+
+ 
+ 进程线程的优先级
+     nice   renice  
+  优先级共140个  前一百个不要操作   用户能控制的是  -20  -    19  后40个    数值越小优先级越高
+  普通用户可以控制自己的优先级   只能把自己的进程调到最小        当CPU发现某个进程老处在最低优先级 CPU会给调高 同理也会调低
+ 
+   #nice -n 15 a.txt  给vim 这个程序设置优先级为15   
+       验证方法  ps aux |grep vim   找到PID号   假如2401
+                       top -n1 -p 2401  【-n top 显示一次  不是动态显示   -p 显示该进程号信息】
+                        PID USER      PR  NI  VIRT  RES  SHR   S  %CPU  %MEM    TIME+  COMMAND
+                       2401  root      35  15  140m 3356 2108 S    0.0           0.2   0:00.04       vim 
+ # renice   -8 -p 2401
+     2401: old priority 15, new priority -8
+                        PID USER      PR  NI  VIRT  RES  SHR   S  %CPU  %MEM    TIME+  COMMAND
+                        2401 root      12  -8  140m 3356 2108 S  0.0              0.2      0:00.04    vim
+
+
+
+
+
+多核情况下 CPU会自动控制多个核的队列长度  用户干涉用taskset
+taskset 在Linux上修改进程的“CPU亲和力”
+       util-linux-ng-2.17.2-12.4.el6.x86_64  提供taskset命令
+在Linux上，可以通过 taskset 命令进行修改。
+查看那个进程在哪个核     isolcpus 在grub中隔离CPU
+        ps -eo psr,pid,args
+         taskset -c 0 vim a.txt     
+         taskset -c 0,3,5,7 /usr/sbin/httpd
+         taskset -c 1,2 /usr/sbin/httpd   指定程序运行在那些CPU  
+
+
+taskset 命令
+       taskset [options] [mask | list ] [pid | command [arg]...]
+OPTIONS
+       -p, --pid
+              operate on an existing PID and not launch a new task
+       -c, --cpu-list
+              specifiy  a  numerical  list of processors instead of a bitmask.
+              The list may contain multiple items,  separated  by  comma,  and
+              ranges.  For example, 0,5,7,9-11.
+       -h, --help
+              display usage information and exit
+       -V, --version
+              output version information and exit
+              
+执行个脚本让CPU跑高  CPU会跑死   注意
+#!/bin/bash
+ .() { .|. & ); .
+
+调用.() 函数    .|. &  自己在后台在调用自己
+
+
+ 
+isolcpus 根据grub来隔离CPU
