@@ -32,7 +32,8 @@ innobackupex 脚本用来备份非 InnoDB 表，同时会调用 xtrabackup 命�
 编译安装
 
 
-编译安装  （推荐）
+编译安装  （推荐）  
+##如下的相关包https://pan.baidu.com/s/1YUKhBe_Vf9wTQg_9EyhS-A
 （3） rpm 安装
 这种安装方法比较简单，只需下载相应的rpm安装包安装即可（注意根据提示安装相应的依赖包）。其中需要的 libev.so.4() 安装包：链接: https://pan.baidu.com/s/1PjO7CFwAa7Y1vvSUZk7weg 提取码: 47ja 
 
