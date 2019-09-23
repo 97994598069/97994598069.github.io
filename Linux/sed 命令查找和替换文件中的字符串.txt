@@ -1,0 +1,75 @@
+基础使用:
+sed -i 's/Search_String/Replacement_String/g' Input_File
+
+
+
+1) 如何查找和替换一行中“第一次”模式匹配
+sed 's/unix/linux/' sed-test.txt
+
+
+2) 如何查找和替换每一行中“第 N 次”出现的模式
+sed 's/unix/linux/2' sed-test.txt
+
+
+3) 如何搜索和替换一行中所有的模式实例
+sed 's/unix/linux/g' sed-test.txt
+
+
+4) 如何查找和替换一行中从“第 N 个”开始的所有匹配的模式实例
+sed 's/unix/linux/2g' sed-test.txt
+
+
+
+5) 在特定的行号搜索和替换模式
+sed '3 s/unix/linux/' sed-test.txt
+
+
+6) 在特定范围行号间搜索和替换模式
+sed '1,3 s/unix/linux/' sed-test.txt
+
+
+7) 如何查找和修改最后一行的模式
+sed '$ s/Linux/Unix/' sed-test.txt
+
+
+8) 在一行中如何只查找和替换正确的模式匹配
+sed '1,3 s/\bunix\b/linux/' sed-test.txt
+
+
+9) 如何以不区分大小写来搜索与替换模式
+sed 's/unix/linux/gI' sed-test.txt
+
+
+10) 如何查找和替换包含分隔符的字符串
+sed 's/\/bin\/bash/\/usr\/bin\/fish/g' sed-test.txt
+或者
+sed 's|/bin/bash|/usr/bin/fish/|g' sed-test.txt
+
+
+11) 如何以给定的模式来查找和替换数字
+sed 's/[0-9]/number/g' sed-test.txt
+
+
+12) 如何用模式仅查找和替换两个数字
+sed 's/\b[0-9]\{2\}\b/number/g' sed-test.txt
+
+
+13) 如何用 sed 命令仅打印被替换的行
+sed -n 's/Unix/Linux/p' sed-test.txt
+
+
+14) 如何同时运行多个 sed 命令
+sed -e 's/linuxunix/LINUXUNIX/g' -e 's/CentOS/RHEL8/g' sed-test.txt
+
+
+15) 如果给定的模式匹配，如何查找和替换整个行
+sed '/OS/ c\
+New Line
+' sed-test.txt
+
+
+16) 如何搜索和替换相匹配的模式行
+sed '/OS/ s/Linux/ArchLinux/' sed-test.txt
+
+
+
