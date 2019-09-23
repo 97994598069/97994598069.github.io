@@ -1,0 +1,141 @@
+一、单用户模式
+Linux系统提供了单用户模式(类似Windows安全模式)，可以在最小环境中进行系统维护。在单用户模式(运行级别1)中，Linux引导进入根shell，网络被禁用，只有少数进程运行。单用户模式可以用来修改文件系统损坏、还原配置文件、移动用户数据等。
+
+
+案例一：root密码忘记
+在单用户模式中，Linux不需要root密码(Red Hat系统不需要root密码，但SuSe则需要，不同Linux系统稍有差别，本文以Fedora Core 6为例讲解)，这使更改root密码非常容易。了解当系统引导进入多用户模式失败时，如何进入单用户模式，非常重要。
+
+1、 在系统启动过程中，会出现开始界面，按任意键，进入GRUB菜单选项。（若希望以后无此提示，直接进入GRUB菜单选项，删除配置文件grub.conf中“hiddenmenu”项即可。）
+
+2、 按“e”键编辑GRUB引导菜单选项，按“e”键后的GRUB屏幕。通过箭头键下移到kernel行，并按“e”键，
+
+3、在尾行光标处添加single，按回车键返回前一个屏幕，按“b”键进行引导，则系统自动进入单用户模式，如果要改变root密码，则执行命令：sh-3.1# passwd root
+
+更改成功后，执行命令exit退出重启即可。
+
+
+大家可以在单用户模式中去纠正阻止系统正常启动的很多问题，比如：
+1、 禁用可能中止系统运行的服务如禁用Samba服务，则执行：sh-3.1# chkconfig smb off下次系统引导就不会启动Samba服务了。
+2、 更改系统缺省运行级如果X Window无法启动或者出现故障，可以编辑/etc/inittab文件，采用文本方式登录，更改initdefault引导级别为3：id：3：initdefault：
+
+
+
+案例二：硬盘扇区错乱
+在启动过程中最容易遇到的问题就是硬盘可能有坏道或扇区错乱(数据损坏)的情况，这种情况多由于异常断电、不正常关机导致。
+此种问题发生，在系统启动的时候，屏幕会显示：
+Press root password or ctrl+D：
+此时输入root密码系统自动进入单用户模式，输入：
+fsck -y /dev/hda6 
+
+(fsck为文件系统检测修复命令，“-y”设定检测到错误自动修复，/dev/hda6为发生错误的硬盘分区，请依据具体情况更改此参数)
+
+系统修复完成后，用命令“reboot”重新启动即可。
+
+
+
+案例三、GRUB选项设置错误
+“Error 15”显示系统无法找到grub.conf中指定的内核。
+GRUB引导错误信息，我们观察发现因为打字错误，内核文件的“vmlinuz”打成了“vmlinux”，所以系统无法找到内核的可执行文件。
+我们可以按任意键回到GRUB编辑界面，修改此错误，回车保存后按“b”键即可正常引导，当然不要忘记进入系统后修改grub.conf文件中此处错误。
+这是很多初学Linux的用户在修改GRUB设置时很容易犯的错误，出现此黑屏提示时注意观察报错信息，即可针对性修复。
+
+
+二、GRUB引导故障排除
+我发现有时Linux启动后会直接进入GRUB命令行界面(只有“grub>”提示符)，此时很多用户就选择了重新安装GRUB甚至重新安装系统。
+其实一般而言此故障的原因最常见的有两个：
+一是GRUB配置文件中选项设置错误;
+二是GRUB配置文件丢失(还有少数原因，如内核文件或镜像文件损坏、丢失，/boot目录误删除等)
+
+如果是第一种情况，可以首先通过GRUB命令引导系统后修复;若是第二种情况，则要使用Linux救援模式修复了(本文后续有描述)。
+首先，我们需要了解GRUB启动系统的引导过程，grub.conf文件中主要的配置选项如下：
+(注意，GRUB配置文件为/boot/grub/grub.conf， /etc/grub.conf只是此文件的软链接)
+ title Fedora Core (2.6.18-1.2798.fc6) 
+ root (hd0，0) 
+ kernel /boot/vmlinuz-2.6.18-1.2798.fc6 ro root=LABEL=/ rhgb quiet initrd /boot/initrd-2.6.18-1.2798.fc6.img 
+ 
+其中：
+“title”段指定了GRUB引导的系统：
+“root”段指定了/boot分区所在的位置：
+“kernel”段指定了内核文件所在位置，内核加载时权限属性为只读(“ro”)以及指定根分区所在位置(root=LABEL=/);
+“initrd”指定了镜像文件所在位置。
+所以GRUB在引导时顺序为首先加载/boot分区，然后依次载入内核与镜像文件。
+
+
+案例
+“title Fedora Core (2.6.18-1.2798.fc6)”段被误删除
+此时，系统启动后会自动进入“GRUB>”命令行，为排除故障我们可以依次做如下操作：
+1、查找/boot/grub/grub.conf文件所在分区GRUB> find /boot/grub/grub.conf(hd0，0)
+
+2、查看grub.conf文件错误GRUB>cat (hd0，0)/boot/grub/grub.conf建议系统安装设置好后，要将grub.conf文件备份，如果有备份文件如grub.conf.bak，则此时可以查看备份文件，与当前文件比较，发现错误：GRUB>cat (hd0，0)/boot/grub/grub.conf.bak
+
+3、确认错误后，先通过命令行方式完成GRUB引导，进入系统后再行修复grub.conf文件错误：
+1)指定/boot分区root (hd0，0)
+2)指定内核加载kernel /boot/vmlinuz-2.6.18-1.2798.fc6 ro root=LABEL=/ rhgb quiet
+3)指定镜像文件所在位置initrd /boot/initrd-2.6.18-1.2798.fc6.img
+提示：GRUB支持tab键命令补全功能
+
+
+4、从/boot分区启动boot (hd0，0)
+命令行模式可以在GRUB菜单模式中通过按“c”键调用，也可以用于测试新编译的内核(设置kernel、initrd引导新内核及镜像文件)。增加对GRUB引导以及Linux系统引导知识的了解将对此类故障排除大有帮助。
+
+
+
+
+三、Linux救援模式应用
+当系统连单用户模式都无法进入时或出现GRUB命令行也不能解决的引导问题，我们就需要使用Linux救援模式来进行故障排除了。
+步骤如下：
+1、将Linux安装光盘(如果使用CD光盘，则放入第一张引导光盘)放入光驱，设置固件CMOS/BIOS为光盘引导，当Linux安装画面出现后，在“boot：”提示符后输入“linux rescue”回车进入救援模式。(想了解救援模式详细信息，还可以按F5键查看)
+
+2、系统会检测硬件，引导光盘上的Linux环境，依次提示你选择救援模式下使用的语言(建议选择默认的英文即可，根据笔者测试，部分Linux系统选择中文会出现乱码);键盘设置用默认的“us”就好;网络设置可以根据需要，大部分故障修复不需要网络连接，可不进行此项设置，选择“No”。
+
+3、接下来系统将试图查找根分区，出现挂载提示，设置默认在救援模式，硬盘的根分区将挂载到光盘Linux环境的/mnt/sysimage目录下，默认选项“continue”表示挂载权限为读写：“Read-only”为只读，如果出现检测失败可以选择“skip”跳过。此处，因为要对系统进行修复，所以需要有读写权限，一般选择默认选项“continue”。
+进入下一步后，系统提示执行“chroot /mnt/sysimage”命令，可以将根目录挂载到我们硬盘系统的根目录中去。
+
+
+案例一：双系统启动修复
+当我们安装双系统环境，先安装Linux再安装Windows;或者已经安装好双系统环境的Windows损坏，在重新安装Windows后，保存 GRUB的MBR(Master Boot Record，主引导记录)会被Windows系统的自举程序NTLDR所覆盖，造成Linux系统无法引导。
+1、如果要恢复双系统引导，首先用上述方法进入救援模式，执行chroot命令如下：sh-3.1# chroot /mnt/sysimage
+
+2、将根目录切换到硬盘系统的根目录中，然后执行grub-install命令重新安装GRUB：sh-3.1# grub-install /dev/hda“/dev/hda”为硬盘名称，如使用SCSI硬盘或Linux安装在第二块IDE硬盘，此项设置要做相应调整。
+
+3、然后依次执行exit命令，退出chroot模式及救援模式(执行两次exit命令)：sh-3.1# exit系统重启后，将恢复GRUB引导的双系统启动。
+
+
+
+案例二：系统配置文件丢失修复
+系统在引导期间，很重要的一个过程就是init进程读取其配置文件/etc/inittab，启动系统基本服务程序及默认运行级别的服务程序完成系统引导，如果/etc/inittab误删除或修改错误，Linux将无法正常启动。此时，只有通过救援模式才可以解决此类问题。
+
+/etc/inittab文件丢失引导错误示例 
+
+
+1、有备份文件的恢复办法进入救援模式，执行chroot命令后，如果有此文件的备份(强烈建议系统中的重要数据目录，如/etc、/boot等要进行备份)，直接将备份文件拷贝回去，退出重启即可。
+如果是配置文件修改错误，如比较典型的/boot/grub/grub.conf及/etc/passwd的文件修改错误，也可以直接修正恢复。
+假设有备份文件/etc/inittab.bak，则在救援模式下执行：
+sh-3.1# chroot /mnt/sysimage sh-3.1# cp /etc/inittab.bak /etc/inittab 
+
+
+2、没有备份文件的恢复办法如果一些配置文件丢失或软件误删除，且无备份，可以通过重新安装软件包来恢复。
+首先查找到/etc/inittab属于哪一个RPM包(即便文件丢失，因为存在RPM数据库，一样可以查找到结果)：
+sh-3.1# chroot /mnt/sysimage sh-3.1# rpm -qf /etc/inittab initscripts-8.45.3-1 
+
+退出chroot模式：
+sh-3.1# exit 
+
+挂载存放RPM包的安装光盘(在救援模式下，光盘通常挂载在/mnt/source目录下)：
+sh-3.1# mount /dev/hdc /mnt/source
+
+
+Fedora系统的RPM包存放在光盘Fedora/RPMS目录下，其他Linux存放位置大同小异，我在这里不一一列举;
+另外，因为要修复的硬盘系统的根目录在/mnt/sysimage下，需要使用——root选项指定其位置。
+覆盖安装/etc/inittab文件所在的RPM包：
+sh-3.1# rpm -ivh ——replacepkgs ——root /mnt/sysimage /mnt/source/Fedora/RPMS/ initscripts-8.45.3-1.i386.rpm 
+其中的rpm命令选项“——replacepkgs”表示覆盖安装，执行完成后，即已经恢复了此文件。
+
+
+如果想只提取RPM包中的/etc/inittab文件进行恢复，可以在进入救援模式后，执行命令：
+sh-3.1# rpm2cpio /mnt/source/Fedora/RPMS/initscripts-8.45.3-1.i386.rpm | cpio -idv ./etc/inittab sh-3.1# cp etc/inittab /mnt/sysimage/etc 
+注意此命令执行时不能将文件直接恢复至/etc目录，只能提取到当前目录下，且恢复的文件名称所在路径要写完整的绝对路径。提取文件成功后，将其复制到根分区所在的/mnt/sysimage目录下相应位置即可。
+'
+救援模式是维护Linux的有力武器，本文以上述两个例子讲解了它的应用方法，希望能够给读者一点启示。解决Linux系统启动的故障，必须充分理解Linux的引导过程，才能够对故障进行有效的判断和处理。
+ 
+ 
