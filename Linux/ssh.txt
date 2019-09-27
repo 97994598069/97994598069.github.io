@@ -1,0 +1,72 @@
+[root@localhost ~]# ssh-keygen -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): /root/.ssh/09_rsa
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /root/.ssh/09_rsa.
+Your public key has been saved in /root/.ssh/09_rsa.pub.
+The key fingerprint is:
+SHA256:z/FWVP6j1Bbh+qsGdnZPaH5QuGUJfMb0l3Lro7L1XSw root@localhost
+The key's randomart image is:
++---[RSA 2048]----+
+|            . oo.|
+|             o.*+|
+|             .=*=|
+|             .*.O|
+|        S .  o.@.|
+|         o =.+Xoo|
+|          + *=E*+|
+|           o..+.B|
+|           .+o.+.|
++----[SHA256]-----+
+
+[root@localhost ~]# ll .ssh/
+总用量 8
+-rw------- 1 root root 1675 9月  27 11:13 09_rsa
+-rw-r--r-- 1 root root  396 9月  27 11:13 09_rsa.pub
+
+分发：可配置脚本for ip in 141 109 114 32
+[root@localhost ~]# sshpass -p '666666' ssh-copy-id -i /root/.ssh/09_rsa.pub -o StrictHostKeyChecking=no root@192.168.197.14
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/09_rsa.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with:   "ssh -o 'StrictHostKeyChecking=no' 'root@192.168.197.14'"
+and check to make sure that only the key(s) you wanted were added.
+
+[root@localhost ~]# sshpass -p '666666' ssh-copy-id -i /root/.ssh/09_rsa.pub -o StrictHostKeyChecking=no root@192.168.197.4
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/09_rsa.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with:   "ssh -o 'StrictHostKeyChecking=no' 'root@192.168.197.4'"
+and check to make sure that only the key(s) you wanted were added.
+
+
+
+测试登录：
+[root@localhost ~]# ssh -i /root/.ssh/09_rsa root@192.168.197.14
+Last failed login: Fri Sep 27 11:04:14 CST 2019 from 192.168.197.28 on ssh:notty
+There was 1 failed login attempt since the last successful login.
+Last login: Fri Sep 27 11:02:15 2019 from 192.168.197.28
+[root@localhost ~]# hostname -I
+192.168.197.14 
+
+
+[root@localhost ~]# ssh -i /root/.ssh/09_rsa root@192.168.197.4
+Last failed login: Fri Sep 27 11:04:11 CST 2019 from 192.168.197.28 on ssh:notty
+There was 1 failed login attempt since the last successful login.
+Last login: Fri Sep 27 11:02:07 2019 from 192.168.197.28
+[root@node1 ~]# hostname -I
+192.168.197.4 172.17.0.1 
+
+
++++++++++++++++++++++++++
+使用pssh管理
+
+
+
