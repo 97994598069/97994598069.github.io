@@ -1,0 +1,121 @@
+跳板机
+192.168.197.14
+
+客户机：
+192.168.197.4
+
+客户机上生成密钥对：
+[root@node1 ~]# ssh-keygen -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): /root/.ssh/07_rsa
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /root/.ssh/07_rsa.
+Your public key has been saved in /root/.ssh/07_rsa.pub.
+The key fingerprint is:
+SHA256:oFm9GfgBdCpn7C7uPY4aYH7pCp31MxlMa9cTtsHRHuM root@node1
+The key's randomart image is:
++---[RSA 2048]----+
+|     .o . ..     |
+|     . * . .+    |
+|    . X + =o o   |
+|     @ + B +E    |
+|..  + * S +      |
+|oo o.+ +   .     |
+|..+o. *          |
+|. oo +.o         |
+| .o++.o.         |
++----[SHA256]-----+
+
+
+[root@node1 .ssh]# ll
+总用量 20
+-rw------- 1 root root 1766 9月  26 15:44 06_rsa
+-rw-r--r-- 1 root root  392 9月  26 15:44 06_rsa.pub
+-rw------- 1 root root 1679 9月  26 16:13 07_rsa
+-rw-r--r-- 1 root root  392 9月  26 16:13 07_rsa.pub
+-rw-r--r-- 1 root root  525 9月  26 15:49 known_hosts
+[root@node1 .ssh]# mv ./07_rsa.pub authorized_keys
+[root@node1 .ssh]# ll
+总用量 20
+-rw------- 1 root root 1766 9月  26 15:44 06_rsa
+-rw-r--r-- 1 root root  392 9月  26 15:44 06_rsa.pub
+-rw------- 1 root root 1679 9月  26 16:13 07_rsa
+-rw-r--r-- 1 root root  392 9月  26 16:13 authorized_keys
+-rw-r--r-- 1 root root  525 9月  26 15:49 known_hosts
+[root@node1 .ssh]# mv 07_rsa 07_rsa.pem
+[root@node1 .ssh]# ll
+总用量 20
+-rw------- 1 root root 1766 9月  26 15:44 06_rsa
+-rw-r--r-- 1 root root  392 9月  26 15:44 06_rsa.pub
+-rw------- 1 root root 1679 9月  26 16:13 07_rsa.pem
+-rw-r--r-- 1 root root  392 9月  26 16:13 authorized_keys
+-rw-r--r-- 1 root root  525 9月  26 15:49 known_hosts
+[root@node1 .ssh]# scp /root/^C
+[root@node1 .ssh]# scp ./07_rsa.pem root@192.168.197.14:/root/.ssh/
+root@192.168.197.14's password: 
+07_rsa.pem                                                         
+
+
+此时在跳板机上指定密钥可以登录到客户机上：  由于客户机生成密钥对的时候没有设置密码，则此处默认也是空密码
+[root@localhost ~]# hostname -I
+192.168.197.14 
+[root@localhost ~]# ssh -i /root/.ssh/07_rsa.pem 192.168.197.4  ##最好不要放在家目录，放在一个隐藏目录的下面
+Last login: Thu Sep 26 16:16:51 2019 from 192.168.197.14
+[root@node1 ~]# hostname -I
+192.168.197.4 172.17.0.1 
+[root@node1 ~]# 
+
+
+上述的这个pem文件只能登录一台服务器，怎么配置才能登录多台服务器呢
+
+跳板机上生成密钥对：
+[root@localhost ~]# ssh-keygen -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): /root/.ssh/tbj_rsa
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /root/.ssh/tbj_rsa.
+Your public key has been saved in /root/.ssh/tbj_rsa.pub.
+The key fingerprint is:
+SHA256:T6i7Zox2MMHVOUhNSP94/Wfoi/TXz2adogeTIwn88fE root@localhost
+The key's randomart image is:
++---[RSA 2048]----+
+|     oo*..       |
+|      +.=        |
+|   . .. ..       |
+|    o  o = o     |
+|     .  S B =    |
+|    o  . B * E . |
+|     =.   o = o *|
+|    o =.   . * =*|
+|   . +o.   .+ ==+|
++----[SHA256]-----+
+
+[root@localhost .ssh]# mv tbj_rsa tbj.pem
+
+
+将公钥内容拷贝到客户机上的authorized_keys中，或者将mv tbj_rsa.pub authorized_keys |chmod 600 然后将此文件拷贝到客户机上
+[root@localhost .ssh]# cat tbj_rsa.pub 
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDQ8m+8me3UlyPAtdOZ89I1uQejfsSCfXtvVU1elLdoG6ZZ2cfN18xCkn9Rw5UNEOxdo3mGHNQYIfEWOx/7bkQrvyxPoNbM7nMGBEyMWblKIV6+3xB+Z7cIyRp/f4HMVYYMq6ms72oznDH1pGhS7LqVecG1nvezlrqrGJEt0s7ksaFKr1bLRcJPXyIJXYk2ZUfv+rlEG//USbclNgj2heQpgmULqESUjGUqmGhUdPdRDbpYPjV8Pmup4diiYX7Od9vGYFCtxJvNwpp/+6tyvhVNVnNXmXanjQihNJmPVn1/awlQROdonXe6e82RnRrhZTInYRlblxie9qVIsnvDmkTT root@localhost
+
+
+[root@localhost .ssh]# chmod 600 ./tbj_rsa.pub 
+[root@localhost .ssh]# mv tbj_rsa.pub authorized_keys
+[root@localhost .ssh]# scp -p ./authorized_keys root@192.168.197.28:/root/.ssh/   ###若是生成密钥对的时候是默认的则可以使用echo yes >ssh-copy-id -i $ip这种方式
+root@192.168.197.28's password: 
+authorized_keys 
+
+测试登录:
+[root@localhost .ssh]# ssh -i /root/.ssh/tbj.pem 192.168.197.4
+Last login: Thu Sep 26 16:51:24 2019 from 192.168.197.14
+[root@node1 ~]# 
+
+[root@localhost .ssh]# ssh -i /root/.ssh/tbj.pem 192.168.197.28
+Last login: Fri Sep 27 01:08:01 2019 from 192.168.197.14
+[root@localhost ~]# hostname -I
+192.168.197.28 
+
+
+
+
