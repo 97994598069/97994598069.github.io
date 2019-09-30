@@ -66,7 +66,17 @@ Last login: Fri Sep 27 11:02:07 2019 from 192.168.197.28
 
 
 +++++++++++++++++++++++++
-使用pssh管理
+使用pssh管理;;为了安全考虑，整体思路是在跳板机上不能直接ssh进到客户机，需要指定第二个密钥（和跳板机登录不是一个）；同理pssh也需要指定密钥
+pssh -h ip_list -O "IdentityFile=/root/.ssh/test_rsa" -i "ifconfig"
 
+###IdentityFile=/root/.ssh/test_rsa  指定私钥位置等同于ssh的配置文件里添加
+Host 主机别名（随意起名）
+    HostName 主机地址（ip地址或者域名地址）
+    User 用户名（如root）
+    Port 端口号（如22）
+    IdentityFile  私钥文件路径（如 ~/.ssh/我的私钥）
+ 
+ 需要注意的是私钥文件的访问权限仅限当前用户   
+ chmod 400 私钥文件路径
 
 
