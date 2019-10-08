@@ -1,0 +1,121 @@
+1、 SYN Flood介绍
+前段时间网站被攻 击多次，其中最猛烈的就是TCP洪水攻击，即SYN Flood。
+SYN Flood是当前最流行的DoS（拒绝服务攻击）与DDoS（分布式拒绝服务攻击）的方式之一，这是一种利用TCP协议缺陷，发送大量伪造的TCP连接请求，常用假冒的IP或IP号段发来海量的请求连接的第一个握手包（SYN包），被攻击服务器回应第二个握手包（SYN+ACK包），因为对方是假冒IP，对方永远收不到包且不会回应第三个握手包。导致被攻击服务器保持大量SYN_RECV状态的“半连接”，并且会重试默认5次回应第二个握手包，塞满TCP等待连接队列，资源耗尽（CPU满负荷或内存不足），让正常的业务请求连接不进来。
+
+2. 诊断
+我们看到业务曲线大跌时，检查机器和DNS，发现只是对外的web机响应慢、CPU负载高、ssh登陆慢甚至有些机器登陆不上，检查系统syslog：
+# tail -f /var/log/messages
+Apr 18 11:21:56 web5 kernel: possible SYN flooding on port 80. Sending cookies.
+
+检查连接数增多，并且SYN_RECV 连接特别多：
+# netstat -n | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}' 
+TIME_WAIT 16855
+CLOSE_WAIT 21
+SYN_SENT 99
+FIN_WAIT1 229
+FIN_WAIT2 113
+ESTABLISHED 8358
+SYN_RECV 48965
+CLOSING 3
+LAST_ACK 313
+
+
+根据经验，正常时检查连接数如下：
+# netstat -n | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}' 
+TIME_WAIT 42349
+CLOSE_WAIT 1
+SYN_SENT 4
+FIN_WAIT1 298
+FIN_WAIT2 33
+ESTABLISHED 12775
+SYN_RECV 259
+CLOSING 6
+LAST_ACK 432
+
+以上就是TCP洪水攻击的两大特征。执行netstat -na>指定文件，保留罪证。
+
+
+3. 应急处理
+根据netstat查看到的对方IP特征：
+# netstat -na |grep SYN_RECV|more
+
+利用iptables临时封掉最大嫌疑攻击的IP或IP号段，例如对方假冒173.*.*.*号段来攻击，短期禁用173.*.*.*这个大号段（要确认小心不要封掉自己的本地IP了！）
+# iptables -A INPUT -s 173.0.0.0/8 -p tcp –dport 80 -j DROP  （##一般不可靠，因为黑客假冒ip是不能是一个ip段的）
+再分析刚才保留的罪证，分析业务，用iptables解封正常173.*.*.*号段内正常的ip和子网段。这样应急处理很容易误伤，甚至可能因为封错了导致ssh登陆不了服务器，并不是理想方式。
+
+
+4. 使用F5挡攻击
+应急处理毕竟太被动，因为本机房的F5比较空闲，运维利用F5来挡攻击，采用方式：让客户端先和F5三次握手，连接建立之后F5才转发到后端业务服务器。后来被攻击时F5上看到的现象：
+1. 连接数比平时多了500万，攻击停止后恢复。
+2. 修改F5上我们业务的VS模式后，F5的CPU消耗比平时多7%，攻击停止后恢复。
+3. 用F5挡效果明显，后来因攻击无效后，用户很少来攻击了，毕竟攻击也是有成本的。
+5. 调整系统参数挡攻击
+
+
+没有F5这种高级且昂贵的设备怎么办？我测试过以下参数组合能明显减小影响，准备以后不用F5抗攻击。
+第一个参数 tcp_synack_retries = 0是关键，表示回应第二个握手包（SYN+ACK包）给客户端IP后，如果收不到第三次握手包（ACK包）后，不进行重试，加快回收“半连接”，不要耗光资源。
+
+不修改这个参数，模拟攻击，10秒后被攻击的80端口即无法服务，机器难以ssh登录； 用命令netstat -na |grep SYN_RECV检测“半连接”hold住180秒；
+
+修改这个参数为0，再模拟攻击，持续10分钟后被攻击的80端口都可以服务，响应稍慢些而已，只是ssh有时也登录不上；检测“半连接”只hold住3秒即释放掉。
+
+修改这个参数为0的副作用：网络状况很差时，如果对方没收到第二个握手包，可能连接服务器失败，但对于一般网站，用户刷新一次页面即可。这些可以在高峰期或网络状况不好时tcpdump抓包验证下。
+
+根据以前的抓包经验，这种情况很少，但为了保险起见，可以只在被tcp洪水攻击时临时启用这个参数。
+tcp_synack_retries默认为5，表示重发5次，每次等待30~40秒，即“半连接”默认hold住大约180秒。
+之所以可以把tcp_synack_retries改为0，因为客户端还有tcp_syn_retries参数，默认是5，即使服务器端没有重发SYN+ACK包，客户端也会重发SYN握手包。
+第二个参数 net.ipv4.tcp_max_syn_backlog = 200000也重要，具体多少数值受限于内存。
+
+
+以下配置，第一段参数是最重要的，第二段参数是辅助的，其余参数是其他作用的：
+# vi /etc/sysctl.conf
+#最关键参数，默认为5，修改为0 表示不要重发
+net.ipv4.tcp_synack_retries = 0
+#半连接队列长度
+net.ipv4.tcp_max_syn_backlog = 200000
+
+#系统允许的文件句柄的最大数目，因为连接需要占用文件句柄
+fs.file-max = 819200
+#用来应对突发的大并发connect 请求
+net.core.somaxconn = 65536
+#最大的TCP 数据接收缓冲（字节）
+net.core.rmem_max = 1024123000
+ 
+#最大的TCP 数据发送缓冲（字节）
+net.core.wmem_max = 16777216
+#网络设备接收数据包的速率比内核处理这些包的速率快时，允许送到队列的数据包的最大数目
+net.core.netdev_max_backlog = 165536
+#本机主动连接其他机器时的端口分配范围
+net.ipv4.ip_local_port_range = 10000 65535
+ 
+# ……省略其它……
+
+
+使配置生效：
+# sysctl -p
+
+
+注意，以下参数面对外网时，不要打开。因为副作用很明显，具体原因请google，如果已打开请显式改为0，然后执行sysctl -p关闭。因为经过试验，大量TIME_WAIT状态的连接对系统没太大影响：
+#当出现 半连接 队列溢出时向对方发送syncookies，调大 半连接 队列后没必要
+net.ipv4.tcp_syncookies = 0
+#TIME_WAIT状态的连接重用功能
+net.ipv4.tcp_tw_reuse = 0
+#时间戳选项，与前面net.ipv4.tcp_tw_reuse参数配合
+net.ipv4.tcp_timestamps = 0
+#TIME_WAIT状态的连接回收功能
+net.ipv4.tcp_tw_recycle = 0
+
+
+为了处理大量连接，还需改大另一个参数：
+# vi /etc/security/limits.conf 
+
+
+在底下添加一行表示允许每个用户都最大可打开409600个文件句柄（包括连接）：
+* - nofile 409600
+
+
+
+
+
+
+
