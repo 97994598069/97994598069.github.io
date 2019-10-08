@@ -1,0 +1,11 @@
+location /getData/ {
+    default_type application/json;
+    alias /Users/zhangyalin/Downloads/treegrid/;   ###必须是以“/”结尾，否则报错404
+}
+
+
+设置响应的内容格式为application/json，然后告诉nginx去/Users/zhangyalin/Downloads/treegrid/文件下面找/getData/的GET请求的json数据。
+**Note:**这里使用的alias配置方式是请求替代的方式，即/getData/mydata.json就去找/Users/zhangyalin/Downloads/treegrid/mydata.json文件。这种nginx的alias配置方式不适用于正则表达式的配置方式。
+
+访问示例
+http://192.168.197.4/getData/db.json
