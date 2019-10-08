@@ -1,0 +1,17 @@
+nginx简单的反向代理一般是
+ server{
+ listen 80;
+ server_name localhost;
+ index index.html ;
+ location / {
+ proxy_pass https://192.168.1.x/;
+ }
+
+ }
+ 
+ 
+这是最简单的nginx反向代理，用前辈的话来说最low的方式。我就用这种方式代理，页面服务不正常出现很多404，
+location / {
+ proxy_pass https://192.168.1.x/
+ proxy_set_header Host $host:${server_port};
+ }
