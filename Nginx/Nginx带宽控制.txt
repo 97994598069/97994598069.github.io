@@ -1,0 +1,28 @@
+Nginx 提供了 limit_rate 和 limit_rate_after，举个例子来说明一下：
+location /download/ {
+ limit_rate_after 500k;
+ limit_rate 50k;
+}
+
+大概意思是：用户下载达到 500k 后，便控制其速度在 50k 以内。
+坏消息是此控制是针对单个连接而言的。换言之，只能限制单个连接的带宽，不能限制总带宽。不过使用 limit_conn 模块的话，可以在一定程度上缓解问题：
+
+
+limit_conn_zone $server_name zone=servers:10m;
+server {
+ location /download/ {
+ limit_conn servers 1000;
+ limit_rate_after 500k;
+ limit_rate 50k;
+ }
+}
+
+
+通过 limit_conn 限制了并发连接数，于是也就限制了总带宽。可惜这个解决方式并不完美，大家可以设想如下的例子：1000 个用户能够同时以 50k 的速度下载；那么在总带宽不变的情况下，2000 个用户是否能够同时以 25k 的速度下载？从业务的角度看，答案自然是肯定的，可实际上 limit_conn 和 limit_rate 不够灵活，无法简单实现此类逻辑。
+
+
+当然，问题肯定有办法解决。比如使用第三方模块：limit_speed；还可以使用 Linux 内置的 TC 命令。limit_speed 比较简单，不多说了，接下来我们就看看 TC 的用法吧：
+shell> tc qdisc add dev eth0 root handle 1: htb default 10
+shell> tc class add dev eth0 parent 1: classid 1:1 htb rate 10mbit
+shell> tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 \
+ match ip dport 80 0xffff flowid 1:1
