@@ -37,7 +37,7 @@ CST：北京时间
 [root@localhost ~]# date
 
 ntpdate cn.pool.ntp.org
-echo '*/30 * * * * ntpdate cn.pool.ntp.org && hwclock -w && hwclock --systohc >/dev/null 2>&1' >> /var/spool/cron/root
+echo '*/30 * * * * /usr/sbin/ntpdate cn.pool.ntp.org && hwclock -w && hwclock --systohc >/dev/null 2>&1' >> /var/spool/cron/root
 systemctl restart crond
 
 3. 调整文件描述符大小
