@@ -89,7 +89,16 @@ LAST-ACK - 等待原来发向远程TCP的连接中断请求的确认；
 TIME-WAIT -等待足够的时间以确保远程TCP接收到连接中断请求的确认；
 CLOSED - 没有任何连接状态；
 
-
+TCP_SYN_SENT：发送连接请求，等待确认。
+TCP_SYN_RECV：收到连接请求，发送确认，等待三次握手的最终确认。
+TCP_ESTABLISHED：连接建立。
+TCP_FIN_WAIT1：客户端关闭连接，等待服务端完成剩余缓冲数据的传输。
+TCP_FIN_WAIT2：服务端所有缓冲数据已发送完毕，等待服务端关闭连接请求。
+TCP_CLOSING：双方都已关闭连接，但还有数据需要发送。
+TCP_TIME_WAIT：此状态只能由 FIN_WAIT2 或 CLOSING 进入，客户端等待未接收完的数据。
+TCP_CLOSE_WAIT：等待客户端接收完数据，由客户端向服务端发起关闭请求。
+TCP_LAST_ACK：等待客户端发送关闭连接确认。
+TCP_CLOSE：连接关闭。
 
 
 
