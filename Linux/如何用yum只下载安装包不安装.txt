@@ -1,0 +1,66 @@
+如何用yum只下载安装包不安装
+在内网环境非常有用：
+
+常见yum命令
+yum install 包 -y
+yum list 包（列出yum包） --方便安装指定版本的包
+yum clean all（清除缓存）
+yum makecache(缓存)
+这个时候如果你想在生产环境安装某些包，但很多时候生产环境是不能上外网的，这时候有没有一些只下载包的方式呢？
+
+
+第一种方式（推荐使用）
+6.4及之前版本需安装yum的插件 yum-plugin-downloadonly
+yum install yum-downloadonly
+
+完成安装后，yum就多了两个命令参数，分别是：
+--downloadonly don't update, just download
+--downloaddir=DLDIR specifies an alternate directory to store packages
+
+yum install httpd --downloadonly --downloaddir=/root/yum
+
+
+
+
+第二种方式：（推荐使用）
+yum install yum-utils -y（此时你会发现多了一些命令，其中有yumdownloader）
+默认在当前目录。
+
+
+第三种方式：
+修改配置
+# vim /etc/yum.conf（此时yum主配置文件）
+##启用缓存，也可以下载指定包，但是不推荐，过程会自动安装
+[main]
+cachedir=/var/cache/yum/$basearch/$releasever
+keepcache=0
+#将 keepcache=0 修改为 keepcache=1
+
+
+
+
+常见安装包的方式以及优缺点
+1、yum
+优点：
+安装方便，只要你的yum源够强大，基本包都可以满足。避免了麻烦的依赖关系。
+
+缺点：
+需要够好的网速，安装默认路径默认，需要有基础的人才能熟悉，此外依赖关系需要掌握，不可贸然卸载，否则可能会影响其它程序。
+也就是说，在你享受它带给你的方便同时，也要明白其中后果。灵活性强，方便管理，使得yum安装方式很受人喜欢。
+
+2、编译安装
+优点：
+可自己安装指定版本的包，路径参数都是自己定义，在Linux环境下，只需要将其安装目录卸载即可（至于所依赖的包也可以自己手动删除即可，基本的依赖包gcc c++可不能卸载，很多东西必须依赖这些包）。
+
+缺点：
+安装复杂，依赖关系强（Linux包兼容性并不好，因此需要经验判断并尝试安装）
+
+
+3、二进制安装
+优点：安装速度快，管理方便，这点和编译安装很相似（特别二进制安装MySQL，着实很方便）
+缺点：也需要手动配置，并不是很多包都有二进制。需参照一些官网手册进行配置，比较严格。需要一定的经验。当然编译安装和二进制安装都可以写脚本。
+
+
+
+
+
