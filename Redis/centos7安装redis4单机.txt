@@ -1,0 +1,65 @@
+1、安装redis
+第一步：下载redis安装包
+wget http://download.redis.io/releases/redis-4.0.11.tar.gz
+
+第二步：解压压缩包
+[root@localhost local]# tar -zxvf redis-4.0.11.tar.gz
+
+第三步：yum安装gcc依赖
+yum install gcc -y 
+
+
+第四步：跳转到redis解压目录下
+[root@localhost local]# cd redis-4.0.11
+
+第五步：编译安装
+[root@localhost redis-4.0.11]# make MALLOC=libc
+
+将/usr/local/redis-4.0.11/src目录下的文件加到/usr/local/bin目录
+[root@localhost redis-4.0.11]# cd src && make install
+
+
+第六步：测试是否安装成功 
+先切换到redis src目录下
+[root@localhost redis-4.0.11]# cd src
+
+1、直接启动redis
+[root@localhost src]# ./redis-server
+18685:C 13 Dec 12:56:12.507 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+18685:C 13 Dec 12:56:12.507 # Redis version=4.0.11, bits=64, commit=00000000, modified=0, pid=18685, just started
+18685:C 13 Dec 12:56:12.507 # Warning: no config file specified, using the default config. In order to specify a config file use ./redis-server /path/to/redis.conf
+                _._                                                 
+           _.-``__ ''-._                                            
+      _.-``    `.  `_.  ''-._           Redis 4.0.11 (00000000/0) 64 bit
+  .-`` .-```.  ```\/    _.,_ ''-._                                  
+ (    '      ,       .-`  | `,    )     Running in standalone mode
+ |`-._`-...-` __...-.``-._|'` _.-'|     Port: 6379
+ |    `-._   `._    /     _.-'    |     PID: 18685
+  `-._    `-._  `-./  _.-'    _.-'                                  
+ |`-._`-._    `-.__.-'    _.-'_.-'|                                 
+ |    `-._`-._        _.-'_.-'    |           http://redis.io       
+  `-._    `-._`-.__.-'_.-'    _.-'                                  
+ |`-._`-._    `-.__.-'    _.-'_.-'|                                 
+ |    `-._`-._        _.-'_.-'    |                                 
+  `-._    `-._`-.__.-'_.-'    _.-'                                  
+      `-._    `-.__.-'    _.-'                                      
+          `-._        _.-'                                          
+              `-.__.-'                                              
+ 
+18685:M 13 Dec 12:56:12.508 # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
+18685:M 13 Dec 12:56:12.508 # Server initialized
+18685:M 13 Dec 12:56:12.508 # WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+18685:M 13 Dec 12:56:12.508 # WARNING you have Transparent Huge Pages (THP) support enabled in your kernel. This will create latency and memory usage issues with Redis. To fix this issue run the command 'echo never > /sys/kernel/mm/transparent_hugepage/enabled' as root, and add it to your /etc/rc.local in order to retain the setting after a reboot. Redis must be restarted after THP is disabled.
+18685:M 13 Dec 12:56:12.508 * Ready to accept connections　　
+
+
+如上图：redis启动成功，但是这种启动方式需要一直打开窗口，不能进行其他操作，不太方便。
+2、以后台进程方式启动redis
+第一步：修改redis.conf文件
+将daemonize no 改为 daemonize yes
+
+第二步：指定redis.conf文件启动,此时启动要到src目录下去启动，
+./redis-server ../redis.conf
+
+
+
