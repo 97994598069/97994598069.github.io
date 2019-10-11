@@ -1,7 +1,7 @@
 vim catalina.sh
 
 添加：
-CATALINA_PID="/var/run/tomcat.pid"
+CATALINA_PID="/var/run/tomcat.pid"  ##必须先停止tomcat再添加，tomcat跑着的时候添加完重启不会造成pid不一致的错误
 
 
 创建tomcat.service文件
