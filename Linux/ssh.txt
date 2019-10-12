@@ -78,5 +78,18 @@ Host 主机别名（随意起名）
  
  需要注意的是私钥文件的访问权限仅限当前用户   
  chmod 400 私钥文件路径
+ 
+ 如果不想每次输入指定私钥则可以如下
+ [root@localhost ssh]# tail /etc/ssh/ssh_config 
+# If this option is set to yes then remote X11 clients will have full access
+# to the original X11 display. As virtually no X11 client supports the untrusted
+# mode correctly we set this to yes.
+	ForwardX11Trusted yes
+# Send locale-related environment variables
+	SendEnv LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
+	SendEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
+	SendEnv LC_IDENTIFICATION LC_ALL LANGUAGE
+	SendEnv XMODIFIERS
+        IdentityFile=/root/.ssh/09_rsa  ###增加这一行
 
 
