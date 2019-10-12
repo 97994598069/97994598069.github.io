@@ -90,6 +90,5 @@ Host 主机别名（随意起名）
 	SendEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
 	SendEnv LC_IDENTIFICATION LC_ALL LANGUAGE
 	SendEnv XMODIFIERS
-        IdentityFile=/root/.ssh/09_rsa  ###增加这一行
-
+        IdentityFile=/root/.ssh/09_rsa  ###增加这一行，不需要重启ssh，及时生效
 
