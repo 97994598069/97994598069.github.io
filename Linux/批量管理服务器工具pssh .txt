@@ -76,6 +76,8 @@ pslurp 将文件从远程主机复制到本地： 从多个远程到本地
 [1] 11:40:54 [SUCCESS] 192.168.1.199
 表示将目标服务器的/tmp/network文件复制到本地的/tmp/test目录下,并更名为test(必须有)
 在/tmp/test目录下即可看见192.168.1.199这个目录，目录中存放复制过来的文件。
+发送目录：
+ pscp -r -h ip_list -O "IdentityFile=/root/.ssh/09_rsa" /usr/local/jdk1.8.0_202/ /usr/local/
 
 pnuke 并行在远程主机杀进程:
 [root@centos pssh-2.3]# pnuke -h host.txt syslog
