@@ -1,0 +1,21 @@
+1.下载解压
+略
+
+2.配置
+vi elasticsearch.yml 
+#network.host: 192.168.0.1
+network.host: 10.43.112.237  ###为本机ip
+http.port: 9200  ##前面注释“#”去掉
+
+script.painless.regex.enabled: true  ##配置文件最后追加01
+indices.fielddata.cache.size: 40%    ##配置文件最后追加02
+
+2.创建启动用户。es默认是不能通过root启动的
+useradd es
+
+su es 
+./bin/elasticsearch -d
+
+查看日志  略
+查看进程和端口  略
+
