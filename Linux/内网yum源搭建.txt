@@ -1,0 +1,49 @@
+1. ftp上传centos7的镜像到yum服务器的/opt
+2. 挂载
+mkdir /yum ##根据需要
+mount -o loop -t iso9660 /opt/CentOS-7-x86_64-Everything-1804.iso /yum
+ -o 是mount命令的一个参数，Options的首字母，后面跟着mount选项
+loop：用来把一个文件当成硬盘分区mount到目录
+-t：指定档案系统的型态，通常不必指定。mount 会自动选择正确的型态。
+
+
+3.修改本机yum源配置
+vi /etc/yum.repos.d/rhel7.repo
+[rhel-media]
+name=Red Hat Enterprise Linux 7
+baseurl=file:///yum
+enabled=1
+gpgcheck=0
+gpgkey=file:///yum/RPM-GPG-KEY-redhat-release
+
+
+4.安装nginx
+略
+配置权限和访问列表
+location / {
+    root   /yum;
+    autoindex on;
+    allow 192.168.15.0/24;
+    allow 192.168.19.0/24;
+    deny all;
+}
+
+
+5.pssh工具批量备份内网服务器的yum源
+pssh -h host_list -i "mkdir -pv /etc/yum.repos.d/yum_back"
+pssh -h host_list -i "mv /etc/yum.repos.d/*.repo /etc/yum.repos.d/yum_back"
+
+
+
+6.配置内网yum源，并发送至内网需要的服务器
+[root@localhost conf]# cat /etc/yum.repos.d/client.repo 
+[rhel-media]
+name=Red Hat Enterprise Linux
+baseurl=http://10.43.112.226/
+enabled=1
+gpgcheck=0
+gpgkey=http://10.43.112.226/RPM-GPG-KEY-redhat-release
+
+pscp -h host_list /etc/yum.repos.d/client.repo /etc/yum.repos.d/
+pssh -h host_list -i "yum clean all"
+pssh -h host_list -i "yum makecache"
