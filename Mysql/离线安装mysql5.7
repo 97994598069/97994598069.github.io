@@ -1,0 +1,119 @@
+上传按照包
+[root@localhost package_install]# ll /mnt/package_install/
+total 131980
+-rw-r--r--. 1 root root 83709983 Oct 12 18:03 boost_1_59.tar.gz
+-rw-r--r--. 1 root root 51433090 Oct 12 18:03 mysql-5.7.17.tar.gz
+
+
+#卸载系统自带boots库
+[root@localhost ~]# yum -y remove boost-*   
+
+#卸载系统自带的mysql
+[root@localhost ~]#  yum -y remove mysql
+[root@localhost ~]# rpm -qa | grep mysql
+mysql-libs-5.1.73-5.el6_6.x86_64
+[root@localhost ~]#  rpm -e --nodeps  mysql-libs-5.1.73-5.el6_6.x86_64
+[root@localhost ~]# rpm -qa | grep mysql
+
+[root@localhost package_install]# tar xf boost_1_59.tar.gz -C /mnt/
+[root@localhost package_install]# ./bootstrap.sh
+[root@localhost package_install]# ./b2 install
+
+添加用户和组
+[root@localhost ~]# groupadd mysql
+[root@localhost ~]# useradd -M -s /sbin/nologin -r -g mysql mysql
+
+[root@localhost ~]# yum -y install vim git gcc gcc-c++ wget make cmake automake autoconf libaio libtool net-tools bison bison-devel libaio-devel ncurses ncurses-devel perl-Data-Dumper
+tar xf mysql-5.7.17.tar.gz -C /mnt/
+cd mysql-5.7.17/
+cmake -DCMAKE_INSTALL_PREFIX=/server/mysql  -DMYSQL_DATADIR=/server/mysql/data -DSYSCONFDIR=/etc -DMYSQL_UNIX_ADDR=/server/mysql/mysql.sock -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_MEMORY_STORAGE_ENGINE=1 -DWITH_READLINE=1 -DMYSQL_UNIX_ADDR=l -DMYSQL_TCP_PORT=3306 -DENABLED_LOCAL_INFILE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8 -DDEFAULT_COLLATION=utf8_general_ci -DDOWNLOAD_BOOST=1 -DWITH_BOOST=/server/boost_1_59_0
+
+make -j 4 ###4为cpu核数
+
+make install 
+
+
+chown -R mysql:mysql /mnt/mysql
+
+配置数据库配置文件
+mv /etc/my.cnf{,.bak}
+
+[root@Wg64 mysql-5.7.18]#vim /etc/my.cnf
+[mysqld]
+sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES
+#default
+user = mysql
+basedir = /mnt/mysql
+datadir = /mnt/mysql/data
+port = 3306
+pid-file = /mnt/mysql/data/mysql.pid
+socket = /mnt/mysql/mysql.sock
+character-set-server=utf8
+[client]
+socket = /mnt/mysql/mysql.sock
+
+
+生成服务启动脚本
+cd /mnt/mysql
+grep chkconfig ./* -R  -color
+
+cp /mnt/mysql/support-files/mysql.server /etc/init.d/mysqld
+
+chmod +x /etc/init.d/mysqld
+chkconfig --add mysqld
+chkconfig mysqld on
+[root@localhost mysql]# chkconfig --list mysqld
+
+Note: This output shows SysV services only and does not include native
+      systemd services. SysV configuration data might be overridden by native
+      systemd configuration.
+
+      If you want to list systemd services use 'systemctl list-unit-files'.
+      To see services enabled on particular target use
+      'systemctl list-dependencies [target]'.
+
+mysqld         	0:off	1:off	2:on	3:on	4:on	5:on	6:off
+
+
+
+初始化数据库
+[root@Wg64 mysql]# /server/mysql/bin/mysqld --initialize-insecure --user=mysql --basedir=/server/mysql --datadir=/server/mysql/data  
+
+
+[root@localhost mysql]# mkdir /mnt/mysql/logs/
+[root@localhost logs]# touch mysqld.log
+[root@localhost logs]# chown -R mysql:mysql /mnt/mysql/logs/
+
+启动服务
+[root@Wg64 mysql]# service mysqld restart 
+ ERROR! MySQL server PID file could not be found!
+Starting MySQL.Logging to '/server/mysql/data/Wg64.err'.
+ SUCCESS! 
+ 
+[root@Wg64 mysql]# service mysqld restart 
+Shutting down MySQL.. SUCCESS! 
+Starting MySQL. SUCCESS!
+
+
+优化调用命令路径
+#添加path路径： vim /etc/profile 添加下面2行 在文件的结尾
+export MYSQL_HOME=/server/mysql
+export PATH=$PATH:$MYSQL_HOME/bin
+
+#使修改生效
+source /etc/profile
+
+
+修改mysql密码测试登入：
+[root@Wg64 ~]# mysqladmin -u root password "123456"
+{{ 或者配置文件中[mysqld]段中增加skip-grant-tables  然后mysql命令进去修改 }}
+
+ALTER USER 'root'@'localhost' IDENTIFIED BY '12345678;
+GRANT all privileges ON *.* TO 'root'@'%' identified by '123456' WITH GRANT OPTION;
+
+
+然后配置文件中去掉skip-grant-tables ，并重新启动mysql服务
+
+
++++++++++++++++++++++++++++++++++
+启动或者：/bin/sh /server/mysql/bin/mysqld_safe --datadir=/server/mysql/data --pid-file=/server/mysql/data/mysql.pid
