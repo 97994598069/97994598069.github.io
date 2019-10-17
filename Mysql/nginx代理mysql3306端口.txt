@@ -1,0 +1,44 @@
+背景:
+1. mysql服务器是台纯内网的环境，不能访问外网，安装完数据库只能内网环境使用
+2. 办公环境和服务器不能同一环境，导致开发过程中不能连接数据库，影响开发时间
+3. 内网环境中有一台服务器是有外网的，但是这个外网只开了80端口
+
+计划：在有外网的服务器上安装nginx，并通过4层代理mysql服务
+
+1.安装配置nginx
+ 1)配置nginx的4层负载
+[root@localhost sbin]# ./nginx -V
+nginx version: nginx/1.16.0
+built by gcc 4.8.5 20150623 (Red Hat 4.8.5-28) (GCC) 
+built with OpenSSL 1.0.2k-fips  26 Jan 2017
+TLS SNI support enabled
+configure arguments: --prefix=/usr/local/nginx --with-threads --with-file-aio --with-http_ssl_module --with-http_v2_module --with-stream
+
+##备注：需要增加--with-stream
+
+ 2)配置文件，增加
+在核和http同级别的地方添加：
+stream {
+    log_format main "$remote_addr $upstream_addr $time_local $status";
+    upstream test_mysql {
+        hash $remote_addr consistent;
+        server 10.43.112.174:3306;
+    }
+
+     server {
+         listen 80;
+         proxy_pass test_mysql;
+     }
+}
+
+
+然后测试登录说明:
+linux下用命令行连接，通，但是输入密码报错：
+[root@node1 ~]# mysql -h$外网ip -uxmt -p -P80
+Enter password: 
+ERROR 2003 (HY000): Can't connect to MySQL server on '124.47.33.252' (111)
+
+但是用Navicat客户端登录OK
+
+
+
