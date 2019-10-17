@@ -26,7 +26,7 @@ mysql-libs-5.1.73-5.el6_6.x86_64
 [root@localhost ~]# yum -y install vim git gcc gcc-c++ wget make cmake automake autoconf libaio libtool net-tools bison bison-devel libaio-devel ncurses ncurses-devel perl-Data-Dumper
 tar xf mysql-5.7.17.tar.gz -C /mnt/
 cd mysql-5.7.17/
-cmake -DCMAKE_INSTALL_PREFIX=/server/mysql  -DMYSQL_DATADIR=/server/mysql/data -DSYSCONFDIR=/etc -DMYSQL_UNIX_ADDR=/server/mysql/mysql.sock -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_MEMORY_STORAGE_ENGINE=1 -DWITH_READLINE=1 -DMYSQL_UNIX_ADDR=l -DMYSQL_TCP_PORT=3306 -DENABLED_LOCAL_INFILE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8 -DDEFAULT_COLLATION=utf8_general_ci -DDOWNLOAD_BOOST=1 -DWITH_BOOST=/server/boost_1_59_0
+cmake -DCMAKE_INSTALL_PREFIX=/mnt/mysql  -DMYSQL_DATADIR=/mnt/mysql/data -DSYSCONFDIR=/etc -DMYSQL_UNIX_ADDR=/mnt/mysql/mysql.sock -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_MEMORY_STORAGE_ENGINE=1 -DWITH_READLINE=1 -DMYSQL_UNIX_ADDR=l -DMYSQL_TCP_PORT=3306 -DENABLED_LOCAL_INFILE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8 -DDEFAULT_COLLATION=utf8_general_ci -DDOWNLOAD_BOOST=1 -DWITH_BOOST=/mnt/boost_1_59_0
 
 make -j 4 ###4为cpu核数
 
