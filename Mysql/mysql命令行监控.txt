@@ -12,32 +12,8 @@ MySQL on 127.0.0.1 (5.7.19-log)                                                 
 
       Id      User         Host/IP         DB      Time    Cmd Query or State                                                                                                     
        --      ----         -------         --      ----    --- ----------                                                                                                         
-    48183      root   10.43.112.184     xmt_db         0  Sleep                                                                                                                    
-   135616      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
-   135617      root   10.43.112.178     xmt_db         0  Sleep                                                                                                                    
-   135618      root   10.43.112.178     xmt_db         0  Sleep                                                                                                                    
-   135620      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
-   135621      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
-   135622      root   10.43.112.178     xmt_db         0  Sleep                                                                                                                    
-   135623      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
-   135624      root   10.43.112.178     xmt_db         0  Query select a.ID,a.SiteID,a.ContentTypeID,a.StudioID,a.StudioName,a.Title,a.SubTitle,a.Author,a.Summary,a.Status,a.Keywo
-   135915      root   10.43.112.177      hkdb2         0  Sleep                                                                                                                    
-   135916      root   10.43.112.177      hkdb2         0  Sleep                                                                                                                    
-   135917      root   10.43.112.177      hkdb2         0  Sleep                                                                                                                    
-   135918      root       localhost     xmt_db         0  Query show full processlist                                                                                              
-    48513      root   10.43.112.180     xmt_db         1  Sleep                                                                                                                    
-   135619      root   10.43.112.178     xmt_db         1  Sleep                                                                                                                    
-   135849      root   10.43.112.228      hkdb2         1  Sleep                                                                                                                    
-   135850      root   10.43.112.228      hkdb2         1  Sleep                                                                                                                    
-   135895      root   10.43.112.228      hkdb2         2  Sleep                                                                                                                    
-   115358      root   10.43.112.180     xmt_db         3  Sleep                                                                                                                    
-   135896      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
-   135897      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
-   135898      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
-   135899      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
-   135900      root   10.43.112.228      hkdb2         3  Sleep                                                                                                                    
-   135901      root   10.43.112.228      hkdb2         3  Sleep
-   
+                                                                                      
+  
 ##通过和sar对比可以查看到吃资源的sql
 
 监控画面参数意义： 
