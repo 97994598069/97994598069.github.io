@@ -28,6 +28,8 @@ stream {
      server {
          listen 80;
          proxy_pass test_mysql;
+         allow 192.168.1.23;  ##做访问限制,外网IP
+         deny all;
          access_log /usr/local/nginx/logs/proxy_mysql.log main;  ##定义日志路径
      }
 }
