@@ -19,7 +19,7 @@ configure arguments: --prefix=/usr/local/nginx --with-threads --with-file-aio --
  2)配置文件，增加
 在核和http同级别的地方添加：
 stream {
-    log_format main "$remote_addr $upstream_addr $time_local $status";
+    log_format main "$remote_addr $upstream_addr $time_local $status";  ##定义日志格式
     upstream test_mysql {
         hash $remote_addr consistent;
         server 10.43.112.174:3306;  ##内网ip,也可以是外网ip，不过最好使用内网ip
@@ -28,6 +28,7 @@ stream {
      server {
          listen 80;
          proxy_pass test_mysql;
+         access_log /usr/local/nginx/logs/proxy_mysql.log main;  ##定义日志路径
      }
 }
 
