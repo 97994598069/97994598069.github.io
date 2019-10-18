@@ -22,7 +22,7 @@ stream {
     log_format main "$remote_addr $upstream_addr $time_local $status";
     upstream test_mysql {
         hash $remote_addr consistent;
-        server 10.43.112.174:3306;
+        server 10.43.112.174:3306;  ##内网ip,也可以是外网ip，不过最好使用内网ip
     }
 
      server {
@@ -36,7 +36,7 @@ stream {
 linux下用命令行连接，通，但是输入密码报错：
 [root@node1 ~]# mysql -h$外网ip -uxmt -p -P80
 Enter password: 
-ERROR 2003 (HY000): Can't connect to MySQL server on '124.47.33.252' (111)
+ERROR 2003 (HY000): Can't connect to MySQL server on '$外网ip' (111)
 
 但是用Navicat客户端登录OK
 
