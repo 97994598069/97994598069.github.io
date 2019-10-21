@@ -16,9 +16,6 @@ B、ln -s -f /usr/local/java/jdk1.8.0_171/bin/jar(此处链接实际jdk安装路
 C、重新执行上述步骤3
 
 
-mysqldump -h192.168.1.21 -P3306 -uroot -p --database wechat >./wechat.sql
-
-Pdmi!1234mySQL
 
 
 
