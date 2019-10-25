@@ -56,11 +56,23 @@ chattr +i /etc/gshadow
 USER_IP=`who -u -m | awk '{print $NF}'| sed 's/[()]//g'`
 export HISTTIMEFORMAT="[%F %T][`whoami`][${USER_IP}] "
 或者开启审计功能
-HISTSIZE=1000
-HISTTIMEFORMAT="[%F %T][`whoami`][${USER_IP}] ";export HISTTIMEFORMAT
-export HISTORY_FILE=/var/log/audit.log   ##注意日志
-export PROMPT_COMMAND='{ thisHistID=`history 1|awk "{print \\$1}"`;lastCommand=`history 1| awk "{\\$1=\"\" ;print}"`;user=`id -un`;whoStr=(`who -u am i`);realUser=${whoStr[0]};logMonth=${whoStr[2]};logDay=${whoStr[3]};logTime=${whoStr[4]};pid=${whoStr[6]};ip=${whoStr[7]};if [ ${thisHistID}x != ${lastHistID}x ];then echo -E `date "+%Y/%m/%d %H:%M:%S"` $user\($realUser\)@$ip[PID:$pid][LOGIN:$logMonth $logDay $logTime] --- $lastCommand ;lastHistID=$thisHistID;fi; } >> $HISTORY_FILE'
-
+采用以下步骤配置用户命令日志审计功能：
+1.创建用户审计文件存放目录和审计日志文件 ； 
+mkdir -p /var/log/usermonitor/
+2.创建用户审计日志文件；
+echo usermonitor >/var/log/usermonitor/usermonitor.log
+3.将日志文件所有者赋予一个最低权限的用户；
+chown nobody:nobody /var/log/usermonitor/usermonitor.log
+4.给该日志文件赋予所有人的写权限； 
+chmod 002 /var/log/usermonitor/usermonitor.log
+5.设置文件权限,使所有用户对该文件只有追加权限 ；
+chattr +a /var/log/usermonitor/usermonitor.log
+6.编辑vim /etc/profile文件，添加如下脚本命令；
+export HISTORY_FILE=/var/log/usermonitor/usermonitor.log
+export PROMPT_COMMAND='{ date "+%y-%m-%d %T ##### $(who am i |awk "{print \$1\" \"\$2\" \"\$5}") #### $(whoami) #### $(history 1 | { read x cmd; echo "$cmd"; })"; } >>$HISTORY_FILE'
+7.使配置生效
+source /etc/profile
+审计时查看/var/log/usermonitor/usermonitor.log文件即可，它会记录登上服务器所有用户使用的命令。为了更安全，还可以将改文件打包压缩，ftp至其它本地。
 source /etc/profile
 
 
