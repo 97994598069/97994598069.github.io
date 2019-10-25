@@ -76,7 +76,13 @@ source /etc/profile
 source /etc/profile
 
 
-6.如果出差配置服务器而且有配置外网一定要启用防火墙并且创建普通用户；否则有可能等你回公司发现服务器已经登陆不上去了
+新建用户并配置sudo权限:
+ useradd admin  
+ passwd admin
+  
+ root	ALL=(ALL) 	ALL
+ admin	ALL=(ALL) 	NOPASSWD:ALL  ##新增；此时admin用户可以直接使用sudo kill命令，不需要输入root密码。若需要输入root密码则格式为:admin	ALL=(ALL) 	ALL
+
 
 
 6.内核参数调整
