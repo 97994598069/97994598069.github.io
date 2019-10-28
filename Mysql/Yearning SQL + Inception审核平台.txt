@@ -1,0 +1,292 @@
+Yearning 是基于Inception的web可视化SQL审核平台,其本身只提供可视化交互页面并不具备sql审核的能力。所以必须搭配Inception一起用。Inception 安装参考 MySQL 审核工具 Inception。
+
+
+Inception安装:
+安装前，MySQL 需要配置以下几个参数，用于 inception 记录及回滚等
+vim /etc/my.cnf
+[mysqld]
+log-bin=/usr/local/mysql/binlog/mysql-bin
+binlog_format = row	#mixed/row 
+server_id = 10
+
+
+安装相关包
+yum install -y cmake ncurses-devel openssl-devel bison-devel gcc-c++ MySQL-python 
+yum install -y perl-DBI perl-DBD-MySQL perl-Digest-MD5 perl-IO-Socket-SSL perl-TermReadKey   ##如果缺少 perl-Digest-MD5 perl-TermReadKey则会报错
+
+安装 percona-toolkit (需要用到 pt-online-schema-change)
+wget https://www.percona.com/downloads/percona-toolkit/3.0.12/binary/redhat/7/x86_64/percona-toolkit-3.0.12-1.el7.x86_64.rpm
+#或者https://pan.baidu.com/s/1ID7NYi35HUDsD-smLBcZew
+rpm -ivh percona-toolkit-3.0.12-1.el7.x86_64.rpm
+ll /usr/bin/pt-*
+
+下载SQLaudit（inception ）源码，命名为 "inception-master"
+wget https://github.com/weiyanwei412/SQLaudit/archive/master.zip
+##或者链接：https://pan.baidu.com/s/11udr_cEZOuK4YkdmiHTJAw  提取码：i2c4 
+
+复制这段内容后打开百度网盘手机App，操作更方便哦
+unzip master.zip
+mv SQLaudit-master /opt/inception-master
+cd /opt/inception-master
+
+cmake -DWITH_DEBUG=OFF \
+-DCMAKE_INSTALL_PREFIX=/usr/local/inception \
+-DMYSQL_DATADIR=/usr/local/inception/data \
+-DWITH_SSL=yes \
+-DCMAKE_BUILD_TYPE=RELEASE \
+-DWITH_ZLIB=bundled \
+-DMY_MAINTAINER_C_WARNINGS="-Wall -Wextra -Wunused -Wwrite-strings -Wno-strict-aliasing -Wdeclaration-after-statement" \
+-DMY_MAINTAINER_CXX_WARNINGS="-Wall -Wextra -Wunused -Wwrite-strings -Wno-strict-aliasing -Wno-unused-parameter -Woverloaded-virtual"
+
+make && make install
+
+
+Inception配置文件（/etc/inc.cnf）设置
+vim /etc/inc.cnf
+[inception]
+port=6669
+socket=/usr/local/inception/data/inc.socket
+character-set-server=utf8
+general_log=1 								#启用Inception语句执行记录
+general_log_file=/usr/local/inception/data/inception.log
+#Inception 审核规则
+inception_check_autoincrement_datatype=1 	#建表时，自增列的类型不为int或者bigint
+inception_check_autoincrement_init_value=1	#建表时，自增列的值指定的不为1，则报错
+inception_check_autoincrement_name=1		#建表时，如果指定的自增列的名字不为ID
+inception_check_column_comment=1			#建表时，列没有注释
+inception_check_column_default_value=0		#检查在建表、修改列、新增列时，列属性是否有默认值
+inception_check_dml_limit=1					#在DML语句中使用了LIMIT
+inception_check_dml_orderby=1				#在DML语句中使用了Order By
+inception_check_dml_where=1					#在DML语句中没有WHERE条件
+inception_check_identifier=1				#SQL语句名字检查，如果发现名字中存在除数字、字母、下划线之外的字符时，会报Identifier “invalidname” is invalid, valid options: [a-z,A-Z,0-9,_].
+inception_check_index_prefix=1				#是否检查索引名字前缀为"idx_"，检查唯一索引前缀是不是"uniq_"
+inception_check_insert_field=1				#是否检查插入语句中的列链表的存在性
+inception_check_primary_key=1				#检查是否有主键
+inception_check_table_comment=0				#检查表是否有注释
+inception_check_timestamp_default=0			#检查表是否有timestamp类型指定默认值
+inception_enable_autoincrement_unsigned=1	#检查自增列是不是为无符号型
+inception_enable_blob_type=0				#检查是不是支持BLOB字段，包括建表、修改列、新增列操作 默认开启
+inception_enable_column_charset=0			#允许列自己设置字符集
+inception_enable_enum_set_bit=0				#是否支持enum,set,bit数据类型
+inception_enable_foreign_key=0				#是否支持外键
+inception_enable_identifer_keyword=0		#SQL语句是否有标识符被写成MySQL的关键字
+inception_enable_not_innodb=0				#存储引擎是否指定为Innodb
+inception_enable_nullable=0					#创建或者新增列是否允许为NULL
+inception_enable_orderby_rand=0				#是否允许order by rand
+inception_enable_partition_table=0			#是否支持分区表
+inception_enable_select_star=0				#是否允许 Select*
+inception_enable_sql_statistic=1			#备库实例是否存储sql统计信息
+inception_max_char_length=16				#当char类型的长度大于这个值时，是否提示转换为VARCHAR
+inception_max_key_parts=5					#一个索引中，列的最大个数，超过这个数目则报错
+inception_max_keys=16						#一个表中，最大的索引数目，超过这个数则报错
+inception_max_update_rows=10000				#在一个修改语句中，预计影响的最大行数，超过这个数就报错
+inception_merge_alter_table=1				#在多个改同一个表的语句出现是，是否提示合成一个
+#inception 支持 OSC 参数(pt-online-schema-change)
+inception_osc_bin_dir=/usr/bin				#用于指定pt-online-schema-change脚本的位置，不可修改，在配置文件中设置
+inception_osc_check_interval=5				#对应OSC参数–check-interval，意义是Sleep time between checks for --max-lag.
+inception_osc_chunk_size=1000				#对应OSC参数–chunk-size
+inception_osc_chunk_size_limit=4			#对应OSC参数–chunk-size-limit
+inception_osc_chunk_time=0.1				#对应OSC参数–chunk-time
+inception_osc_critical_thread_connected=1000 #对应参数–critical-load中的thread_connected部分
+inception_osc_critical_thread_running=80	#对应参数–critical-load中的thread_running部分
+inception_osc_drop_new_table=1				#对应参数–[no]drop-new-table
+inception_osc_drop_old_table=1				#对应参数–[no]drop-old-table
+inception_osc_max_lag=3						#对应参数–max-lag
+inception_osc_max_thread_connected=1000		#对应参数–max-load中的thread_connected部分
+inception_osc_max_thread_running=80			#对应参数–max-load中的thread_running部分
+inception_osc_min_table_size=0				# 这个参数实际上是一个OSC的开关，如果设置为0，则全部ALTER语句都走OSC，如果设置为非0，则当这个表占用空间大小大于这个值时才使用OSC方式。单位为M，这个表大小的计算方式是通过语句："select (DATA_LENGTH + INDEX_LENGTH)/1024/1024 from information_schema.tables where table_schema = ‘dbname’ and table_name = ‘tablename’"来实现的
+inception_osc_on=0							#一个全局的OSC开关，默认是打开的，如果想要关闭则设置为OFF，这样就会直接修改
+inception_osc_print_none=1					#用来设置在Inception返回结果集中，对于原来OSC在执行过程的标准输出信息是不是要打
+印到结果集对应的错误信息列中，如果设置为1，就不打印，如果设置为0，就打印。而如果出现错误了，则都会打印
+inception_osc_print_sql=1					#对应参数–print
+######备份服务器信息，记录用于回滚（需要权限 CREATE、INSERT，只备份更改的数据）
+#######线上同名库可能冲突，所有此备库命名规则如：IP_Port_dbname，里面的表与对应线上表都是一一对应的
+inception_remote_backup_host=10.10.10.10
+inception_remote_backup_port=3307
+inception_remote_system_user=root
+inception_remote_system_password=mysql
+inception_support_charset=utf8
+
+
+启动和连接 Inception
+nohup /usr/local/inception/bin/Inception --defaults-file=/etc/inc.cnf 
+netstat -tulpn | grep 6669 //inception的默认端口是6669
+/usr/local/inception/bin/mysql -uroot -h127.0.0.1 -P6669 //联接inception，和mysql一样的方式inception get variables;   //查看inception的所有参数
+
+
+连接后测试查看变量
+mysql> inception get variables;
+mysql> inception get variables 'connect_timeout';
+mysql> inception set connect_timeout=15;
+
+
+###Inception参数介绍
+port=6669：Inception的服务端口
+socket=/tmp/inc.socket：Inception的套接字文件存放位置
+character-set-server=utf8：mysql原生参数
+#Inception 审核规则
+inception_check_insert_field：参数可选范围为ON/OFF，参数默认值为ON，功能是在插入语句中，
+用来控制是否指定插入列列表，如果没有指定，并且参数值为ON，则会报错。
+inception_check_dml_where：参数可选范围为ON/OFF，参数默认值为ON，功能是在审核DML语句时，
+如果发现没有WHERE条件，并且此参数设置为ON，就会报错，否则被忽略
+inception_check_dml_limit：参数可选范围为ON/OFF，参数默认值为ON，功能说明是在DML语句中，如果使用了LIMIT表达式，
+并且此参数设置为ON，就会报错。这一般用来防止STATEMENT语句主从复制时导致主从不一致的问题。
+inception_check_dml_orderby：参数可选范围为ON/OFF，参数默认值为ON，功能是在DML语句中，如果使用了OrderBy表达式，
+并且此参数设置为ON，就会报错。这一般用来防止STATEMENT语句主从复制时导致主从不一致的问题。
+inception_enable_select_star：参数可选范围为ON/OFF，参数默认值为ON，功能是在遇到查询语句为“select*from”，
+并且此参数设置为ON时，不会报错，否则会报错。
+inception_enable_orderby_rand：参数可选范围为ON/OFF，参数默认值为ON，功能是语句中出现orderbyrand()时，
+用来控制是否报错，设置为ON表示不报错，否则会报错。
+inception_enable_nullable：参数可选范围为ON/OFF，参数默认值为ON，功能是在创建或者新增列时，如果列为NULL，
+用来控制是否报错，如果设置为ON，表示不报错，否则会报错。
+inception_enable_foreign_key：参数可选范围为ON/OFF，参数默认值为ON，功能是在创建表或增加索引时，如果存在外键，
+用来控制是否报错，如果设置为ON，则不报错，否则会报错。
+inception_max_key_parts：参数可选范围为1～64，参数默认值为5，功能是在一个索引中，用来控制列的最大个数，
+如果超过这个数目则报错。在增加索引或新建表时，都会生效。
+inception_max_update_rows：参数可选范围为1～MAX，参数默认值为10000，功能是在一个修改语句中，用来控制预计影响的最大行数，
+如果超过这个数就报错。这个参数的获取方法是explain，对于有一些语句或在MySQL5.5版本中获取不到相应语句时，预计行数都会是0，
+这时这个参数就失效了。
+inception_max_keys：参数可选范围为1～1024，参数默认值为16，功能在一个表中，用来控制支持的最大索引数目，
+如果超过这个数则报错，不管在新增表，还是新增索引时，都有效。
+inception_enable_not_innodb：参数可选范围为ON/OFF，参数默认值为OFF，功能是在新建表指定的存储引擎不是Innodb时，
+用来控制是否报错，如果设置为ON，则不报错，否则会报错。
+inception_support_charset：参数可选范围为MySQL支持字符集，参数默认值为“utf8mb4”，功能是表示在建表或建库时支持的字符集，
+如果需要多个，则用逗号分隔，影响的范围是建表、设置会话字符集、修改表字符集属性等。
+inception_check_table_comment：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表及没有设置表注释时，用来控制是否报错，如果设置为ON，则会报错。
+inception_check_column_comment：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表或改表加列，并且没有设置列注释时，用来控制是否报错，如果设置为ON，则会报错。
+inception_check_primary_key：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表时，如果没有创建主键，
+用来控制是否报错，如果设置为ON，就会报错。
+inception_enable_partition_table：参数可选范围为ON/OFF，参数默认值为OFF，功能是在建表时，
+如果创建了分区表，用来控制是否报错，如果设置为ON，不会报错，否则会报错。
+inception_enable_enum_set_bit：参数可选范围为ON/OFF，参数默认值为OFF，功能是在建表或加列时，
+如果列对应的数据类型指定的是enum、set、bit数据类型，用来控制是否报错，如果设置为ON，则不报错，否则会报错。
+inception_check_index_prefix：参数可选范围为ON/OFF，参数默认值为ON，功能是用来检查新建或建表时的索引前缀，
+普通索引的前缀为“idx_”，唯一索引的前缀为“uniq_”，如果设置为ON，并且索引前缀不符合规则，则会报错。
+inception_enable_autoincrement_unsigned：参数可选范围为ON/OFF，参数默认值为ON，功能是在新建表时，
+如果自增列不是无符号整型的数据类型，用来控制是否报错，如果设置为ON，就报错，否则不报错。
+inception_max_char_length：参数可选范围为1～MAX，参数默认值为16，功能是用来控制当char类型的长度大于多少时，
+就提示将其转换为VARCHAR。
+inception_check_autoincrement_init_value：参数可选范围为ON/OFF，参数默认值为ON，功能是当建表时自增列的值指定不为1时，
+用来控制是否报错，如果设置为ON，则报错。
+inception_check_autoincrement_datatype：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表时自增列的类型不为int或bigint时，
+用来控制是否报错，如果设置为ON，则会报错。
+inception_check_timestamp_default：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表时，如果没有为timestamp类型指定默认值，
+用来控制是否报错，如果设置为ON，则会报错。
+inception_enable_column_charset：参数可选范围为ON/OFF，参数默认值为OFF，功能是在新建表或修改表加列改列时，
+用来控制是否能单独指定列的字符集，如果设置为ON，则表示可以设置，不报错。
+inception_check_autoincrement_name：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表时，如果指定的自增列名字不为ID，
+用来控制是否报错，如果设置为ON，则报错，表示这个列可能存在业务意义，起到提示的作用。
+inception_merge_alter_table：参数可选范围为ON/OFF，参数默认值为ON，功能是在同一个Inception任务中，多个语句修改同一个表的语句出现时，
+用来控制是否报错，如果设置为ON，则报错，并提示合成一个。
+inception_check_column_default_value：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表、修改列、新增列时，
+用来控制新的列属性是否要有默认值，如果设置为ON，则说明必须要有默认值，否则会报错。
+inception_enable_blob_type：参数可选范围为ON/OFF，参数默认值为ON，功能是在建表、修改列、新增列操作时，如果存在BLOB类型的列，
+用来控制是否报错，如果设置为ON，说明支持BLOB类型，则不会报错。
+inception_enable_identifer_keyword：参数可选范围为ON/OFF，参数默认值为OFF，功能是在所有审核的SQL语句中，
+如果有标识符被写成MySQL的关键字，用来控制是否报错。如果设置为ON，说明支持标识符为关键字，就不会报错，否则会报错。
+由于历史原因，这里的identifer写错了，正确写法是identifier，但Inception发布已久，只能将错就错。
+auto_commit：参数可选范围为ON/OFF，参数默认值为OFF，功能是为了匹配Python客户端每次自动设置auto_commit=0的，
+如果取消则会报错，针对Inception本身没有实际意义。
+bind_address：参数可选范围为string，参数默认值为*。这个参数实际上就是MySQL数据库原来的参数，
+因为Incpetion没有权限验证过程，那么为了实现更安全的访问，可以给Inception服务器的这个参数设置某些机器（Inception上层的应用程序）的地址，
+这样其他非法程序就是不可访问的了，再加上Inception执行选项中的用户名密码，对于后端MySQL就更加安全了。
+general_log：参数可选范围为ON/OFF，参数默认值为ON。
+这个参数就是原生的MySQL参数，用来记录在Inception服务上执行过哪些语句，定位一些问题等。
+general_log_file：参数可选范围为string，参数默认值为inception.log，功能是设置generallog写入的文件路径。
+inception_user：参数可选范围为string，参数默认值为empty。这个用户名在配置之后，在连接Inception的选项中可以不指定user，
+这样就可以不暴露线上数据库的用户名及密码了，可以作为临时使用的一种方式。
+但这个用户现在只能用来审核，也就是说，即使在选项中指定–enable-execute，也不能执行，是只能用来审核的账号。
+inception_password：参数可选范围为string，参数默认值为empty。这个参数与上面的参数是一对的，对应的是选项中的password，设置这个参数之后，可以在选项中不指定password。
+inception_enable_sql_statistic：参数可选范围为ON/OFF，参数默认值为ON。
+用来设置是否支持在统计Inception执行过的语句中，记录各种语句分别占多大比例。
+如果参数值为ON，则每次执行的情况都会在备份数据库实例中inception库的statistic表中，以一条记录的形式存储这次操作的统计情况，
+每次操作对应一条记录，这条记录中含有的信息是各种类型的语句执行次数情况，
+具体的信息请参照52章中“Inception对SQL执行情况的统计”一节。
+inception_read_only：参数可选范围为ON/OFF，参数默认值为OFF。
+设置当前Inception服务器是否为只读，这是为了防止一些人在具有修改权限的账号时，通过Inception误修改一些数据。
+如果inception_read_only设置为ON，则即使打开了enable-execute，同时又有执行权限，也不会去执行，审核完成即返回。
+inception_check_identifier：参数可选范围为ON/OFF，参数默认值为ON，功能是打开与关闭Inception对SQL语句中各种名字的检查。
+如果设置为ON，则发现名字中存在除数字、字母、下划线之外的字符时，会报Identifier“invalidname”isinvalid,validoptions:[a-z,A-Z,0-9,_]。
+inception_max_primary_key_parts：参数可选范围为1～64，参数默认值为5，功能是在创建表时，如果主键所包含的列个数超过这个设置的值，则会报警告。
+inception_enable_pk_columns_only_int：参数可选范围为ON/OFF，参数默认值为OFF，功能是如果参数设置为ON，则在创建表或创建主键索引时，会判断包含的列的类型是否只有INT类型的，如果不是则报警告。
+#备份服务器信息，注意改成你的机器.用于回滚。
+inception_remote_backup_host：指定远程备份MySQL实例的地址。
+inception_remote_backup_port：指定远程备份MySQL实例的端口。
+inception_remote_system_user：备份时，连接上面指定的MySQL实例时所需要的用户名，这个用户需要有相应的权限，一般包括CREATE、INSERT及SELECT权限。
+inception_remote_system_password：备份时，连接备份库时所需要的用户对应的密码。
+#inception 支持 OSC 参数
+inception_osc_bin_dir=/user/bin：用于指定pt-online-schema-change脚本的位置，不可修改，在配置文件中设置
+inception_osc_check_interval=5 #对应OSC参数–check-interval，意义是Sleep time between checks for --max-lag.
+inception_osc_chunk_size=1000 #对应OSC参数–chunk-size
+inception_osc_chunk_size_limit=4 #对应OSC参数–chunk-size-limit
+inception_osc_chunk_time=0.1 #对应OSC参数–chunk-time
+inception_osc_critical_thread_connected=1000 #对应参数–critical-load中的thread_connected部分
+inception_osc_critical_thread_running=80 #对应参数–critical-load中的thread_running部分
+inception_osc_drop_new_table=1 #对应参数–[no]drop-new-table
+inception_osc_drop_old_table=1 #对应参数–[no]drop-old-table
+inception_osc_max_lag=3 #对应参数–max-lag
+inception_osc_max_thread_connected=1000 #对应参数–max-load中的thread_connected部分
+inception_osc_max_thread_running=80 #对应参数–max-load中的thread_running部分
+inception_osc_min_table_size=0 # 这个参数实际上是一个OSC的开关，如果设置为0，则全部ALTER语句都走OSC，如果设置为非0，则当这个表占用空间大小大于这个值时才使用OSC方式。单位为M，这个表大小的计算方式是通过语句："select (DATA_LENGTH + INDEX_LENGTH)/1024/1024 from information_schema.tables where table_schema = ‘dbname’ and table_name = ‘tablename’"来实现的
+inception_osc_on=0 #一个全局的OSC开关，默认是打开的，如果想要关闭则设置为OFF，这样就会直接修改
+inception_osc_print_none=1 #用来设置在Inception返回结果集中，对于原来OSC在执行过程的标准输出信息是不是要打印到结果集对应的错误信息列中，如果设置为1，就不打印，如果设置为0，就打印。而如果出现错误了，则都会打印
+inception_osc_print_sql=1 #对应参数–print
+
+
+
+2. Yearning安装  https://guide.yearning.io/
+Yearning下载
+Yearning-go提供二进制下载包 
+下载地址 https://github.com/cookieY/Yearning/releases
+请选择最新版本 在Assets中选择 Yearning-x.x.x.linux-amd64.zip 包进行下载
+
+1.填写配置文件
+cat conf.toml
+[Mysql]
+Db = "Yearning"
+Host = "127.0.0.1"
+Port = "3306"
+Password = "xxxx"
+User = "root"
+
+[General]   #数据库加解密key，只可更改一次。
+SecretKey = "dbcjqheupqjsuwsm"
+
+
+关于SecretKey
+SecretKey是token/数据库密码加密/解密的salt。
+建议所有用户在初次安装Yearning之前将SecretKey更改(不更改将存在安全风险)
+格式: 大小写字母均可, 长度必须为16位
+
+特别注意: 
+此key仅可在初次安装时更改!之后不可再次更改!如再次更改会导致之前已存放的数据源密码无法解密,最终导致无法获取相关数据源信息
+
+
+使用帮助
+./Yearning -h
+
+2.初始化数据结构
+./Yearning -m
+如要再次初始化，请先把yearning表删除，否则重复执行无效
+
+
+3.启动服务
+默认启动
+./Yearning -s
+
+参数启动 
+./Yearning -s -b "172.27.80.35" -p "8000"
+
+
+打开浏览器 http://172.27.80.35:8000
+默认密码：admin/Yearning_admin
+
+
+服务更新
+Yearning采用自动表结构同步 无需手动更新表结构
+但如遇 删除字段操作的变动需要执行以下命令。具体是否需要做此操作，请详见相应版本的更新公告
+./Yearning -x
+
+
+
+
