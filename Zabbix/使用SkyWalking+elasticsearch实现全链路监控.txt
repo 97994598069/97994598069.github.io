@@ -1,0 +1,124 @@
+随着微服务架构的流行，一些微服务架构下的问题也会越来越突出，比如一个请求会涉及多个服务，而服务本身可能也会依赖其他服务，整个请求路径就构成了一个网状的调用链，而在整个调用链中一旦某个节点发生异常，整个调用链的稳定性就会受到影响。
+
+面对以上情况， 我们就需要一些可以帮助理解系统行为、用于分析性能问题的工具，以便发生故障的时候，能够快速定位和解决问题。这时候分布式追踪系统就该闪亮登场了。
+
+skywalking简介:
+SkyWalking 是针对分布式系统的 APM 系统，也被称为分布式追踪系统
+* 全自动探针监控，不需要修改应用程序代码。查看支持的中间件和组件库列表：https://github.com/apache/incubator-skywalking
+* 支持手动探针监控, 提供了支持 OpenTracing 标准的SDK。覆盖范围扩大到 OpenTracing-Java 支持的组件。查看OpenTracing组件支持列表：https://github.com/opentracing-contrib/meta
+* 自动监控和手动监控可以同时使用，使用手动监控弥补自动监控不支持的组件，甚至私有化组件。
+* 纯 Java 后端分析程序，提供 RESTful 服务，可为其他语言探针提供分析能力。
+* 高性能纯流式分析
+
+
+SkyWalking 的核心是数据分析和度量结果的存储平台，通过 HTTP 或 gRPC 方式向 SkyWalking Collecter 提交分析和度量数据，SkyWalking Collecter 对数据进行分析和聚合，存储到 Elasticsearch、H2、MySQL、TiDB 等其一即可，最后我们可以通过 SkyWalking UI 的可视化界面对最终的结果进行查看。Skywalking 支持从多个来源和多种格式收集数据：多种语言的 Skywalking Agent 、Zipkin v1/v2 、Istio 勘测、Envoy 度量等数据格式。
+下面基于Linux环境部署SkyWalking+elasticsearch。
+
+
+1.安装es 略
+配置：
+vim elasticsearch/config/elasticsearch.yml
+cluster.name: CollectorDBCluster
+path.data: /data/elasticsearch/data
+path.logs: /data/elasticsearch/logs
+network.host: 0.0.0.0
+http.port: 9200
+
+2.安装skywalking
+tar zxvf apache-skywalking-apm-6.4.0.tar.gz
+修改SkyWalking配置
+vim apache-skywalking-apm-bin/config/application.yml
+1.打开es:
+storage:
+  elasticsearch:
+    nameSpace: ${SW_NAMESPACE:"abc"}
+    clusterNodes: ${SW_STORAGE_ES_CLUSTER_NODES:192.168.197.198:9200}
+    protocol: ${SW_STORAGE_ES_HTTP_PROTOCOL:"http"}
+#    trustStorePath: ${SW_SW_STORAGE_ES_SSL_JKS_PATH:"../es_keystore.jks"}
+#    trustStorePass: ${SW_SW_STORAGE_ES_SSL_JKS_PASS:""}
+#    user: ${SW_ES_USER:""}
+#    password: ${SW_ES_PASSWORD:""}
+    indexShardsNumber: ${SW_STORAGE_ES_INDEX_SHARDS_NUMBER:2}
+    indexReplicasNumber: ${SW_STORAGE_ES_INDEX_REPLICAS_NUMBER:0}
+#    # Those data TTL settings will override the same settings in core module.
+#    recordDataTTL: ${SW_STORAGE_ES_RECORD_DATA_TTL:7} # Unit is day
+#    otherMetricsDataTTL: ${SW_STORAGE_ES_OTHER_METRIC_DATA_TTL:45} # Unit is day
+#    monthMetricsDataTTL: ${SW_STORAGE_ES_MONTH_METRIC_DATA_TTL:18} # Unit is month
+#    # Batch process setting, refer to https://www.elastic.co/guide/en/elasticsearch/client/java-api/5.5/java-docs-bulk-processor.html
+#    bulkActions: ${SW_STORAGE_ES_BULK_ACTIONS:1000} # Execute the bulk every 1000 requests
+#    flushInterval: ${SW_STORAGE_ES_FLUSH_INTERVAL:10} # flush the bulk every 10 seconds whatever the number of requests
+#    concurrentRequests: ${SW_STORAGE_ES_CONCURRENT_REQUESTS:2} # the number of concurrent requests
+#    metadataQueryMaxSize: ${SW_STORAGE_ES_QUERY_MAX_SIZE:5000}
+#    segmentQueryMaxSize: ${SW_STORAGE_ES_QUERY_SEGMENT_SIZE:200}
+#  h2:
+
+2.关闭h2
+#  h2:
+#    driver: ${SW_STORAGE_H2_DRIVER:org.h2.jdbcx.JdbcDataSource}
+#    url: ${SW_STORAGE_H2_URL:jdbc:h2:mem:skywalking-oap-db}
+#    user: ${SW_STORAGE_H2_USER:sa}
+#    metadataQueryMaxSize: ${SW_STORAGE_H2_QUERY_MAX_SIZE:5000}
+#  mysql:
+#    metadataQueryMaxSize: ${SW_STORAGE_H2_QUERY_MAX_SIZE:5000}
+
+
+cd apache-skywalking-apm-bin/bin/
+./startup.sh
+验证，浏览器访问http://192.168.2.211:8080/
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+配置agent：
+部署java agent
+先进入agent目录，编辑config/agent.config
+修改应用名称和收集服务器地址
+agent.service_name=${SW_AGENT_NAME:tomcat}  ##tomcat为应用名
+collector.backend_service=${SW_AGENT_COLLECTOR_BACKEND_SERVICES:192.168.197.198:11800}  ##192.168.197.198:11800为skywalking的地址
+
+然后将agent考到应用服务器上：
+scp -rp ./agent/ root@192.168.197.2:/home  然后java启动的时候指定agent下的jar包就行
+若一台服务器上配置了多个应用，则可以配置多个agent来区分不同的应用（因为agent的配置文件是需要指定服务名称的）
+
+运行应用
+nohup java -javaagent:/opt/soft/apache-skywalking-apm-incubating/agent/skywalking-agent.jar  -jar service-registry-0.0.1-SNAPSHOT.jar  >> registry.log 2>&1 &
+
+监听tomcat：
+[root@localhost bin]# cat catalina.sh 
+#!/bin/sh
+CATALINA_OPTS="$CATALINA_OPTS -javaagent:/data/apache-skywalking-apm-bin/agent/skywalking-agent.jar"; export CATALINA_OPTS
+
+
+或者创建一个start.sh
+rm -f tpidnohup java -javaagent:/opt/soft/apache-skywalking-apm-incubating/agent/skywalking-agent.jar  -jar chat-robot-0.0.1-SNAPSHOT.jar  >> app.log 2>&1 &
+echo $! > tpid
+echo Start Success!
+
+编辑权限
+chmod 755 start.sh
+
+运行start.sh
+
+
+
+停止的话可以加一个stop.sh
+APP_NAME=service-registry-0.0.1-SNAPSHOT
+
+tpid=`ps -ef|grep $APP_NAME|grep -v grep|grep -v kill|awk '{print $2}'`
+if [ ${tpid} ]; then
+    echo 'Stop Process...'
+    kill -15 $tpid
+fi
+sleep 5
+tpid=`ps -ef|grep $APP_NAME|grep -v grep|grep -v kill|awk '{print $2}'`
+if [ ${tpid} ]; then
+    echo 'Kill Process!'
+    kill -9 $tpid
+else
+    echo 'Stop Success!'
+fi
+
+
++++++++++++++++++++++++++++++
+
