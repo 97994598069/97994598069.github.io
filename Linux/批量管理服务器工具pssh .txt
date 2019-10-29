@@ -1,3 +1,194 @@
+[root@localhost ~]# ssh-keygen -t rsa
+
+Generating public/private rsa key pair.
+
+Enter file in which to save the key (/root/.ssh/id_rsa): /root/.ssh/09_rsa
+
+Enter passphrase (empty for no passphrase): 
+
+Enter same passphrase again: 
+
+Your identification has been saved in /root/.ssh/09_rsa.
+
+Your public key has been saved in /root/.ssh/09_rsa.pub.
+
+The key fingerprint is:
+
+SHA256:z/FWVP6j1Bbh+qsGdnZPaH5QuGUJfMb0l3Lro7L1XSw root@localhost
+
+The key's randomart image is:
+
++---[RSA 2048]----+
+
+|            . oo.|
+
+|             o.*+|
+
+|             .=*=|
+
+|             .*.O|
+
+|        S .  o.@.|
+
+|         o =.+Xoo|
+
+|          + *=E*+|
+
+|           o..+.B|
+
+|           .+o.+.|
+
++----[SHA256]-----+
+
+
+
+[root@localhost ~]# ll .ssh/
+
+总用量 8
+
+-rw------- 1 root root 1675 9月  27 11:13 09_rsa
+
+-rw-r--r-- 1 root root  396 9月  27 11:13 09_rsa.pub
+
+
+
+分发：可配置脚本for ip in 141 109 114 32
+
+[root@localhost ~]# sshpass -p '666666' ssh-copy-id -i /root/.ssh/09_rsa.pub -o StrictHostKeyChecking=no root@192.168.197.14
+
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/09_rsa.pub"
+
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+
+
+
+Number of key(s) added: 1
+
+
+
+Now try logging into the machine, with:   "ssh -o 'StrictHostKeyChecking=no' 'root@192.168.197.14'"
+
+and check to make sure that only the key(s) you wanted were added.
+
+
+
+[root@localhost ~]# sshpass -p '666666' ssh-copy-id -i /root/.ssh/09_rsa.pub -o StrictHostKeyChecking=no root@192.168.197.4
+
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/09_rsa.pub"
+
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+
+
+
+Number of key(s) added: 1
+
+
+
+Now try logging into the machine, with:   "ssh -o 'StrictHostKeyChecking=no' 'root@192.168.197.4'"
+
+and check to make sure that only the key(s) you wanted were added.
+
+
+
+
+
+
+
+测试登录：
+
+[root@localhost ~]# ssh -i /root/.ssh/09_rsa root@192.168.197.14
+
+Last failed login: Fri Sep 27 11:04:14 CST 2019 from 192.168.197.28 on ssh:notty
+
+There was 1 failed login attempt since the last successful login.
+
+Last login: Fri Sep 27 11:02:15 2019 from 192.168.197.28
+
+[root@localhost ~]# hostname -I
+
+192.168.197.14 
+
+
+
+
+
+[root@localhost ~]# ssh -i /root/.ssh/09_rsa root@192.168.197.4
+
+Last failed login: Fri Sep 27 11:04:11 CST 2019 from 192.168.197.28 on ssh:notty
+
+There was 1 failed login attempt since the last successful login.
+
+Last login: Fri Sep 27 11:02:07 2019 from 192.168.197.28
+
+[root@node1 ~]# hostname -I
+
+192.168.197.4 172.17.0.1 
+
+
+
+
+
++++++++++++++++++++++++++
+
+使用pssh管理;;为了安全考虑，整体思路是在跳板机上不能直接ssh进到客户机，需要指定第二个密钥（和跳板机登录不是一个）；同理pssh也需要指定密钥
+
+pssh -h ip_list -O "IdentityFile=/root/.ssh/test_rsa" -i "ifconfig"
+
+
+
+###IdentityFile=/root/.ssh/test_rsa  指定私钥位置等同于ssh的配置文件里添加
+
+Host 主机别名（随意起名）
+
+    HostName 主机地址（ip地址或者域名地址）
+
+    User 用户名（如root）
+
+    Port 端口号（如22）
+
+    IdentityFile  私钥文件路径（如 ~/.ssh/我的私钥）
+
+ 
+
+ 需要注意的是私钥文件的访问权限仅限当前用户   
+
+ chmod 400 私钥文件路径
+
+ 
+
+ 如果不想每次输入指定私钥则可以如下
+
+ [root@localhost ssh]# tail /etc/ssh/ssh_config 
+
+# If this option is set to yes then remote X11 clients will have full access
+
+# to the original X11 display. As virtually no X11 client supports the untrusted
+
+# mode correctly we set this to yes.
+
+	ForwardX11Trusted yes
+
+# Send locale-related environment variables
+
+	SendEnv LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
+
+	SendEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
+
+	SendEnv LC_IDENTIFICATION LC_ALL LANGUAGE
+
+	SendEnv XMODIFIERS
+
+        IdentityFile=/root/.ssh/09_rsa  ###增加这一行，不需要重启ssh，及时生效
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
 pssh 用于同时管理多台服务器，在安装Hadoop时可以同步Hadoop已经配置好的安装文件，十分方便，本文将介绍pssh的基本命令和使用方法。由于pssh基于python实现的，所以在安装之前务必保证安装好python2.6以上。
 
 安装：
