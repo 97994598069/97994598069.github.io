@@ -1,0 +1,164 @@
+首先要在CentOS系统上面安装所需的依赖：ssh、防火墙、postfix(用于邮件通知)、wegt，以下这些命令也会打开系统防火墙中的HTTP和SSH端口访问。
+
+1、安装SSH协议
+安装命令：sudo yum install -y curl policycoreutils-python openssh-server
+
+2、设置SSH服务开机自启动
+安装命令：sudo systemctl enable sshd
+
+3、启动SSH服务
+启动命令：sudo systemctl start sshd
+
+5、开启防火墙
+开启命令：service firewalld  start
+
+6、添加HTTP服务到firewalld  ##其中，pemmanent表示永久生效，若不加--permanent系统下次启动后就会失效。
+安装命令：sudo firewall-cmd --permanent --add-service=http
+
+8、安装Postfix以发送邮件
+安装命令：sudo yum install postfix
+
+9、将postfix服务设置成开机自启动
+命令：sudo systemctl enable postfix
+
+10、启动postfix
+启动命令：sudo systemctl start postfix
+
+
+11、安装wget，用于从外网上下载插件
+安装命令：sudo  yum -y install wget
+
+
+二、添加GitLab镜像源并安装gitlab服务器
+1、添加gitlab镜像
+命令：wget https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el7/gitlab-ce-10.5.7-ce.0.el7.x86_64.rpm
+
+
+2、安装Gitlab
+命令：rpm -i gitlab-ce-10.5.7-ce.0.el7.x86_64.rpm
+
+
+3、修改gitlab配置文件指定服务器ip和自定义端口：
+命令：vim  /etc/gitlab/gitlab.rb
+external_url 'http://192.168.197.95:9090'   ###git的浏览器访问地址，也可以是80端口
+
+4、将9090端口添加到防火墙中
+命令： firewall-cmd --zone=public --add-port=9090/tcp --permanent 
+
+5、重启防火墙
+重启命令：sudo systemctl reload firewalld
+
+6、重置gitlab  ###需要很长时间
+命令：gitlab-ctl reconfigure
+
+
+7、启动gitlab
+命令：gitlab-ctl restart
+
+8、访问Gitlab页面
+如果没有设置域名，在浏览器里面直接输入服务器IP和指定的端口号就可以进行访问，第一次登陆的时候会默认进入修改密码界面：
+
+
++++++++++++++++++++++++++++++++++
+
+上述是通过浏览器来配置的，若是我不想通过浏览器，只想通过ssh呢
+{{访问gitlab从http方式改为ssh方式，gitlab使用的不是标准22端口}}
+
+设置步骤：
+1，本地进入.ssh查看是否存在密钥对：xxx和xxx.pub
+命令：cd ~/.ssh
+
+2，如果不存在，使用ssh-keygen来创建
+命令：ssh-keygen -t rsa -C "youremail@youremail.com"
+例如：ssh-keygen -t rsa -C "wanwan5856@163.com"
+
+注解：
+Enter file in which to save the key 输入保存秘钥的文件 直接enter即可
+Enter passphrase (empty for no passphrase) 输入密码 直接enter即可
+此时查看.ssh目录下可看到新增的一对秘钥id_rsa和id_rsa.pub
+
+
+
+3，查看公钥
+命令： cat ~/.ssh/id_rsa.pub 
+复制全部，包括后面的邮箱
+
+4，添加到gitlab中
+左侧栏Profile Settings → 左侧栏SSH Keys → 粘贴并Add key
+
+
+5，创建config，端口为22可忽略这一步
+命令：cat>~/.ssh/config ##也可以手动复制进去
+输入：
+Host gitlab.xxx.com
+User git
+Port 458
+IdentityFile /home/yourname/.ssh/id_rsa（替换成你的id_rsa所在的路径）
+
+
+6，更改remote
+使用git remote -v查看origin和upstream的url，把http更改为ssh地址，命令：git remote set-url origin（或者upstream） xxxx
+例如：
+git remote set-url origin git@gitlab.xxxx.com:xxx/server.git
+git remote set-url upstream git@gitlab.xxxx.com:enterprise/server.git
+
+
+7，验证是否设置成功
+命令：ssh -T git@gitlab.xxxxxxxx.com
+显示Welcome to GitLab, yourname! 代表成功。
+
+
+以上总结的是http改为ssh，若是一开始clone就是以ssh方式访问，方法见下：
+同样第5步根据需要选择配置与否。
+第6步改为
+git clone git@gitlab.xxxx.com:xxx/server.git  clone远程仓库到本地，称为origin
+git remote add upstream http://gitlab.xxxx.com/enterprise/server.git  添加upstream
+
+最后再总结一下fork，origin，upstream的关系吧：
+成为一个项目的新成员，需要在原项目的基础上进行开发，fork就是复制原项目一份给自己，fork不会自动更新，也就是说fork放着不管的话代码最后一次一直停留在复制出它的那一刻。
+origin即自己的远程仓库
+upstream用于与原项目保持联系，更新到最近的修改。
+
+
+++++++++++++++++++++++++++++++++++++++
+
+GitLab遇到ssh修改了默认端口解决方法
+修改步骤
+1、修改ssh端口（此步骤略过）
+Port 端口
+
+2、修改/etc/gitlab/gitlab.rb [gitlab.yml中的配置会被这个给覆盖]
+ //在后面修改自己的ssh端口
+ gitlab_rails['gitlab_shell_ssh_port'] = 21386
+
+3、使其生效
+gitlab-ctl reconfigure
+默认是22端口，直接访问则不会出现端口的
+
+3.重新编译
+gitlab-ctl stop
+gitlab-ctl reconfigure
+gitlab-ctl start 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
