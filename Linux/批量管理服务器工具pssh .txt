@@ -140,7 +140,7 @@ pssh -h ip_list -O "IdentityFile=/root/.ssh/test_rsa" -i "ifconfig"
 
 
 
-###IdentityFile=/root/.ssh/test_rsa  指定私钥位置等同于ssh的配置文件里添加
+###IdentityFile=/root/.ssh/test_rsa  指定私钥位置等同于ssh的配置文件里添加（/etc/ssh/ssh_config）
 
 Host 主机别名（随意起名）
 
