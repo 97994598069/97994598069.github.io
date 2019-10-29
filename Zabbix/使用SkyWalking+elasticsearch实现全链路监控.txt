@@ -83,11 +83,15 @@ scp -rp ./agent/ root@192.168.197.2:/home  然后java启动的时候指定agent�
 
 运行应用
 nohup java -javaagent:/opt/soft/apache-skywalking-apm-incubating/agent/skywalking-agent.jar  -jar service-registry-0.0.1-SNAPSHOT.jar  >> registry.log 2>&1 &
+##若是一台服务器上有多个应用，则可以在启动的时候指定服务名如下:
+java -Dskywalking.agent.service_name=xxxx
+
 
 监听tomcat：
 [root@localhost bin]# cat catalina.sh 
 #!/bin/sh
 CATALINA_OPTS="$CATALINA_OPTS -javaagent:/data/apache-skywalking-apm-bin/agent/skywalking-agent.jar"; export CATALINA_OPTS
+
 
 
 或者创建一个start.sh
