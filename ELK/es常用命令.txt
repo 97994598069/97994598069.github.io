@@ -18,6 +18,8 @@ curl -XPOST 'http://localhost:9200/_cluster/nodes/_local/_shutdown?delay=10s'
 查询索引状态
 curl 'localhost:9200/_cat/indices?v'
 
+查看index列表
+curl http://vm1:9200/_cat/indices?v
 
 创建索引
 curl -XPUT 'localhost:9200/goods_v1?pretty'
@@ -31,6 +33,8 @@ curl -XDELETE 'localhost:9200/goods_v1?pretty'
 curl -XGET 'http://localhost:9200/help/_mapping/fulltext?pretty'
 
 
+查看节点列表
+curl http://vm1:9200/_cat/nodes?v
 
 
 查看分区
