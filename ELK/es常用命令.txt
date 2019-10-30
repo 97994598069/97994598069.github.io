@@ -1,0 +1,170 @@
+1.集群管理
+集群状态查询
+curl 'localhost:9200/_cat/health?v'
+curl '192.168.56.10:9200/_cat/nodes?v'
+curl '192.168.56.10:9200/_cat/nodes?v&h=hc,hm,rc,rm'
+
+
+启动节点
+bin/elasticsearch     -Des.cluster.name=es4fql   -Des.node.name=n_4.216  -d
+关闭节点
+curl -XPOST 'http://localhost:9200/_cluster/nodes/n2/_shutdown'
+curl -XPOST 'http://localhost:9200/_shutdown'
+curl -XPOST 'http://localhost:9200/_cluster/nodes/_local/_shutdown?delay=10s'
+
+
+
+2.索引管理
+查询索引状态
+curl 'localhost:9200/_cat/indices?v'
+
+
+创建索引
+curl -XPUT 'localhost:9200/goods_v1?pretty'
+
+
+删除索引
+curl -XDELETE 'localhost:9200/goods_v1?pretty'
+
+
+获取mapping
+curl -XGET 'http://localhost:9200/help/_mapping/fulltext?pretty'
+
+
+
+
+查看分区
+curl 'localhost:9200/_cat/shards?v'
+
+
+创建别名
+curl -XPOST localhost:9200/_aliases -d '
+{
+    "actions": [
+        { "add": {
+            "alias": "goods",
+            "index": "goods_v1"
+        }}
+    ]
+}
+'
+删除并更新别名
+curl -XPOST 'http://localhost:9200/_aliases' -d '
+{
+    "actions" : [
+        { "remove" : { "index" : "goods_v2", "alias" : "goods" } },
+        { "add" : { "index" : "goods_v1", "alias" : "goods" } }
+    ]
+}'
+查看已有别名
+curl -XGET 'localhost:9200/_cat/aliases'
+查看别名对应的索引
+curl -XGET 'localhost:9200/_alias/help'
+创建mapping
+curl -XPOST http://localhost:9200/goods_v1/fulltext/_mapping -d'
+{
+    "fulltext": {
+             "_all": {
+            "indexAnalyzer": "ik",
+            "searchAnalyzer": "ik_syno",
+            "term_vector": "no",
+            "store": "false"
+        },
+     "properties": {
+        "sku_id" :{
+          "type": "string"
+      },
+      "product_id":{
+          "type": "string"
+      },
+      "product_name":{
+          "type": "string",
+          "store": "no",
+          "term_vector": "with_positions_offsets",
+          "indexAnalyzer": "ik",
+          "searchAnalyzer": "ik_syno",
+          "include_in_all": "true",
+          "boost": 8
+      }
+    }
+    }
+}'
+
+
+修复unsigned 分区
+for shard in $(curl -XGET http://localhost:9200/_cat/shards | grep UNASSIGNED | grep goods_v1 |awk '{print $2}'); do
+    curl -XPOST 'localhost:9200/_cluster/reroute' -d '{
+        "commands" : [ {
+              "allocate" : {
+                  "index" : "goods_v1", 
+                  "shard" : $shard, 
+                  "node" : "n_4.216", 
+                  "allow_primary" : false
+              }
+            }
+        ]
+    }'
+    sleep 5
+done
+
+
+curl -XPOST 'localhost:9200/_cluster/reroute' -d '{
+        "commands" : [ {
+              "allocate" : {
+                  "index" : "goods", 
+                  "shard" : 2, 
+                  "node" : "n2", 
+                  "allow_primary" : false
+              }
+            }
+        ]
+    }'
+
+
+索引修复
+java -cp lucene-core-4.10.4.jar -ea:org.apache.lucene... org.apache.lucene.index.CheckIndex /opt/elasticsearch-1.5.0/data/elasticsearch/nodes/0/indices/goods_v2/2/index -fix
+
+解决unsigned 分区的问题
+curl -XPUT 'localhost:9200/<index>/_settings' \
+    -d '{"index.routing.allocation.disable_allocation": false}'
+
+
+获取文档
+curl -XGET 'localhost:9200/goods/fulltext/S201406251699?pretty'
+
+
+删除文档
+curl -XDELETE 'localhost:9200/goods/fulltext/1?pretty'
+
+
+
+获取索引中前10个文档
+curl -XPOST 'localhost:9200/goods/_search?pretty' -d '
+{
+  "query": { "match_all": {} }
+}'
+
+
+4.缓存管理
+创建时显式开启缓存
+curl -XPUT localhost:9200/my_index -d'
+{
+  "settings": {
+    "index.cache.query.enable": true
+  }
+}
+
+
+更新设置开启缓存
+curl -XPUT localhost:9200/goods/_settings -d'
+{ "index.cache.query.enable": true }
+
+
+
+查询各节点缓存状态
+curl 'localhost:9200/_nodes/stats/indices/query_cache?pretty&human'
+
+
+5.分词测试
+curl -XGET 'http://localhost:9200/goods/_analyze?analyzer=ik_max_word_syno&pretty' -d '爱疯狂' 
+
