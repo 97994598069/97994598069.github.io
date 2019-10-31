@@ -1,0 +1,114 @@
+MongoDB是一个基于分布式文件存储的数据库。由C++语言编写。旨在为WEB应用提供可扩展的高性能数据存储解决方案。
+欲安装版本
+MongoDB 4.2企业版
+
+使用.rpm包（推荐）
+1.配置存储库
+创建一个/etc/yum.repos.d/mongodb-enterprise.repo文件，以便可以使用以下yum命令直接安装MongoDB Enterprise。内容如下 ：
+[mongodb-enterprise]
+name=MongoDB Enterprise Repository
+baseurl=https://repo.mongodb.com/yum/redhat/$releasever/mongodb-enterprise/4.2/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-4.2.asc
+
+2.执行命令安装
+sudo yum install -y mongodb-enterprise
+
+3.禁止yum自动升级MongoDB，在/etc/yum.conf中加入以下内容排除：
+exclude=mongodb-enterprise,mongodb-enterprise-server,mongodb-enterprise-shell,mongodb-enterprise-mongos,mongodb-enterprise-tools
+
+4.默认情况下，MongoDB使用mongod用户帐户运行，并使用以下默认目录：
+/var/lib/mongo （数据目录）
+/var/log/mongodb （日志目录）
+
+
+5.启动MongoDB服务
+systemctl start mongod
+#设置开机启动
+systemctl enable mongod
+
+
+6.进入MongoDB
+mongo
+
+7.查看数据库列表：
+show dbs
+
+
+8.启用身份验证
+启用安全认证前要先创建一个超级用户，可用于管理所有数据库的信息，否则开启安全认证没有意义。
+切换到admin数据库并创建超级管理用户：
+use admin
+db.createUser(
+  {
+    user: "设置帐号",
+    pwd: "设置密码",
+    roles: [
+       { role: "userAdminAnyDatabase", db: "admin" }
+    ]
+  }
+)#然后查看用户show users
+
+
+然后，启用安全认证：
+vi /etc/mongod.conf
+
+
+找到“#security:”项，并在其下方添加：
+security:
+  authorization: enabled
+  
+  
+然后重启MongoDB：
+systemctl restart mongod
+
+
+9.然后尝试认证登录，输入：
+mongouser admin
+#如果不进行认证，show collections/ show users等指令都无法进行。也会提示你必须登录
+db.auth("u","p")
+#登录成功后提示，1
+1
+
+
+10.开启允许远程登录
+vi /etc/mongod.conf
+
+
+找到net:项，修改如下：
+net:
+  port: 27017
+  bindIp: 0.0.0.0 #允许任意IP连接
+  
+  
+11.然后重启mongo 
+systemctl restart mongod
+
+
+
+12.开放MongoDB访问端口：27017
+查看27017端口是否开启
+firewall-cmd --query-port=27017/tcp
+
+
+开启27017端口
+firewall-cmd --zone=public --add-port=27017/tcp --permanent
+
+
+重启防火墙
+firewall-cmd --reload
+
+
+再次查看27017端口是否开启
+firewall-cmd --query-port=27017/tcp
+
+
+
+13.测试远程访问
+windows上安装客户端
+略
+
+
+
+
