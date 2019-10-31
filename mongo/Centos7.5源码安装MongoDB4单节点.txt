@@ -1,0 +1,77 @@
+MongoDB 是一个基于分布式文件存储的数据库。由 C++ 语言编写。旨在为 WEB 应用提供可扩展的高性能数据存储解决方案。MongoDB 是一个介于关系数据库和非关系数据库之间的产品，是非关系数据库当中功能最丰富，最像关系数据库的。 
+
+1、下载并解压mongodb
+cd /data/
+curl -O https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-4.0.4.tgz
+tar zxvf mongodb-linux-x86_64-4.0.4.tgz
+
+
+2、创建mongodb相关目录
+mv mongodb-linux-x86_64-4.0.4 mongodb
+mkdir -p mongodb/{data/db,log}
+mkdir -p /etc/mongodb
+
+
+3、创建mongodb配置文件
+vim /etc/mongodb/mgdb.conf
+dbpath=/data/mongodb/data/db #数据文件存放目录
+logpath=/data/mongodb/log/mongodb.log #日志文件存放目录
+port=37485 #端口，默认27017，可以自定义
+logappend=true #开启日志追加添加日志
+fork=true #以守护程序的方式启用，即在后台运行
+bind_ip=0.0.0.0 #本地监听IP，0.0.0.0表示本地所有IP
+auth=true #是否需要验证权限登录(用户名和密码)
+
+4、添加环境变量
+vim /etc/profile
+export MONGODB_HOME=/data/mongodb
+export PATH=$PATH:$MONGODB_HOME/bin
+使环境变量立即生效
+source /etc/profile
+
+
+5、创建mongodb启动配置文件
+vim /usr/lib/systemd/system/mongodb.service
+[Unit]
+Description=mongodb
+After=network.target remote-fs.target nss-lookup.target
+[Service]
+Type=forking
+RuntimeDirectory=mongodb
+PIDFile=/data/mongodb/data/db/mongod.lock
+ExecStart=/data/mongodb/bin/mongod --config /etc/mongodb/mgdb.conf
+ExecStop=/data/mongodb/bin/mongod --shutdown --config /etc/mongodb/mgdb.conf
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
+
+
+6、启动mongodb并加入开机启动
+systemctl daemon-reload
+systemctl start mongodb
+systemctl enable mongodb
+
+
+7、配置firewalld防火墙策略
+firewall-cmd --permanent --add-port=37485/tcp
+firewall-cmd --reload
+
+
+8、测试
+(1)创建管理用户
+mongo --port 37485
+> use admin
+> db.createUser({user:"admin",pwd:"xuad830818",roles:[{role:"userAdminAnyDatabase",db: "admin"}]})
+> db.auth('admin','xuad830818')
+
+(2)创建测试用户
+> use test
+> db.createUser({user:"xuad",pwd:"123456",roles:[{role:"readWrite",db:"securitydata"}]})
+> db.auth('xuad','123456')
+> exit
+Centos 7.5安装配置MongoDB 4.0.4
+
+
+(3)用测试用户登陆
+mongo --port 37485 -u xuad -p 123456
+Centos 7.5安装配置MongoDB 4.0.4
