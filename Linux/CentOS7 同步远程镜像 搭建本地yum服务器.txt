@@ -1,0 +1,299 @@
+一、前提条件：
+1、本机连接互联网，能正常访问CentOS镜像站点，本例使用中科大的源：mirrors.ustc.edu.cn。
+2、CentOS镜像站点需要支持 rsync 协议。
+
+
+二、搭建过程：
+1、本机安装所需工具：
+yum -y install rsync createrepo
+
+
+2、创建目录（位置随意）：
+（1）、centos仓库目录，centosplus可以不同步，一般用不到：
+mkdir -p /storage/repos/centos/7/{os,updates,extras,centosplus}/x86_64
+
+
+（2）、epel仓库目录：
+mkdir -p /storage/repos/epel/7/x86_64
+
+#如果需要EPEL软件的源码，请同时创建以下目录
+mkdir -p /storage/repos/epel/7/SRPMS/
+
+
+3、同步远程镜像（该过程需要很长时间，与你的外网带宽有关）：
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/centos/7/os/x86_64/ /storage/repos/centos/7/os/x86_64/
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/centos/7/updates/x86_64/ /storage/repos/centos/7/updates/x86_64/
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/centos/7/extras/x86_64/ /storage/repos/centos/7/extras/x86_64/
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/centos/7/centosplus/x86_64/ /storage/repos/centos/7/centosplus/x86_64/ 
+
+#同步gpgkey
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/centos/RPM-GPG-KEY-CentOS-7 /storage/repos/centos/
+
+
+4、生成本地仓库元数据及索引
+createrepo /storage/repos/centos/7/os/x86_64/
+createrepo /storage/repos/centos/7/updates/x86_64/
+createrepo /storage/repos/centos/7/extras/x86_64/
+createrepo /storage/repos/centos/7/centosplus/x86_64/
+
+
+5、同步脚本，如果你的服务器一直连接外网可以配置在定时任务里，定期与远程镜像保持同步：
+vi /etc/cron.daily/update-repos
+# create new
+#!/bin/bash
+VER='7'
+ARCH='x86_64'
+CENTOS_REPOS=(os updates extras centosplus)
+#同步centos镜像
+for REPO in ${CENTOS_REPOS[@]}
+do
+    rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/centos/${VER}/${CENTOS_REPOS}/${ARCH}/ /storage/repos/centos/${VER}/${CENTOS_REPOS}/${ARCH}/
+    createrepo /storage/repos/centos/${VER}/${CENTOS_REPOS}/${ARCH}/
+done
+
+#同步gpgkey
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/centos/RPM-GPG-KEY-CentOS-7 /storage/repos/centos/
+
+#同步epel镜像
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/epel/7/x86_64/ /storage/repos/epel/7/x86_64/
+ 
+createrepo /storage/repos/epel/7/x86_64/
+
+#如果需要epel软件的源码，同步epel软件源码仓库
+#rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/epel/7/SRPMS/ /storage/repos/epel/7/SRPMS/
+
+#createrepo /storage/repos/epel/7/SRPMS/
+
+#同步gpgkey
+rsync -avz --delete --exclude='repodata' rsync://mirrors.ustc.edu.cn/epel/RPM-GPG-KEY-EPEL-7 /storage/repos/epel/
+
+
+# wq 保存退出后，给脚本赋予可执行权限
+# chmod 755 /etc/cron.daily/update-repo
+
+
+6、关闭selinux:
+# 1、永久关闭
+vi /etc/selinux/config
+#将其中的 SELINUX=enforcing 配置项 修改为： SELINUX=disabled 
+
+# 2、临时关闭
+setenforce 0
+
+
+在/etc/nginx/conf.d/下面创建repos.conf配置文件:
+vim /etc/nginx/conf.d/repos.conf
+server {
+    listen        80;
+    server_name   _;
+    # 404 错误页面重定向配置
+    error_page  404  /404.html; 
+
+    # 50x 错误页面重定项配置
+    error_page   500 503 504  /50x.html;
+    error_log    /var/log/nginx/repos_error.log;
+    access_log   /var/log/nginx/repos_access.log;
+    root /storage/repos/;
+    location / {
+        autoindex on;
+    }
+
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+
+    location = /404.html {
+        root   /usr/share/nginx/html;
+    }
+}
+
+
+
+
+三、yum客户端（机）配置：
+1、修改 /etc/yum.repos.d/CentOS-Base.repo 文件中各仓库的baseurl 和 gpgkey 配置项，模板中的{ipaddress}替换为你的实际IP地址。
+
+# CentOS-Base.repo
+
+#
+
+# The mirror system uses the connecting IP address of the client and the
+
+# update status of each mirror to pick mirrors that are updated to and
+
+# geographically close to the client.  You should use this for CentOS updates
+
+# unless you are manually picking other mirrors.
+
+#
+
+# If the mirrorlist= does not work for you, as a fall back you can try the
+
+# remarked out baseurl= line instead.
+
+#
+
+#
+
+ 
+
+[base]
+
+name=CentOS-$releasever - Base
+
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=os&infra=$infra
+
+#baseurl=http://mirror.centos.org/centos/$releasever/os/$basearch/
+
+baseurl=http://{ipaddress}/centos/$releasever/os/$basearch/
+
+gpgcheck=1
+
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+gpgkey=http://{ipaddress}/centos/RPM-GPG-KEY-CentOS-7
+
+ 
+
+#released updates
+
+[updates]
+
+name=CentOS-$releasever - Updates
+
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=updates&infra=$infra
+
+#baseurl=http://mirror.centos.org/centos/$releasever/updates/$basearch/
+
+baseurl=http://{ipaddress}/centos/$releasever/updates/$basearch/
+
+gpgcheck=1
+
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+gpgkey=http://{ipaddress}/centos/RPM-GPG-KEY-CentOS-7
+
+ 
+
+#additional packages that may be useful
+
+[extras]
+
+name=CentOS-$releasever - Extras
+
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=extras&infra=$infra
+
+#baseurl=http://mirror.centos.org/centos/$releasever/extras/$basearch/
+
+baseurl=http://{ipaddress}/centos/$releasever/extras/$basearch/
+
+gpgcheck=1
+
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+gpgkey=http://{ipaddress}/centos/RPM-GPG-KEY-CentOS-7
+
+ 
+
+#additional packages that extend functionality of existing packages
+
+[centosplus]
+
+name=CentOS-$releasever - Plus
+
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=centosplus&infra=$infra
+
+#baseurl=http://mirror.centos.org/centos/$releasever/centosplus/$basearch/
+
+baseurl=http://{ipaddress}/centos/$releasever/centosplus/$basearch/
+
+gpgcheck=1
+
+enabled=0
+
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+gpgkey=http://{ipaddress}/centos/RPM-GPG-KEY-CentOS-7
+
+
+
+2、与修 1 的方式 修改 /etc/yum.repos.d/epel.repo 配置文件，如果没有就创建一个配置文件，内容如下：
+
+[epel]
+
+name=Extra Packages for Enterprise Linux 7 - $basearch
+
+#baseurl=http://download.fedoraproject.org/pub/epel/7/$basearch
+
+#metalink=https://mirrors.fedoraproject.org/metalink?repo=epel-7&arch=$basearch
+
+baseurl=http://{ipaddress}//epel/7/$basearch
+
+failovermethod=priority
+
+enabled=1
+
+gpgcheck=1
+
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7
+
+gpgkey=http://{ipaddress}/epel/RPM-GPG-KEY-EPEL-7
+
+ 
+
+[epel-debuginfo]
+
+name=Extra Packages for Enterprise Linux 7 - $basearch - Debug
+
+#baseurl=http://download.fedoraproject.org/pub/epel/7/$basearch/debug
+
+#metalink=https://mirrors.fedoraproject.org/metalink?repo=epel-debug-7&arch=$basearch
+
+baseurl=http://{ipaddress}/epel/7/$basearch/debug
+
+failovermethod=priority
+
+enabled=0
+
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7
+
+gpgkey=http://{ipaddress}/epel/RPM-GPG-KEY-EPEL-7
+
+gpgcheck=1
+
+ 
+
+#[epel-source] #如果已同步SRPMS仓库，请取消该配置注释
+
+#name=Extra Packages for Enterprise Linux 7 - $basearch - Source
+
+##baseurl=http://download.fedoraproject.org/pub/epel/7/SRPMS
+
+#metalink=https://mirrors.fedoraproject.org/metalink?repo=epel-source-7&arch=$basearch
+
+#failovermethod=priority
+
+#enabled=0
+
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7
+
+#gpgkey=http://{ipaddress}/epel/RPM-GPG-KEY-EPEL-7
+
+#gpgcheck=1
+
+
+3、清除yum缓存：
+yum clean all
+
+4、删除yum缓存目录：
+rm -rf /var/cache/yum/*
+
+
+5、创建yum缓存：
+yum makecache
+
+
+
+
+
+
