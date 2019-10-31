@@ -1,4 +1,5 @@
 1. ftp上传centos7的镜像到yum服务器的/opt
+{{下载镜像:wget http://mirrors.163.com/centos/7.3.1611/isos/x86_64/CentOS-7-x86_64-DVD-1611.iso}}
 2. 挂载
 mkdir /yum ##根据需要
 mount -o loop -t iso9660 /opt/CentOS-7-x86_64-Everything-1804.iso /yum
