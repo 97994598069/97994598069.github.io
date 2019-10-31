@@ -1,0 +1,40 @@
+一、下载安装jdk
+略
+
+二、官网下载 activemq 软件包
+官网： http://apache.fayea.com/activemq/
+下载activemq的压缩包：
+wget http://apache.fayea.com/activemq/5.15.9/apache-activemq-5.15.9-bin.tar.gz
+tar -xvf apache-activemq-5.15.9-bin.tar.gz
+
+
+启动 activemq 服务
+cd apache-activemq-5.15.9
+./bin/linux-x86-64/activemq start
+
+
+
+查看 服务是否启动
+ps -elf |grep activemq
+
+
+查看端口是否被启动
+netstat -apn | grep 8161
+
+
+三、浏览器登陆
+浏览器中输入 http://服务器IP:8161/admin
+跳出登陆用户名和密码的界面，默认的用户名和密码为：admin
+
+四、修改web页面登陆密码：
+修改配置文件：conf/jetty-realm.properties
+grep -Ev '#|^$' conf/jetty-realm.properties
+  admin: admin, admin
+  user: user, user
+  
+值得注意的是 用户名和密码的格式是
+用户名 : 密码 ,角色名 
+修改admin的密码，只需要将文件中的 “admin: admin, admin” 修改成“admin: 新修改的密码, admin”
+
+
+
