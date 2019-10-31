@@ -1,0 +1,975 @@
+https://blog.51cto.com/bigboss/2160311
+MongoDB分片集群搭建
+环境：
+Centos 7.5 1804
+MongoDB 4.0.1
+
+shard分片主机：
+    shard1: IP:192.168.1.1
+    shard2: IP:192.168.1.2
+    shard2: IP:192.168.1.3
+    #三台主机分别启动三个mongod实例：
+        mongod1: 端口: 27017
+        mongod2: 端口: 27018
+        mongod2: 端口: 27019
+
+configsrv主机：
+    IP:192.168.1.4
+        mongod1: 端口: 27019
+        mongod2: 端口: 37018
+        mongod2: 端口: 47019
+
+Route主机：
+    192.168.1.5
+        mongods: 端口: 27017
+		
+		
+一、准备工作
+在所有节点安装mongodb-4 并创建相关文件夹
+cat << EOF > /etc/yum.repos.d/mongodb.repo
+[mongodb-org-4.0]
+name=MongoDB 4.0 Repository
+baseurl=https://mirrors.aliyun.com/mongodb/yum/redhat/\$releasever/mongodb-org/4.0/\$basearch/
+gpgcheck=0
+enabled=1
+EOF
+
+yum install -y mongodb-org
+
+mkdir -p /var/run/mongodb
+mkdir -p /data/mongod{1..3}
+mkdir -p /etc/mongo
+mkdir -p /tmp/mongod{1..3}
+
+chown -R mongod.mongod /data
+chown -R mongod.mongod /var/run/mongodb
+chown -R mongod.mongod /tmp/mongod{1..3}
+
+
+生成key并复制至所有主机
+#在192.168.1.1主机执行
+openssl rand -base64 756 > /etc/mongo/mongo.key
+chown -R mongod.mongod /etc/mongo
+chmod -R 600 /etc/mongo
+
+scp -r /etc/mongo 192.168.1.2:/etc/
+scp -r /etc/mongo 192.168.1.3:/etc/
+scp -r /etc/mongo 192.168.1.4:/etc/
+scp -r /etc/mongo 192.168.1.5:/etc/
+
+
+
+二、配置configsvr
+在configsvr主机(IP:192.168.1.4)操作
+生成三个configsvr的配置文件：
+
+#configsvr1的配置文件
+cat << EOF > /etc/mongo/configsvc1.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod1.log
+
+storage:
+  dbPath: /data/mongod1
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod1.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27019
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod1
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: BigBoss
+sharding:
+  clusterRole: configsvr
+
+EOF
+
+
+
+
+
+#configsvr2的配置文件
+
+cat << EOF > /etc/mongo/configsvc2.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod2.log
+
+storage:
+  dbPath: /data/mongod2
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod2.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+net:
+  port: 37019
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod2
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: BigBoss
+sharding:
+  clusterRole: configsvr
+
+EOF
+
+
+
+
+
+#configsvr3的配置文件
+
+cat << EOF > /etc/mongo/configsvc3.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod3.log
+
+storage:
+  dbPath: /data/mongod3
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod3.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 47019
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod3
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: BigBoss
+sharding:
+  clusterRole: configsvr
+EOF
+
+
+启动mongod：
+mongod -f /etc/mongo/configsvc1.conf
+mongod -f /etc/mongo/configsvc2.conf
+mongod -f /etc/mongo/configsvc3.conf
+
+
+初始化configsrv副本集群：
+mongo --port 27019
+
+rs.initiate(
+{
+  _id: "BigBoss",
+  version: 1,
+  protocolVersion: 1,
+  writeConcernMajorityJournalDefault: true,
+  configsvr: true,
+  members: [
+    {
+      _id: 0,
+      host: "192.168.1.4:27019",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 66,
+      tags: {
+        BigBoss: "YES"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 1,
+      host: "192.168.1.4:37019",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 55,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 2,
+      host: "192.168.1.4:47019",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 33,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    }
+  ],
+  settings: {
+    chainingAllowed : true,
+  }
+}
+)
+
+#查看副本集状态
+rs.status()
+
+
+
+三、配置shard1副本集：
+在shard1主机(IP:192.168.1.1)操作
+生成三个mongod的配置文件：
+
+#mongod1.conf配置文件:
+
+cat << EOF > /etc/mongo/mongod1.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod1.log
+
+storage:
+  dbPath: /data/mongod1
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod1.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27017
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod1
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard1
+sharding:
+  clusterRole: shardsvr
+
+EOF
+
+
+
+
+
+#mongod2.conf配置文件:
+
+cat << EOF > /etc/mongo/mongod2.conf
+
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod2.log
+
+storage:
+  dbPath: /data/mongod2
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod2.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27018
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod2
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard1
+
+sharding:
+  clusterRole: shardsvr
+EOF
+
+
+
+
+
+#mongod3.conf配置文件:
+
+cat << EOF > /etc/mongo/mongod3.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod3.log
+
+storage:
+  dbPath: /data/mongod3
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod3.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27019
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod3
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard1
+
+sharding:
+  clusterRole: shardsvr
+
+EOF
+
+
+启动mongod：
+mongod -f /etc/mongo/mongod1.conf
+mongod -f /etc/mongo/mongod2.conf
+mongod -f /etc/mongo/mongod3.conf
+
+
+初始化shard1副本集
+mongo
+
+rs.initiate(
+{
+  _id: "shard1",
+  version: 1,
+  protocolVersion: 1,
+  writeConcernMajorityJournalDefault: true,
+  members: [
+    {
+      _id: 0,
+      host: "192.168.1.1:27017",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 66,
+      tags: {
+        BigBoss: "YES"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 1,
+      host: "192.168.1.1:27018",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 55,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 2,
+      host: "192.168.1.1:27019",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 33,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    }
+  ],
+  settings: {
+    chainingAllowed : true,
+  }
+}
+)
+
+#查看副本集状态
+rs.status()
+
+
+四、配置shard2副本集：
+在shard2主机(IP:192.168.1.2)操作
+生成三个mongod的配置文件：
+#mongod1.conf配置文件:
+cat << EOF > /etc/mongo/mongod1.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod1.log
+
+storage:
+  dbPath: /data/mongod1
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod1.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27017
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod1
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard2
+sharding:
+  clusterRole: shardsvr
+
+EOF
+
+
+
+
+
+
+#mongod2.conf配置文件:
+
+cat << EOF > /etc/mongo/mongod2.conf
+
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod2.log
+
+storage:
+  dbPath: /data/mongod2
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod2.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27018
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod2
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard2
+
+sharding:
+  clusterRole: shardsvr
+EOF
+
+
+
+
+
+#mongod3.conf配置文件:
+
+cat << EOF > /etc/mongo/mongod3.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod3.log
+
+storage:
+  dbPath: /data/mongod3
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod3.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27019
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod3
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard2
+
+sharding:
+  clusterRole: shardsvr
+
+EOF
+
+
+启动mongod：
+mongod -f /etc/mongo/mongod1.conf
+mongod -f /etc/mongo/mongod2.conf
+mongod -f /etc/mongo/mongod3.conf
+
+
+
+初始化shard2副本集
+mongo
+
+rs.initiate(
+{
+  _id: "shard2",
+  version: 1,
+  protocolVersion: 1,
+  writeConcernMajorityJournalDefault: true,
+  members: [
+    {
+      _id: 0,
+      host: "192.168.1.2:27017",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 66,
+      tags: {
+        BigBoss: "YES"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 1,
+      host: "192.168.1.2:27018",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 55,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 2,
+      host: "192.168.1.2:27019",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 33,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    }
+  ],
+  settings: {
+    chainingAllowed : true,
+  }
+}
+)
+
+#查看shard2副本集状态
+
+rs.status()
+
+
+
+五、配置shard1副本集
+在shard1主机(IP:192.168.1.1)操作
+生成三个mongod的配置文件：
+#mongod1.conf配置文件:
+cat << EOF > /etc/mongo/mongod1.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod1.log
+
+storage:
+  dbPath: /data/mongod1
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod1.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27017
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod1
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard3
+sharding:
+  clusterRole: shardsvr
+
+EOF
+
+
+
+
+#mongod2.conf配置文件:
+
+cat << EOF > /etc/mongo/mongod2.conf
+
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod2.log
+
+storage:
+  dbPath: /data/mongod2
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod2.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27018
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod2
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard3
+
+sharding:
+  clusterRole: shardsvr
+EOF
+
+
+
+
+#mongod3.conf配置文件:
+
+cat << EOF > /etc/mongo/mongod3.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod3.log
+
+storage:
+  dbPath: /data/mongod3
+  journal:
+    enabled: true
+  wiredTiger:
+    engineConfig:
+      directoryForIndexes: true     
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod3.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  port: 27019
+  #bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp/mongod3
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+  authorization: enabled
+
+replication:
+  replSetName: shard3
+
+sharding:
+  clusterRole: shardsvr
+
+EOF
+
+启动mongod：
+mongod -f /etc/mongo/mongod1.conf
+mongod -f /etc/mongo/mongod2.conf
+mongod -f /etc/mongo/mongod3.conf
+
+
+初始化shard3副本集
+mongo
+
+rs.initiate(
+{
+  _id: "shard3",
+  version: 1,
+  protocolVersion: 1,
+  writeConcernMajorityJournalDefault: true,
+  members: [
+    {
+      _id: 0,
+      host: "192.168.1.3:27017",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 66,
+      tags: {
+        BigBoss: "YES"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 1,
+      host: "192.168.1.3:27018",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 55,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    },
+    {
+      _id: 2,
+      host: "192.168.1.3:27019",
+      arbiterOnly: false,
+      buildIndexes: true,
+      hidden: false,
+      priority: 33,
+      tags: {
+        BigBoss: "NO"
+      },
+      slaveDelay: 0,
+      votes: 1
+    }
+  ],
+  settings: {
+    chainingAllowed : true,
+  }
+}
+)
+
+#查看shard3副本集状态
+
+rs.status()
+
+
+
+六、配置Route
+创建mongos配置文件：
+#route是无状态的，在任何一台主机启动都行，只要能够连接至configsrv即可
+
+cat << EOF > /etc/mongo/route.conf
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod.log
+
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod.pid  # location of pidfile
+  timeZoneInfo: /usr/share/zoneinfo
+
+net:
+  bindIpAll: true
+  maxIncomingConnections: 500
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: /tmp
+    filePermissions: 0700
+
+security:
+  keyFile: /etc/mongo/mongo.key
+#  authorization: enabled
+
+#replication:
+
+sharding:
+  configDB: BigBoss/192.168.1.4:27019,192.168.1.4:37019,192.168.1.4:47019
+EOF
+
+
+启动mongos并设置一个连接的账号密码
+#启动
+mongos -f /etc/mongo/route.conf
+
+#连接
+mongo
+
+#设置管理员账号密码
+use admin
+
+db.createUser(
+{
+    user: "root",
+    pwd: "123456",
+    roles: [ { role: "__system", db: "admin" } ]
+  }
+)
+
+exit
+
+
+重连至mongodb
+mongo -uroot -p123456  --authenticationDatabase admin
+
+#添加分片主机至集群中
+sh.addShard("shard1/192.168.1.1:27017,192.168.1.1:27018,192.168.1.1:27019")
+sh.addShard("shard2/192.168.1.2:27017,192.168.1.2:27018,192.168.1.2:27019")
+sh.addShard("shard3/192.168.1.3:27017,192.168.1.3:27018,192.168.1.3:27019")
+
+#查看状态
+sh.status()
+
+####为了展示出效果，修改一下默认的chunksize大小,这里修改为1M
+#默认的chunksize大小为64M，示例修改命令如下：
+#use config
+#db.settings.save( { _id:"chunksize", value: <sizeInMB> } )
+
+use config
+db.settings.save( { _id:"chunksize", value: 1 } )
+
+#为test数据库开启分片
+#选择一个片键age并指定一个集合mycoll对其进行分片
+
+sh.enableSharding("test")
+sh.shardCollection("test.mycoll", {"age": 1})
+
+#测试分片，写入数据到数据库中
+
+use test
+for (i = 1; i <= 10000; i++) db.mycoll.insert({age:(i%100), name:"bigboss_user"+i, address:i+", Some Road, Zhengzhou, Henan", country:"China", course:"cousre"+"(i%12)"})
+
+#写入完成之后就可以查看分片信息了
+
+sh.status()
+
+
+
