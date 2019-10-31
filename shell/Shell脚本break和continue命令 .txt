@@ -1,0 +1,48 @@
+在循环过程中，有时候需要在未达到循环结束条件时强制跳出循环，Shell使用 break 和 continue 来跳出循环。
+break命令 允许跳出所有循环（终止执行后面的所有循环）。
+continue命令 不会跳出所有循环，仅仅跳出当前循环。
+
+break命令的例子：
+#!/bin/bash
+
+for i in $(seq 1 10)
+do
+    if [[ $i == 3 ]];then
+        echo "break"
+        break
+    else
+        echo "continue"
+        sleep 1
+    fi
+done
+
+
+
+运行结果
+# bash test.sh
+continue
+continue
+break
+
+
+
+continue命令的例子：
+#!/bin/bash
+for i in $(seq 1 10)
+do
+    if [[ $i == 3 ]];then
+        echo "continue"
+        continue
+    else
+        sleep 1
+    fi
+    echo $i
+done
+
+运行结果
+# bash aa.sh
+2
+continue
+5
+7
+9

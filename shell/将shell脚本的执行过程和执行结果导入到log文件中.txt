@@ -1,0 +1,12 @@
+[root@localhost scripts]# vim ping.sh 
+#!/bin/bash
+set -x    ##分步执行
+exec &> /tmp/log.txt   ##脚本执行的过程和结果导入/tmp/log.txt文件中
+
+for ip in `seq 1 10`
+do
+    if ! ping -c1 192.168.10.$ip ;then
+        echo $ip
+        exit
+    fi
+done
