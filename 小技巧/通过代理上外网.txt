@@ -1,0 +1,90 @@
+背景：
+公司机房服务器是不通外网的，但是可以通过suqid代理上网
+
+
+
+squid代理服务器搭建 (能访问外网的服务器)
+yum install squid -y
+yum install httpd-tools -y  ##若不打算设置密码则不需要
+
+生成密码文件  ##若不打算设置密码则不需要
+mkdir /etc/squid3/
+#xiaodong 是用户名
+htpasswd -cd /etc/squid3/passwords xiaodong
+#提示输入密码，比如输入123456
+
+测试密码文件
+/usr/lib64/squid/basic_ncsa_auth /etc/squid3/passwords
+#输入用户名 密码
+xiaodong  123456
+#提示ok说明成功
+ok
+#ctrl+c退出
+
+
+配置squid.conf文件
+vi /etc/squid/squid.conf
+#在最后添加  ##若前面没有设置密码则无需设置auth
+auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid3/passwords
+auth_param basic realm proxy
+acl authenticated proxy_auth REQUIRED
+http_access allow authenticated
+
+#这里是端口号，可以按需修改
+#http_port 3128 这样写会同时监听ipv6和ipv4的端口，推荐适应下面的配置方法。
+http_port 0.0.0.0:3128  ##最好不要使用默认端口
+
+
+若不设置密码则最好用防火墙配置白名单
+
+
+
+
+内网服务器配置:
+备注:内网机器上不了网，找一个可以上网的机器，安装Squid实现代理上网，在Windows下设置太容易，就不赘述了，以下为CentOS7下的代理，请查询squid服务正常启动，默认端口3128已有侦听。
+
+
+1.wget 配置文件设置代理（这步可能没用，如果后面两步不行，再加上这个步骤）
+vim ~/.wgetrc
+
+http_proxy=http://192.168.1.26:3128
+https_proxy=http://192.168.1.26:3128
+use_proxy = on
+wait = 30
+
+wget -T 30 --tries 3 http://192.168.1.26:3128
+
+
+
+2.Yum源代理
+vi /etc/yum.conf
+[main]
+cachedir=/var/cache/yum/basearch/basearch/releasever
+keepcache=0
+debuglevel=2
+logfile=/var/log/yum.log
+exactarch=1
+obsoletes=1
+gpgcheck=1
+plugins=1
+installonly_limit=5
+bugtracker_url=http://bugs.centos.org/set_project.php?project_id=16&ref=http://bugs.centos.org/bug_report_page.php?category=yum
+distroverpkg=centos-release
+
+proxy=http://192.168.1.26:3128  ###添加
+
+
+
+3.修改系统全局代理（代理如果没有设置用户名和密码，下面那两行可以去掉）
+vim /etc/profile
+http_proxy=http:// 192.168.1.26:3128
+https_proxy=http:// 192.168.1.26:3128
+proxy_username='*******'
+proxy_password='*******'
+export http_proxy
+export https_proxy
+
+
+source /etc/profile 
+
+
