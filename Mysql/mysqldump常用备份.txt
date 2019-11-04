@@ -14,7 +14,7 @@ mysqldump　数据库名　-uroot　-p　>　xxx.sql　
 
 
 4.导出特定表的结构 
-mysqldump　-uroot　-p　-B　数据库名　--table　表名　>　xxx.sql　　 
+mysqldump -uroot -p1234 --set-gtid-purged=OFF -d $database $table >./$table.sql
 
 
 
