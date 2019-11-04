@@ -16,5 +16,27 @@ mysqldump　数据库名　-uroot　-p　>　xxx.sql　
 4.导出特定表的结构 
 mysqldump -uroot -p1234 --set-gtid-purged=OFF -d $database $table >./$table.sql
 
++++++++++++++++++++++++++++++++++++++++=
+5.导出整个数据库结构和数据
+mysqldump -h localhost -uroot -p123456 database > dump.sql
+
+6.导出单个数据表结构和数据
+mysqldump -h localhost -uroot -p123456  database table > dump.sql
+
+7.导出整个数据库结构（不包含数据）
+mysqldump -h localhost -uroot -p123456  -d database > dump.sql
 
 
+8.导出单个数据表结构（不包含数据）
+mysqldump -h localhost -uroot -p123456  -d database table > dump.sql
+
+
+
+++++++++++++++++++++++
+
+二、导入
+mysql -u用户名    -p密码    <  要导入的数据库数据(runoob.sql)
+mysql -uroot -p123456 < runoob.sql
+
+导入数据（注意sql文件的路径）
+source /home/abc/abc.sql;
