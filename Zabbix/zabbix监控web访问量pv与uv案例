@@ -1,0 +1,29 @@
+首先要监控web pv和uv 访问量、点击量编写脚本并加执行权限
+vim /etc/zabbix/pv_uv.sh
+#/bin/bash
+case $1 in
+uv|UV)
+cat /var/log/httpd/access_log |awk ‘{print $1}’|sort|uniq|wc -l
+;;
+pv|PV)
+cat /var/log/httpd/access_log |awk ‘{print $1}’|wc -l
+;;
+esac
+
+
+chmod +x /etc/zabbix/pv_uv.sh
+
+chmod -R 777 /var/log
+
+增加pv_uv监控项
+vim /etc/zabbix/zabbix_agentd.d/userparameter_pv_uv.conf
+
+UserParameter=pv_uv[*],/etc/zabbix/pv_uv.sh $1
+
+重启zabbix-agent
+systemctl restart zabbix-agent
+
+
+
+回到zabbix界面
+监控项-->键值选择上述定义的键值pv_uv[pv]监控pV,  pv_uv[uv]监控uv
