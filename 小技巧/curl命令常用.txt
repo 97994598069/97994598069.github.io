@@ -1,0 +1,15 @@
+curl伪装浏览器访问
+curl -A "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)" http://192.168.197.198
+
+[root@prometheus logs]# tail -1 ./access.log 
+192.168.197.198 - - [06/Nov/2019:13:02:08 +0800] "GET / HTTP/1.1" 200 612 "-" "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
+
+
+Curl 来控制 Referer
+curl -e "http://191.168.197.11" http://192.168.197.198
+例如：curl -e "http://191.168.197.11"  -A "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)" http://192.168.197.198
+
+[root@prometheus logs]# tail -1 ./access.log 
+192.168.197.198 - - [06/Nov/2019:13:08:23 +0800] "GET / HTTP/1.1" 200 612 "http://191.168.197.11" "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
+
+
