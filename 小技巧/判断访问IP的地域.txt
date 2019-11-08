@@ -1,0 +1,2 @@
+[root@node1 bin]# curl https://ip.cn?ip=111.207.166.93
+{"ip": "111.207.166.93", "country": "北京市", "city": "联通"}
