@@ -219,3 +219,8 @@ backoff_factor：定义到达max_backoff的速度，默认因子是2，到达max
 常用的时间格式的匹配：
 [XY] 2018-11-01 10:46:38 INFO
 multiline.pattern: '^\[XY\]\s*(\d{4}|\d{2})\-(\d{2}|[a-zA-Z]{3})\-(\d{2}|\d{4})
+
+multiline.pattern: '^Mon|Tue|Web|Thu|Fri|Sat|Sun [[:space:]] Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec'
+
+可以根据需要交叉使用
+
