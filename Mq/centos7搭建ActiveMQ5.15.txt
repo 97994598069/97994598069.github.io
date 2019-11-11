@@ -1,0 +1,228 @@
+[root@prometheus home]# mkdir ActiveMQ
+[root@prometheus home]# cd ActiveMQ/
+[root@prometheus home]# wget http://www.apache.org/dyn/closer.cgi?filename=/activemq/5.15.10/apache-activemq-5.15.10-bin.tar.gz&action=download
+
+[root@prometheus ActiveMQ]# tar xf ./apache-activemq-5.15.10-bin.tar.gz 
+[root@prometheus ActiveMQ]# cd apache-activemq-5.15.10/bin/
+
+[root@prometheus bin]# ./activemq start
+INFO: Loading '/home/ActiveMQ/apache-activemq-5.15.10//bin/env'
+INFO: Using java '/usr/local/jdk/bin/java'
+INFO: Starting - inspect logfiles specified in logging.properties and log4j.properties to get details
+INFO: pidfile created : '/home/ActiveMQ/apache-activemq-5.15.10//data/activemq.pid' (pid '2378')
+
+[root@prometheus bin]# ps -ef| grep activemq
+root       2378      1  2 15:35 pts/1    00:00:07 /usr/local/jdk/bin/java -Xms64M -Xmx1G -Djava.util.logging.config.file=logging.properties -Djava.security.auth.login.config=/home/ActiveMQ/apache-activemq-5.15.10//conf/login.config -Dcom.sun.management.jmxremote -Djava.awt.headless=true -Djava.io.tmpdir=/home/ActiveMQ/apache-activemq-5.15.10//tmp -Dactivemq.classpath=/home/ActiveMQ/apache-activemq-5.15.10//conf:/home/ActiveMQ/apache-activemq-5.15.10//../lib/: -Dactivemq.home=/home/ActiveMQ/apache-activemq-5.15.10/ -Dactivemq.base=/home/ActiveMQ/apache-activemq-5.15.10/ -Dactivemq.conf=/home/ActiveMQ/apache-activemq-5.15.10//conf -Dactivemq.data=/home/ActiveMQ/apache-activemq-5.15.10//data -jar /home/ActiveMQ/apache-activemq-5.15.10//bin/activemq.jar start
+
+
+防火墙的设置添加8161和61616端口号：
+firewall-cmd --zone=public --add-port=61616/tcp --permanent
+firewall-cmd --zone=public --add-port=8161/tcp --permanent
+（--permanent永久生效，没有此参数重启后失效）
+
+重新载入 
+firewall-cmd --reload
+
+
+查看端口是否设置成功：
+firewall-cmd --zone=public --list-ports
+
+
+最后验证结果输入http://ip地址:8161/admin   用户名:admin 密码：admin
+如我的：http://localhost:8161/admin/    （ip地址根据自己的IP进行更改）
+
+重置默认密码以及创建新的用户：
+[root@prometheus conf]# tail ./jetty-realm.properties 
+## distributed under the License is distributed on an "AS IS" BASIS,
+## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+## See the License for the specific language governing permissions and
+## limitations under the License.
+## ---------------------------------------------------------------------------
+
+# Defines users that can access the web (console, demo, etc.)
+# username: password [,rolename ...]
+admin: Aa12345678, admin  ##修改默认密码
+abc: Qq12345678, admin  ##新增用户
+
+
+activemq管理控制台：
+Activemq默认的管理后台端口是8161，默认管理用户名和密码均是admin。
+Activemq默认的管理后台端口，我们可以在activemq的配置文件jetty.xml中查看到，如下：  可以根据需要修改
+vim /usr/local/activemq/conf/jetty.xml +110
+<property name=”port” value=”8161″/>
+
+
+Activemq默认管理用户名和密码均是admin，如果我们要修改默认用户名和密码的话，可以通过修改jetty-realm.properties文件来达到目的。
+vim /usr/local/activemq/conf/jetty-realm.properties
+admin: ilanni, admin
+user: user, user
+
+备注：值得注意的是activemq用户名和密码的格式是：
+username: password, rolename
+
+
+管理控制台介绍:
+在activemq的管理控制台，我们关注比较多的是Queues队列和Topics主题。
+
+Queues队列选项，如下：点击菜单按钮Queues
+Number Of Pending Messages：表示还有多少条消息没有被消费，实际上是表示消息的积压程度。
+Number Of Consumers：表示在该队列上还有多少消费者在等待接受消息。其实就是消费者的数量。
+Messages Enqueued：表示生产了多少条消息。
+Messages Dequeued：表示消费了多少条消息。
+
+ 
+Topics主题选项，如下： 点击菜单按钮Topics
+Number Of Consumers：表示在该队列上还有多少消费者在等待接受消息。
+Messages Enqueued：表示生产了多少条消息。
+Messages Dequeued：表示消费了多少条消息。
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++
+activemq-all-5.14.5.jar：activemq所有jar。
+bin：activemq启动命令的二进制执行文件及一些命令脚本。
+conf：activemq配置目录,包含最基本的activemq配置文件。
+data：activemq数据目录，默认为空。包含activemq的进程文件、数据文件、日志文件。该目录也是activemq消息持久化的目录。
+docs：用户使用帮助相关文件。
+examples：操作activemq相关实例。
+lib：activemq需要的类库。
+webapps：activemq控制台应用目录。
+webapps-demo：activemq使用实例目录。
+LICENSE：ActiveMQ所有包使用的Apache开源消息协议。
+NOTICE：ActiveMQ版权信息。
+README：用户使用引导文件，包括一些文档及URL。
+
++++++++++++++++++++++++
+
+性能测试
+pom.xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-activemq</artifactId>
+</dependency>
+
+
+application.yml
+spring:
+  activemq:
+    broker-url: tcp://192.168.66.6:61616
+    user: admin
+    password: admin
+# 若想activemq启用topic，需开启此项
+  jms:
+    pub-sub-domain: true
+
+
+provider：
+
+package com.activemq.client;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jms.core.JmsTemplate;
+import org.springframework.stereotype.Component;
+
+import javax.jms.Queue;
+import javax.jms.Topic;
+
+@Component
+public class ActiveMQClient {
+
+    @Autowired
+    private JmsTemplate jmsTemplate;
+    @Autowired
+    private Queue queue;
+    @Autowired
+    private Topic topic;
+
+    public void send(String message) {
+        //默认不注入Queue和Topic时，使用Queue
+//        jmsTemplate.convertAndSend("testMQ", message);
+        //1.测试queue性能
+//        jmsTemplate.convertAndSend(queue, message);
+        //2.测试topic性能
+        jmsTemplate.convertAndSend(topic, message);
+    }
+
+}
+
+
+
+consumer
+
+package com.activemq.server;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jms.annotation.JmsListener;
+import org.springframework.stereotype.Component;
+
+import javax.jms.Queue;
+
+@Component
+public class ActiveMQServer {
+
+//    @JmsListener(destination = "testMQ")
+//    @JmsListener(destination = "testMQ-queue")
+    @JmsListener(destination = "testMQ-topic")
+    public void receive(String message) {
+        System.out.println(" now : "+ System.currentTimeMillis());
+        System.out.println(" activeMQ receive : " + message);
+    }
+}
+
+
+测试类
+
+package com.test;
+
+import com.Application;
+import com.activemq.client.ActiveMQClient;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.util.StopWatch;
+
+import java.io.IOException;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest(classes = Application.class)
+public class ActiveMQTest {
+
+    @Autowired
+    private ActiveMQClient activeMQClient;
+
+    /*
+        queue
+        ActiveMQ 生产消费同时启动   生产10000条数据：89000ms
+        ActiveMQ 只生产不消费启动   生产10000条数据：84000ms
+        ActiveMQ 只消费不生产启动   消费10000条数据：14471ms
+        topic
+        ActiveMQ 生产消费同时启动   生产10000条数据：80605ms
+        ActiveMQ 只生产不消费启动   生产10000条数据：78867ms
+        ActiveMQ 只消费不生产启动   消费10000条数据：无法设置
+     */
+    @Test
+    public void test01() {
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        for (int i = 0; i < 10000; i++) {
+            activeMQClient.send("send : " + i);
+        }
+        stopWatch.stop();
+        System.out.println(" send 10000 共耗时 : " + stopWatch.getTotalTimeMillis());
+    }
+
+    @Test
+    public void test02() throws IOException {
+        //项目启动之后，Queue消费者则自动消费队列数据，根据消费者提供时间进行计算
+        System.in.read();
+    }
+
+}
+
+
++++++++++++++++++++++++++++++
+
+
