@@ -1,0 +1,388 @@
+复制集（Replica Sets)，是一个基于主/从复制机制的复制功能，进行同一数据的异步同步，从而使多台机器拥有同一数据的都多个副本，由于有自动故障转移和恢复特性，当主库宕机时不需要用户干预的情况下自动切换到其他备份服务器上做主库，一个集群最多可以支持7个服务器，并且任意节点都可以是主节点。所有的写操作都被分发到主节点,而读操作可以在任何节点上进行,可以实现读写分离,提高负载。
+
+之前一直使用的master/salve主从架构,不料4.0版本后不支持master/salve这种方式了,故而学习Replica Sets记录之
+
+
+系统 Centos 7.2
+mongodb4.0.2
+10.90.2.10 主，10.90.2.103 从
+
+
+下载部署包
+[root@roothost-10-90-2-105 ~]#wget https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel70-4.0.2.tgz
+[root@roothost-10-90-2-105 ~]#tar xf mongodb-linux-x86_64-rhel70-4.0.2.tgz -C /root/
+[root@roothost-10-90-2-105 ~]#mv  mongodb-linux-x86_64-rhel70-4.0.2  mongodb4.0.2
+
+
+添加mongodb环境变量
+echo 'export PATH=/root/mongodb4.0.2/bin:$PATH'  >>  /etc/profile
+source /etc/profile
+
+创建相关目录
+[root@roothost-10-90-2-105 ~]#cd mongodb4.0.2
+[root@roothost-10-90-2-105 mongodb4.0.2]# mkdir data logs # 数据目录和日志目录
+
+新建配置文件(两个节点的配置都一样)
+[root@roothost-10-90-2-105 mongodb4.0.2]# cat mongodb.conf 
+logpath=/root/mongodb4.0.2/logs/mongod.log   # 日志路径
+logappend=true # 是否日志追加
+fork=true # 后台启动
+port=27017 # 端口
+dbpath=/root/mongodb4.0.2/data # 数据目录
+pidfilepath=/root/mongodb4.0.2/data/mongod.pid # pid
+oplogSize=4096   # 设置oplog的大小
+maxConns=640000 # 最大同时连接数 默认2000
+directoryperdb=true # 设置每个数据库将被保存在一个单独的目录
+bind_ip=0.0.0.0 # 监听
+replSet=rs0
+
+
+启动主节点
+[root@roothost-10-90-2-105 mongodb4.0.2]#./bin/mongod -f mongodb.conf  # 主
+
+
+进入主节点并新建root账号
+[root@roothost-10-90-2-105 mongodb4.0.2]#mongo
+MongoDB shell version v4.0.2
+connecting to: mongodb://127.0.0.1:27017
+MongoDB server version: 4.0.2
+> db.createUser({ user: 'root', pwd: 'test123', roles: [ { role:"root", db: "admin" } ] });
+Successfully added user: {
+    "user" : "root",
+    "roles" : [
+        {
+            "role" : "root",
+            "db" : "admin"
+        }
+    ]
+}
+> 
+
+
+停止主节点
+[root@roothost-10-90-2-105 mongodb4.0.2]#./bin/mongod -f mongodb.conf  # 主
+
+
+启用密码认证和keyfile证书验证
+把主节点上生成的energy-rc.key传到从节点上，配置同主节点一样
+# 生成keyfiles文件
+[root@roothost-10-90-2-105 mongodb4.0.2]#openssl rand -base64 756 > energy-rc.key    
+
+# 设置只读权限
+[root@roothost-10-90-2-105 mongodb4.0.2]#chmod 400 energy-rc.key                                   
+
+# 配置文件中添加如下
+[root@roothost-10-90-2-105 mongodb4.0.2]#cat   mongodb.conf
+auth=true #打开认证
+keyFile=/root/mongodb4.0.2/energy-rc.key  #启用key验证
+
+
+启动主从节点
+[root@roothost-10-90-2-105 mongodb4.0.2]#./bin/mongod -f mongodb.conf  # 主
+[root@server mongodb4.0.2]#./bin/mongod -f mongodb.conf # 从
+
+
+进入主节点添加副本集节点
+2018-09-05T13:26:02.859+0800 I CONTROL  [main] Automatically disabling TLS 1.0, to force-enable TLS 1.0 specify --sslDisabledProtocols 'none'
+about to fork child process, waiting until server is ready for connections.
+forked process: 6290
+child process started successfully, parent exiting
+[root@roothost-10-90-2-105 mongodb4.0.2]# ./bin/mongo
+MongoDB shell version v4.0.2
+connecting to: mongodb://127.0.0.1:27017
+MongoDB server version: 4.0.2
+
+> use admin
+switched to db admin
+> db.auth('root','test123')
+1
+
+
+ # 查看复制集状态
+> rs.status()
+{
+    "ok" : 0,
+    "errmsg" : "no replset config has been received",
+    "code" : 94,
+    "codeName" : "NotYetInitialized"
+}
+
+
+# 定义配置信息,把两台节点加进来
+> var cfg={_id:'rs0',members:[{_id:0,host:'10.90.2.105:27017'},{_id:1,host:'10.90.2.103:27017'}]}
+
+# 初始化复制集
+> rs.initiate(cfg)
+{ "ok" : 1 }
+
+
+# 查看配置信息
+rs0:SECONDARY> rs.conf()
+{
+    "_id" : "rs0",
+    "version" : 1,
+    "protocolVersion" : NumberLong(1),
+    "writeConcernMajorityJournalDefault" : true,
+    "members" : [
+        {
+            "_id" : 0,
+            "host" : "10.90.2.105:27017",
+            "arbiterOnly" : false,
+            "buildIndexes" : true,
+            "hidden" : false,
+            "priority" : 1,
+            "tags" : {
+                
+            },
+            "slaveDelay" : NumberLong(0),
+            "votes" : 1
+        },
+        {
+            "_id" : 1,
+            "host" : "10.90.2.103:27017",
+            "arbiterOnly" : false,
+            "buildIndexes" : true,
+            "hidden" : false,
+            "priority" : 1,
+            "tags" : {
+                
+            },
+            "slaveDelay" : NumberLong(0),
+            "votes" : 1
+        }
+    ],
+    "settings" : {
+        "chainingAllowed" : true,
+        "heartbeatIntervalMillis" : 2000,
+        "heartbeatTimeoutSecs" : 10,
+        "electionTimeoutMillis" : 10000,
+        "catchUpTimeoutMillis" : -1,
+        "catchUpTakeoverDelayMillis" : 30000,
+        "getLastErrorModes" : {
+            
+        },
+        "getLastErrorDefaults" : {
+            "w" : 1,
+            "wtimeout" : 0
+        },
+        "replicaSetId" : ObjectId("5b8f65bd5eb3d94f12e22e96")
+    }
+}
+
+
+rs0:SECONDARY> rs.status()
+{
+    "set" : "rs0",
+    "date" : ISODate("2018-09-05T05:13:09.326Z"),
+    "myState" : 2,
+    "term" : NumberLong(0),
+    "syncingTo" : "",
+    "syncSourceHost" : "",
+    "syncSourceId" : -1,
+    "heartbeatIntervalMillis" : NumberLong(2000),
+    "optimes" : {
+        "lastCommittedOpTime" : {
+            "ts" : Timestamp(0, 0),
+            "t" : NumberLong(-1)
+        },
+        "appliedOpTime" : {
+            "ts" : Timestamp(1536124349, 1),
+            "t" : NumberLong(-1)
+        },
+        "durableOpTime" : {
+            "ts" : Timestamp(1536124349, 1),
+            "t" : NumberLong(-1)
+        }
+    },
+    "lastStableCheckpointTimestamp" : Timestamp(0, 0),
+    "members" : [
+        {
+            "_id" : 0,
+            "name" : "10.90.2.105:27017",
+            "health" : 1,
+            "state" : 2,
+            "stateStr" : "SECONDARY",
+            "uptime" : 191,
+            "optime" : {
+                "ts" : Timestamp(1536124349, 1),
+                "t" : NumberLong(-1)
+            },
+            "optimeDate" : ISODate("2018-09-05T05:12:29Z"),
+            "syncingTo" : "",
+            "syncSourceHost" : "",
+            "syncSourceId" : -1,
+            "infoMessage" : "could not find member to sync from",
+            "configVersion" : 1,
+            "self" : true,
+            "lastHeartbeatMessage" : ""
+        },
+        {
+            "_id" : 1,
+            "name" : "10.90.2.103:27017",
+            "health" : 1,
+            "state" : 0,
+            "stateStr" : "STARTUP",
+            "uptime" : 39,
+            "optime" : {
+                "ts" : Timestamp(0, 0),
+                "t" : NumberLong(-1)
+            },
+            "optimeDurable" : {
+                "ts" : Timestamp(0, 0),
+                "t" : NumberLong(-1)
+            },
+            "optimeDate" : ISODate("1970-01-01T00:00:00Z"),
+            "optimeDurableDate" : ISODate("1970-01-01T00:00:00Z"),
+            "lastHeartbeat" : ISODate("2018-09-05T05:13:09.261Z"),
+            "lastHeartbeatRecv" : ISODate("1970-01-01T00:00:00Z"),
+            "pingMs" : NumberLong(0),
+            "lastHeartbeatMessage" : "",
+            "syncingTo" : "",
+            "syncSourceHost" : "",
+            "syncSourceId" : -1,
+            "infoMessage" : "",
+            "configVersion" : -2
+        }
+    ],
+    "ok" : 1
+}
+
+rs0:SECONDARY> 
+
+
+现在退出连接重新连接下主库，主节点的状态就变成PRIMARY
+[root@roothost-10-90-2-105 mongodb4.0.2]#./bin/mongod --shutdown -f mongodb.conf  # 主
+[root@roothost-10-90-2-105 mongodb4.0.2]#./bin/mongod -f mongodb.conf # 主
+[root@roothost-10-90-2-105 mongodb4.0.2]# ./bin/mongo
+MongoDB shell version v4.0.2
+connecting to: mongodb://127.0.0.1:27017
+MongoDB server version: 4.0.2
+# 需要认证才能查看
+rs0:SECONDARY> show dbs;
+2018-09-05T13:26:33.214+0800 E QUERY    [js] Error: listDatabases failed:{
+    "operationTime" : Timestamp(1536125178, 1),
+    "ok" : 0,
+    "errmsg" : "command listDatabases requires authentication",
+    "code" : 13,
+    "codeName" : "Unauthorized",
+    "$clusterTime" : {
+        "clusterTime" : Timestamp(1536125178, 1),
+        "signature" : {
+            "hash" : BinData(0,"IszQmtleFm3uVO+Uc8luktG9uYM="),
+            "keyId" : NumberLong("6597607397777211393")
+        }
+    }
+} :
+_getErrorWithCode@src/mongo/shell/utils.js:25:13
+Mongo.prototype.getDBs@src/mongo/shell/mongo.js:67:1
+shellHelper.show@src/mongo/shell/utils.js:876:19
+shellHelper@src/mongo/shell/utils.js:766:15
+@(shellhelp2):1:1
+# 认证
+rs0:PRIMARY> use admin
+switched to db admin
+rs0:PRIMARY> db.auth('root','test123')
+1
+
+# 可以看到,当前节点为主了
+rs0:PRIMARY> db.isMaster();
+{
+    "hosts" : [
+        "10.90.2.105:27017",
+        "10.90.2.103:27017"
+    ],
+    "setName" : "rs0",
+    "setVersion" : 1,
+    "ismaster" : true,
+    "secondary" : false,
+    "primary" : "10.90.2.105:27017",
+    "me" : "10.90.2.105:27017",
+    "electionId" : ObjectId("7fffffff0000000000000001"),
+    "lastWrite" : {
+        "opTime" : {
+            "ts" : Timestamp(1536125327, 1),
+            "t" : NumberLong(1)
+        },
+        "lastWriteDate" : ISODate("2018-09-05T05:28:47Z"),
+        "majorityOpTime" : {
+            "ts" : Timestamp(1536125327, 1),
+            "t" : NumberLong(1)
+        },
+        "majorityWriteDate" : ISODate("2018-09-05T05:28:47Z")
+    },
+    "maxBsonObjectSize" : 16777216,
+    "maxMessageSizeBytes" : 48000000,
+    "maxWriteBatchSize" : 100000,
+    "localTime" : ISODate("2018-09-05T05:28:57.348Z"),
+    "logicalSessionTimeoutMinutes" : 30,
+    "minWireVersion" : 0,
+    "maxWireVersion" : 7,
+    "readOnly" : false,
+    "ok" : 1,
+    "operationTime" : Timestamp(1536125327, 1),
+    "$clusterTime" : {
+        "clusterTime" : Timestamp(1536125327, 1),
+        "signature" : {
+            "hash" : BinData(0,"DUnksVz3DkGjfXNiuFbVDPRjtgg="),
+            "keyId" : NumberLong("6597607397777211393")
+        }
+    }
+}
+
+现在副本集主从状态已经建立了,接下来就测试下数据能不能正常同步
+
+
+测试同步
+在主上插入一条数据
+rs0:PRIMARY> use pay
+switched to db pay
+rs0:PRIMARY> db.pay.insert({"_id":"1"})
+WriteResult({ "nInserted" : 1 })
+rs0:PRIMARY> 
+
+然后在从节点上查看是否已同步
+rs0:SECONDARY> use admin
+switched to db admin
+rs0:SECONDARY> db.auth('root','test123')
+1
+rs0:SECONDARY> show dbs;
+2018-09-05T13:31:49.563+0800 E QUERY    [js] Error: listDatabases failed:{
+    "operationTime" : Timestamp(1536125517, 1),
+    "ok" : 0,
+    "errmsg" : "not master and slaveOk=false",
+    "code" : 13435,
+    "codeName" : "NotMasterNoSlaveOk",
+    "$clusterTime" : {
+        "clusterTime" : Timestamp(1536125517, 1),
+        "signature" : {
+            "hash" : BinData(0,"KIttQEB/e0mzlQvqPJzeLWZgREM="),
+            "keyId" : NumberLong("6597607397777211393")
+        }
+    }
+} :
+_getErrorWithCode@src/mongo/shell/utils.js:25:13
+Mongo.prototype.getDBs@src/mongo/shell/mongo.js:67:1
+shellHelper.show@src/mongo/shell/utils.js:876:19
+shellHelper@src/mongo/shell/utils.js:766:15
+@(shellhelp2):1:1
+
+# 默认因为SECONDARY是不允许读写的,如果非要解决,方法如下:
+rs0:SECONDARY> db.getMongo().setSlaveOk();
+# 可以看到数据已经同步过来了
+rs0:SECONDARY> show dbs;
+admin           0.000GB
+config          0.000GB
+local           0.000GB
+pay             0.000GB
+
+rs0:SECONDARY> db.pay.find().count()
+1
+rs0:SECONDARY> db.pay.find()
+{ "_id" : "1" }
+
+
+Replica Sets 还可以有仲裁节点，分片模式，读写分离等,本篇就暂不涉及了
+
+
+
+
