@@ -1,0 +1,359 @@
+1、创建/删除库, 创建/删除集合、数据
+use dbname
+db.createCollection('test_col')
+
+# 查看当前的的数据库
+> show dbs;
+admin  0.000GB
+local  0.000GB
+
+
+# 新建/切换 库
+> use qfedu
+switched to db qfedu
+
+> show dbs;
+admin  0.000GB
+local  0.000GB
+
+
+# 查看当前处于哪个库
+> db;
+qfedu
+
+> use local
+switched to db local
+
+> db
+local
+
+
+# 新建的库，初始没有数据，是查看不到的。
+# MongoDB中的集合（和数据库）的一个重要注意事项是它们是懒惰地创建的。
+> show dbs;
+admin  0.000GB
+local  0.000GB
+
+> use qfedu
+switched to db qfedu
+
+
+# 在一个数据库中，创建一个集合(table 表)
+#@1 通过 Mongo 语法创建一个集合
+> use skedu
+switched to db skedu
+> db
+skedu
+
+> db.createCollection("users")
+{ "ok" : 1 }
+>
+
+
+#@2 通过向一个集合中直接插入一条数据来创建这个集合> use qfeduswitched to db qfedu> dbqfedu> db.users.insert({id:001,name: "yangge",age:18,gender: "男"})  # users 就是集合名称WriteResult({ "nInserted" : 1 })>
+
+
+# 查看当前库里的集合(表)
+> show tables;
+users
+>
+
+或者
+>show collections;
+users
+
+
+
+# 库里有数据，数据包括 集合，就会看到这个新建立的库了
+> show dbs;
+admin      0.000GB
+local      0.000GB
+qfedu      0.000GB
+skedu      0.000GB
+>
+
+
+
+# 删除数据库，需要先进到库里
+> use skedu
+switched to db skedu
+
+> db
+skedu
+
+> show dbs;
+admin      0.000GB
+local      0.000GB
+qdedu      0.000GB
+qfedu      0.000GB
+skedu      0.000GB          # 注意这个 skedu 是我们当前的库，需要删除
+testtable  0.000GB
+
+
+> db.dropDatabase()         # 执行删除库的命令，就会把当前库删除
+{ "dropped" : "skedu", "ok" : 1 }
+
+> db
+skedu
+
+> show dbs;                 # 可以看到数据库 skedu 已经被删除了
+admin      0.000GB
+local      0.000GB
+qdedu      0.000GB
+qfedu      0.000GB
+testtable  0.000GB
+
+
+
+# 删除集合
+## 我们先再次创建 skedu 这个库。
+> use skedu;
+switched to db skedu
+
+
+## 之后在这个库中创建一个名为： ansible_result 的集合，并向这个集合中插入一条数据
+> db.ansible_result.insert({hosts: "172.16.153.130",result:{msg:"success"}})
+WriteResult({ "nInserted" : 1 })
+
+
+## 现在可以把这个集合删除了
+> show tables;               # 删除的集合必须在这个库中存在
+ansible_result
+
+> db.ansible_result.drop()   # 删除集合的命令
+true
+
+> show collections;
+
+
+
+
+
+2、查询
+db.collections.findOne()
+db.collections.find()
+
+1、进入到某个库中，查询库中集合 ansible_result 下的所有数据，并进行格式化输出。
+> db.ansible_result.find().pretty()
+{
+    "_id" : ObjectId("5aa475c3f0b766a230830470"),
+    "hosts" : "172.16.153.130",
+    "success" : {
+        "msg" : {
+            "start" : "2018-0203 18:09:02",
+            "end" : "2018-02-03 18:09:03",
+            "cmd" : "ls /tmp",
+            "stdout" : "file.txt"
+        }
+    }
+}
+
+
+2、查集合中的第一条数据
+> db.ansible_result.findOne()
+{
+    "_id" : ObjectId("5aa475c3f0b766a230830470"),
+    "hosts" : "172.16.153.130",
+    "success" : {
+        "msg" : {
+            "start" : "2018-0203 18:09:02",
+            "end" : "2018-02-03 18:09:03",
+            "cmd" : "ls /tmp",
+            "stdout" : "file.txt"
+        }
+    }
+}
+
+
+3、查询指定添加的数据
+> db.ansible_result.findOne({"hosts": "172.16.153.131"})   # hosts 可以不加引号
+{
+    "_id" : ObjectId("5aa47659f0b766a230830471"),
+    "hosts" : "172.16.153.131",
+    "success" : {
+        "msg" : {
+            "start" : "2018-0203 18:10:02",
+            "end" : "2018-02-03 18:10:03",
+            "cmd" : "ls /tmp",
+            "stdout" : "file.txt"
+        }
+    }
+}
+
+
+
+
+3、更新数据
+db.collections.update()
+
+# 当前库.这个集合.update({条件的key: "条件的value"}, {$set: {需要更新的数据, 字典类型}} )
+> > db.ansbile_result.update({hosts: "172.16.153.130"}, {$set:{hosts: "172.16.153.110"}})
+WriteResult({ "nMatched" : 1, "nUpserted" : 0, "nModified" : 1 })
+
+
+验证更新, 这里使用了 find 来查找数据，并且没有对结果进行格式化输出
+> db.ansbile_result.find({hosts: "172.16.153.130"}).pretty()
+> db.ansbile_result.find({hosts: "172.16.153.110"}).pretty()
+{
+    "_id" : ObjectId("5aa475c3f0b766a230830470"),
+    "hosts" : "172.16.153.110",
+    "success" : {
+        "msg" : {
+            "start" : "2018-0203 18:09:02",
+            "end" : "2018-02-03 18:09:03",
+            "cmd" : "ls /tmp",
+            "stdout" : "file.txt"
+        }
+    }
+}
+>
+
+
+4、深度更新和查找
+==深度更新和查找的添加必须用引号引起来==
+> db.ansbile_result.update({hosts: "172.16.153.110"}, {$set:{"success.msg.start": "子文档更新的开始日期"}})
+WriteResult({ "nMatched" : 1, "nUpserted" : 0, "nModified" : 1 })
+> db.ansbile_result.findOne({"success.msg.start": "子文档更新的开始日期"})
+{
+    "_id" : ObjectId("5aa475c3f0b766a230830470"),
+    "hosts" : "172.16.153.110",
+    "success" : {
+        "msg" : {
+            "start" : "子文档更新的开始日期",
+            "end" : "2018-02-03 18:09:03",
+            "cmd" : "ls /tmp",
+            "stdout" : "file.txt"
+        }
+    }
+}
+>
+
+
+5、条件查询
+大于、小于、等于
+> db.ansbile_result.find({hosts:{$gt: "172.16.153.110"}})
+{ "_id" : ObjectId("5aa47659f0b766a230830471"), "hosts" : "172.16.153.131", "success" : { "msg" : { "start" : "2018-0203 18:10:02", "end" : "2018-02-03 18:10:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+{ "_id" : ObjectId("5aa47680f0b766a230830472"), "hosts" : "172.16.153.132", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:12:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } }, "msg" : { "start" : "被修改的日期" } }
+
+
+> db.ansbile_result.find({hosts:{$lt: "172.16.153.111"}})
+{ "_id" : ObjectId("5aa475c3f0b766a230830470"), "hosts" : "172.16.153.110", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:09:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+
+> db.ansbile_result.find({hosts:{$eq: "172.16.153.110"}})
+{ "_id" : ObjectId("5aa475c3f0b766a230830470"), "hosts" : "172.16.153.110", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:09:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+
+大于等于和小于等于
+
+> db.ansbile_result.find({hosts:{$gte: "172.16.153.110"}})
+{ "_id" : ObjectId("5aa475c3f0b766a230830470"), "hosts" : "172.16.153.110", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:09:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+{ "_id" : ObjectId("5aa47659f0b766a230830471"), "hosts" : "172.16.153.131", "success" : { "msg" : { "start" : "2018-0203 18:10:02", "end" : "2018-02-03 18:10:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+{ "_id" : ObjectId("5aa47680f0b766a230830472"), "hosts" : "172.16.153.132", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:12:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } }, "msg" : { "start" : "被修改的日期" } }
+
+ 
+
+> db.ansbile_result.find({hosts:{$lte: "172.16.153.110"}})
+{ "_id" : ObjectId("5aa475c3f0b766a230830470"), "hosts" : "172.16.153.110", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:09:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+>
+
+
+6、删除数据
+db.collections.remove({条件})
+> db
+skedu
+
+> show collections;
+ansbile_result
+
+ 
+> db.ansbile_result.find()
+{ "_id" : ObjectId("5aa475c3f0b766a230830470"), "hosts" : "172.16.153.110", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:09:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+{ "_id" : ObjectId("5aa47659f0b766a230830471"), "hosts" : "172.16.153.131", "success" : { "msg" : { "start" : "2018-0203 18:10:02", "end" : "2018-02-03 18:10:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+{ "_id" : ObjectId("5aa47680f0b766a230830472"), "hosts" : "172.16.153.132", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:12:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } }, "msg" : { "start" : "被修改的日期" } }
+
+ 
+> db.ansbile_result.remove(
+... {
+... "_id": ObjectId("5aa47680f0b766a230830472")         # 删除的条件
+... }
+... )
+WriteResult({ "nRemoved" : 1 })
+
+ 
+
+> db.ansbile_result.find()                              # 验证结果
+{ "_id" : ObjectId("5aa475c3f0b766a230830470"), "hosts" : "172.16.153.110", "success" : { "msg" : { "start" : "子文档更新的开始日期", "end" : "2018-02-03 18:09:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+{ "_id" : ObjectId("5aa47659f0b766a230830471"), "hosts" : "172.16.153.131", "success" : { "msg" : { "start" : "2018-0203 18:10:02", "end" : "2018-02-03 18:10:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+
+>
+
+
+
+删除的条件一样支持深度查找
+> db.ansbile_result.remove(
+... {'success.msg.start': "子文档更新的开始日期"})
+WriteResult({ "nRemoved" : 1 })
+
+> db.ansbile_result.find()
+{ "_id" : ObjectId("5aa47659f0b766a230830471"), "hosts" : "172.16.153.131", "success" : { "msg" : { "start" : "2018-0203 18:10:02", "end" : "2018-02-03 18:10:03", "cmd" : "ls /tmp", "stdout" : "file.txt" } } }
+>
+
+
+删除 集合 中的所有数据：
+> db.users2.remove({})             # 删除的命令, 目前的版本 大括号是必须的
+WriteResult({ "nRemoved" : 4 })    # 返回的信息，删除了 4 条数据
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++=
+
+1 .  查询所有
+db.getCollection('CollectionName').find()
+
+
+2.根据条件查询
+db.getCollection('CollectionName').find({"userId":37761})；
+
+
+3.多条件查询
+db.getCollection('CollectionName').find({"userId":1},{"customerId":61})；
+
+
+4.根据时间戳范围查询
+db.getCollection('CollectionName').find({"userId":61},{"timestamp":{"$gt":1540449300000,"$lte":1540550100000}})
+
+
+5.条件查排序并分页：1.是升序，  -1是降序 
+db.getCollection('CollectionName').find({"userId":361}).sort({"time":-1}).limit(100);
+
+
+6.使用$and多条件查询
+db.getCollection('CollectionName').find( {$and:[{"userId":37761},{"domain":"time.com"},{"timestamp":{"$gt":1540483200000,"$lte":1540550100000}}]});
+
+
+mongodb中对应的范围标识符：
+"$lt"===================>  "<"
+"$lte"==================>  "<="
+"$gt"===================>  ">"
+"$gte"==================>  ">="
+"$ne"===================>  "!="
+
+
+7.ISOdate时间范围查询
+db.getCollection('CollectionName').find({ "timestamp" : { "$gte" : ISODate("2018-04-20T00:00:00Z")
+, "$lt" : ISODate("2018-04-21T00:00:00Z") }})；
+
+
+8.插入：
+db.CollectionName.insert({"url":"www.baidu.com"});
+
+
+

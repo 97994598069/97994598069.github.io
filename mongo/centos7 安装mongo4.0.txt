@@ -1,0 +1,130 @@
+cd /usr
+wget https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-4.0.0.tgz
+
+tar zxvf mongodb-linux-x86_64-4.0.0.tgz
+mv mongodb-linux-x86_64-4.0.0 mongodb
+
+vim /etc/profile
+export PATH=/usr/mongodb/bin:$PATH
+
+source /etc/profile
+
+
+5、创建数据库目录
+cd /usr/mongodb
+touch mongodb.conf
+mkdir db
+mkdir log
+cd log
+touch mongodb.log
+
+
+6、修改mongodb配置文件。
+vim /usr/mongodb/mongodb.conf
+port=27017 #端口
+dbpath= /usr/mongodb/db #数据库存文件存放目录
+logpath= /usr/mongodb/log/mongodb.log #日志文件存放路径
+logappend=true #使用追加的方式写日志
+fork=true #以守护进程的方式运行，创建服务器进程
+maxConns=100 #最大同时连接数
+noauth=true #不启用验证
+journal=true #每次写入会记录一条操作日志（通过journal可以重新构造出写入的数据）。
+#即使宕机，启动时wiredtiger会先将数据恢复到最近一次的checkpoint点，然后重放后续的journal日志来恢复。
+storageEngine=wiredTiger  #存储引擎有mmapv1、wiretiger、mongorocks
+bind_ip = 0.0.0.0  #这样就可外部访问了，例如从win10中去连虚拟机中的MongoDB
+
+
+7、设置文件夹权限
+cd /usr/mongodb
+chmod 755 db
+chmod 755 log
+
+8、启动mongodb
+cd ~
+mongod -f /usr/mongodb/mongodb.conf
+
+
+为数据库添加用户名和密码
+1、修改前文提到的conf文件，命令如下：
+cd /usr/mongodb
+vim mongodb.conf
+port=27017 #端口
+dbpath= /usr/mongodb/db #数据库存文件存放目录
+logpath= /usr/mongodb/log/mongodb.log #日志文件存放路径
+logappend=true #使用追加的方式写日志
+fork=true #以守护进程的方式运行，创建服务器进程
+maxConns=100 #最大同时连接数
+#noauth = true #不启用验证
+journal=true #每次写入会记录一条操作日志（通过journal可以重新构造出写入的数据）。
+#即使宕机，启动时wiredtiger会先将数据恢复到最近一次的checkpoint点，然后重放后续的journal日志来恢复。
+storageEngine=wiredTiger  #存储引擎有mmapv1、wiretiger、mongorocks
+bind_ip = 0.0.0.0  #这样就可外部访问了，例如从win10中去连虚拟机中的MongoDB
+auth = true #用户认证
+
+
+添加账户密码：
+./mongo  ##进入数据库
+
+依次执行下列命令 添加用户名
+使用admin数据库
+use admin
+
+给admin数据库添加管理员用户名和密码，用户名和密码请自行设置
+db.createUser({user:"admin",pwd:"123456",roles:["root"]})
+
+验证是否成功，返回1则代表成功
+db.auth("admin", "123456")
+
+切换到要设置的数据库,以test为例
+use test
+
+为test创建用户,用户名和密码请自行设置。
+db.createUser({user: "test", pwd: "123456", roles: [{ role: "dbOwner", db: "test" }]})
+
+
+linux远程登录：
+[root@node1 local]# mongo 192.168.197.198:27017
+
+
+
+[root@prometheus mongodb]# mongo
+MongoDB shell version v4.0.0
+connecting to: mongodb://127.0.0.1:27017
+MongoDB server version: 4.0.0
+> db
+test
+> show dbs;
+2019-11-11T14:00:42.479+0800 E QUERY    [js] Error: listDatabases failed:{
+	"ok" : 0,
+	"errmsg" : "command listDatabases requires authentication",
+	"code" : 13,
+	"codeName" : "Unauthorized"
+} :
+_getErrorWithCode@src/mongo/shell/utils.js:25:13
+Mongo.prototype.getDBs@src/mongo/shell/mongo.js:65:1
+shellHelper.show@src/mongo/shell/utils.js:865:19
+shellHelper@src/mongo/shell/utils.js:755:15
+@(shellhelp2):1:1
+> use admin
+switched to db admin
+> show dbs;
+2019-11-11T14:00:57.440+0800 E QUERY    [js] Error: listDatabases failed:{
+	"ok" : 0,
+	"errmsg" : "command listDatabases requires authentication",
+	"code" : 13,
+	"codeName" : "Unauthorized"
+} :
+_getErrorWithCode@src/mongo/shell/utils.js:25:13
+Mongo.prototype.getDBs@src/mongo/shell/mongo.js:65:1
+shellHelper.show@src/mongo/shell/utils.js:865:19
+shellHelper@src/mongo/shell/utils.js:755:15
+@(shellhelp2):1:1
+> db.auth("admin","123456");
+1
+> show dbs;
+admin   0.000GB
+config  0.000GB
+local   0.000GB
+> 
+
+

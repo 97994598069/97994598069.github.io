@@ -1,0 +1,17 @@
+不知道你用什么语言连接mongodb，以下是用mongo的shell打开数据库：
+#创建一个库：
+use mytest
+#添加一个用户account,pwd
+db.addUser("wangming","1234")
+#查看当前库中的用户
+db.system.users.find()
+#连接时候通过auth命令进行连接（account,pwd）
+db.auth("wangming","1234")
+如果是用pymongo连接mongo，如下
+#连接mongodb服务
+con = MongoClient(host,port)
+#选择数据库
+db = con[dbname]
+#用用户名登陆
+db.authenticate(account, pwd)
+mongodb还是挺好用的，祝你快速上手。 
