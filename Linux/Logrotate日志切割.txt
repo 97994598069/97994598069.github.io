@@ -1,4 +1,40 @@
 一，nginx日志的配置实例参考:
+/data/nginx*.log {
+daily
+dateext
+missingok
+rotate 15
+compress
+delaycompress
+notifempty
+create 755 root root
+sharedscripts
+postrotate
+    if [ -f /usr/local/nginx/logs/nginx.pid ];then
+	    kill -USR1 `cat /usr/local/nginx/logs/nginx.pid`
+	fi
+endscript
+}
+
+[root@VM_1_29_centos logrotate.d]# crontab -l
+0 0 * * * /usr/sbin/logrotate -f /etc/logrotate.d/nginx
+
+
+[root@VM_1_10_centos ~]# cat /etc/logrotate.d/abc
+/data/xmt.log { 
+rotate 5 
+daily 
+copytruncate 
+compress 2
+notifempty 
+missingok 
+dateext
+} 
+
+[root@VM_1_10_centos ~]# crontab -l
+00 00 * * * /usr/sbin/logrotate -f /etc/logrotate.d/abc &>/dev/null
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 
 vim /etc/logrotate.d/nginx
 
@@ -16,6 +52,7 @@ vim /etc/logrotate.d/nginx
             fi
     endscript  //结束指令
 }
+
 
 
 
