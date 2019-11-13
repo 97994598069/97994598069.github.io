@@ -1,0 +1,63 @@
+对于监控服务器越来越多的情况，如果还单独一个一个添加，那效率也太低，因此就要实现批量添加监控服务器的操作，Zabbix提供两种批量自动监控的方式：
+自动发现：由服务端主动发起，Zabbix Server开启发现进程，定时扫描局域网中IP服务器、设备。
+自动注册：由客户端主动发起，客户端必须安装并启动Agentd，否则无法被自动注册添加至主机列表。对于使用SNMP的就要采用自动发现了。
+
+
+一、客户端配置指定服务器
+在zabbix_agentd.conf中指定Zabbix server配置信息，这个在前期批量安装客户端的时候，就需要一起批量修改。
+Server=192.168.101.78     
+ServerActive=192.168.101.78  
+HostMetadataItem=system.uname
+
+
+HostMetadataItem主机元数据
+当agent程序向服务器发送自动注册请求时，会发送其主机名。在某些情况下，Zabbix服务器的主机名不足以区分发现的主机。主机元数据可将其他信息从agent发送到服务器。
+
+
+
+
+主机元数据在zabbix_agentd.conf中配置。在配置文件中指定主机元数据有两种方式：(两种不能同时用)
+HostMetadataItem：
+HostMetadataItem=system.uname
+system.uname用于获取包含“Linux”或“Windows”等信息，具体取决于运行agent的主机。
+主机元数据示例如下：
+Linux: Linux server3 3.2.0-4-686-pae #1 SMP Debian 3.2.41-2 i686 GNU/Linux
+Windows: Windows WIN-0PXGGSTYNHO 6.0.6001 Windows Server 2008 Service Pack 1 Intel IA-32
+
+
+HostMetadata：
+可选参数用来定义主机元数据，只有主机自动注册时才用到主机元数据。如果没有定义，该值通过 HostMetadataItem 获得。根据需求设置不同模板进行分组：
+HostMetadata=Linux或HostMetadata=Windows或HostMetadata=Router或HostMetadata=SMNP
+
+1.安装zabbix server端
+略
+
+
+2.安装zabbix agent端
+略
+
+
+zabbix界面配置：
+
+创建主机组：
+配置-->主机群组-->创建主机群组-->test-->添加
+
+
+配置自动发现：
+
+1.配置-->自动发现-->右上角创建发现规则-->定义名称/ip范围/检查->新的->选择ICMP ping（这里最好选择zabbix客户端（前提是zabbix-agent配置了HostMetadataItem=system.uname，键值就是:system.uname），要不然只要能ping通的就直接添加进去了，没有必要）-->添加-->添加   完成 （默认是1h扫描一次，可以改成1s或者1m或者120s等）
+2.创建动作
+配置-->动作-->右上角创建动作(右上角事件源选择自动发现)-->定义名称-->触发条件选择自动发现检查=zabbix-test(上面定义的自动发现的名称) ping--->添加-->操作-->操作细节-->新的-->选择之前创建的主机组也可以选择默认的linux server-->添加
+
+3.此时就可以在主机组或者主机里面有很多被探测到的主机
+
+
+
+配置自动注册：
+
+
+
+
+
+
+
