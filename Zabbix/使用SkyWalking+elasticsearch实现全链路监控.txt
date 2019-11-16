@@ -25,6 +25,7 @@ network.host: 0.0.0.0
 http.port: 9200
 
 2.安装skywalking
+wget http://mirrors.tuna.tsinghua.edu.cn/apache/skywalking/6.5.0/apache-skywalking-apm-6.5.0.tar.gz 
 tar zxvf apache-skywalking-apm-6.4.0.tar.gz
 修改SkyWalking配置
 vim apache-skywalking-apm-bin/config/application.yml
