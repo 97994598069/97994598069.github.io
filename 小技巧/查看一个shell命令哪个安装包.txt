@@ -1,0 +1,30 @@
+一.若该命令已安装，我想知道这个命令是数据哪个安装包，需要在其他服务器上安装
+1.查看该命令的所在路径
+[root@prometheus conf]# whereis ifconfig
+ifconfig: /usr/sbin/ifconfig /usr/share/man/man8/ifconfig.8.gz
+
+
+2.使用该命令的绝对路径进行查询所属软件包
+[root@prometheus conf]# rpm -qf /usr/sbin/ifconfig 
+net-tools-2.0-0.25.20131004git.el7.x86_64
+
+
+
+二，该命令没有安装，我想安装，但是我不知道安装哪个安装包
+[root@prometheus conf]# yum provides nslookup
+已加载插件：fastestmirror
+Loading mirror speeds from cached hostfile
+ * base: mirrors.tuna.tsinghua.edu.cn
+ * extras: mirrors.huaweicloud.com
+ * updates: mirrors.tuna.tsinghua.edu.cn
+32:bind-utils-9.11.4-9.P2.el7.x86_64 : Utilities for querying DNS name servers
+源    ：base
+匹配来源：
+文件名    ：/usr/bin/nslookup
+
+
+
+32:bind-utils-9.11.4-9.P2.el7.x86_64 : Utilities for querying DNS name servers  ##数据这个安装包，安装即可
+源    ：@base
+匹配来源：
+文件名    ：/usr/bin/nslookup
