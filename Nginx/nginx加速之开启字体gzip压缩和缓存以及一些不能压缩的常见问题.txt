@@ -1,0 +1,98 @@
+1.mime.types的原因 需要加对应的type,如   ##如果有请省略
+    application/x-font-truetype           ttf;
+    application/x-font-woff               woff woff2;
+
+
+2.同源策略的原因，跨域的问题
+location ~* \.(eot|otf|ttf|woff|svg)$ { 
+    add_header Access-Control-Allow-Origin *;
+}
+
+
+3.nginx识别路径问题
+如果以上都不行，检查一下日志，如果出现
+/etc/nginx/html/my-web/static/fonts/ionicons.d535a25.ttf" failed (2: No such file or directory), client:
+
+则检查一下nginx.conf 下的 location的root 指定（需要保持一致），修改如下
+location / {
+            root /www; 
+            index index.html index.htm;
+        }       
+
+location ~* \.(eot|otf|ttf|woff|svg)$ {
+            root /www;
+             add_header Access-Control-Allow-Origin *;
+         }
+
+
+Nginx开启Gzip压缩大幅提高页面加载速度
+gzip on;
+gzip_min_length 1k;
+gzip_buffers 4 16k;
+#gzip_http_version 1.0;
+gzip_comp_level 2;
+gzip_types text/plain application/x-javascript text/css application/xml text/javascript application/x-httpd-php image/jpeg image/gif image/png;
+gzip_vary off;
+gzip_disable "MSIE [1-6]\.";
+
+
+用curl测试Gzip是否成功开启
+例如福利老幺查看网站中的图片是否成功压缩,命令如下:
+curl -I -H "Accept-Encoding: gzip, deflate" "https://www.fuli121.com/wp-content/uploads/2016/09/360front1.jpg"
+您可以将后面的地址修改为您的网站中的css文件路径或者js路径来查看.
+
+
+Nginx启用Gzip压缩js无效的原因
+另外,这里福利老幺再补充一下,Nginx启用Gzip压缩js无效的原因,基本都是因为content-type的内容来同造成的.
+各网站的JS类型“content-type”内容不尽相同，Nginx配置gzip是要把各种类型文件的“content-type”内容加进去才行，不加进去就不能被压缩.
+当发现Nginx压缩JS没有成功时，可先查看网站JS的Header信息，如图1那样检测（地址：由此直达.），便可获得js文件的“content-type”内容.获得其“content-type”内容，再看看配置文件的gzip_types里有没有此项内容，如果没有，加入去即可解决问题.
+
+
+开启字体gzip压缩
+一般来说,我们只需要为 ttf、otf 和 svg 字体启用 gzip，对其他字体格式进行 gzip 压缩时效果不明显.
+gzip_types  font/ttf font/otf image/svg+xml
+也就是将上面的代码中加入font/ttf font/otf image/svg+xml这三种格式就可以,成功修改后的格式如下:
+
+
+gzip_types text/plain application/x-javascript text/css application/xml text/javascript application/x-httpd-php image/jpeg image/gif image/png font/ttf font/otf image/svg+xml;
+
+
+
+ginx设置CSS,JS,图片等缓存
+一般情况下,默认都是会设置这些主要文件的缓存的.配置如下:
+location ~* ^.+\.(ico|gif|jpg|jpeg|png)$ {
+        access_log   off;
+        expires      30d;
+}
+
+location ~* ^.+\.(css|js|txt|xml|swf|wav)$ {
+    access_log   off;
+    expires      24h;
+}
+
+location ~* ^.+\.(html|htm)$ {
+        expires      1h;
+}
+
+
+nginx设置字体缓存
+一般情况下,默认的设置里,不会有字体缓存,我们可以加入这些设置.
+Vim打开Nginx配置文件
+vim /usr/local/nginx/conf/nginx.conf
+
+在里面加入以下内容:
+location ~* ^.+\.(eot|ttf|otf|woff|svg)$ {
+        access_log   off;
+        expires max;
+}
+
+
+当然,这里福利老幺需要补充一下,默认很多字体就是压缩过的:
+
+
+判断加载的字体有没有走缓存，可以多次访问该字体然后查看日志的状态码，若是304则走了缓存，若是200则没有走缓存
+
+查看是否走压缩可以：
+curl -I -H "Accept-Encoding: gzip, deflate" "http://dwq.hubpd.com/xmtmedia/xmtshare/font/fontRui.ttf"
+
+
