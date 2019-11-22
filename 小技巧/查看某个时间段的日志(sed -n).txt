@@ -1,0 +1,113 @@
+在linux上查找日志的时候，如果我想找出某个时间段的日志，比如查找今天早上8点到下午2点的日志。
+用grep不太方便直接过滤出来，可以使用sed根据时间去查找
+sed -n '/开始时间日期/,/结束时间日期/p' all.log
+
+
+查找日志
+比如下面这段日志,前面的时间格式都是类似 2019-10-21 07:44:20
+2019-10-24 21:33:31,678 [django.request:93] [base:get_response] [WARNING]- Not Found: /http:/123.125.114.144/
+2019-10-24 21:33:31,679 [django.server:124] [basehttp:log_message] [WARNING]- "HEAD http://123.125.114.144/ HTTP/1.1" 404 1678
+2019-10-24 22:14:04,121 [django.server:124] [basehttp:log_message] [INFO]- code 400, message Bad request version ('HTTP')
+2019-10-24 22:14:04,122 [django.server:124] [basehttp:log_message] [WARNING]- "GET ../../mnt/custom/ProductDefinition HTTP" 400 -
+2019-10-24 22:16:21,052 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/login HTTP/1.1" 301 0
+2019-10-24 22:16:21,123 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/login/ HTTP/1.1" 200 3876
+2019-10-24 22:16:21,192 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/img/main_bg.png HTTP/1.1" 200 2801
+2019-10-24 22:16:21,196 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/iconfont/style.css HTTP/1.1" 200 1638
+2019-10-24 22:16:21,229 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/img/bg.jpg HTTP/1.1" 200 135990
+2019-10-24 22:16:21,307 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/iconfont/fonts/icomoon.ttf?u4m6fy HTTP/1.1" 200 6900
+2019-10-24 22:16:23,525 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/login/ HTTP/1.1" 302 0
+2019-10-24 22:16:23,618 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/index/ HTTP/1.1" 200 18447
+2019-10-24 22:16:23,709 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/js/commons.js HTTP/1.1" 200 13209
+2019-10-24 22:16:23,712 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/css/admin.css HTTP/1.1" 200 19660
+2019-10-24 22:16:23,712 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/css/common.css HTTP/1.1" 200 1004
+2019-10-24 22:16:23,714 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/js/app.js HTTP/1.1" 200 20844
+2019-10-24 22:16:26,509 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/report_list/1/ HTTP/1.1" 200 14649
+2019-10-24 22:16:51,496 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/test_list/1/ HTTP/1.1" 200 24874
+2019-10-24 22:16:51,721 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/add_case/ HTTP/1.1" 200 0
+2019-10-24 22:16:59,707 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/test_list/1/ HTTP/1.1" 200 24874
+2019-10-24 22:16:59,909 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/add_case/ HTTP/1.1" 200 0
+2019-10-24 22:17:01,306 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/edit_case/1/ HTTP/1.1" 200 36504
+2019-10-24 22:17:06,265 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/add_project/ HTTP/1.1" 200 17737
+2019-10-24 22:17:07,825 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/project_list/1/ HTTP/1.1" 200 29789
+2019-10-24 22:17:13,116 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/add_config/ HTTP/1.1" 200 24816
+2019-10-24 22:17:19,671 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/config_list/1/ HTTP/1.1" 200 19532
+
+
+比如我要查找上面的从 2019-10-24 22:16:21 到 2019-10-24 22:16:59 这个时间段的日志
+sed -n '/2019-10-24 22:16:21/,/2019-10-24 22:16:59/p' all.log
+[root@VM_0_2_centos logs]# sed -n '/2019-10-24 22:16:21/,/2019-10-24 22:16:59/p' all.log
+2019-10-24 22:16:21,052 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/login HTTP/1.1" 301 0
+2019-10-24 22:16:21,123 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/login/ HTTP/1.1" 200 3876
+2019-10-24 22:16:21,192 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/img/main_bg.png HTTP/1.1" 200 2801
+2019-10-24 22:16:21,196 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/iconfont/style.css HTTP/1.1" 200 1638
+2019-10-24 22:16:21,229 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/img/bg.jpg HTTP/1.1" 200 135990
+2019-10-24 22:16:21,307 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/iconfont/fonts/icomoon.ttf?u4m6fy HTTP/1.1" 200 6900
+2019-10-24 22:16:23,525 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/login/ HTTP/1.1" 302 0
+2019-10-24 22:16:23,618 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/index/ HTTP/1.1" 200 18447
+2019-10-24 22:16:23,709 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/js/commons.js HTTP/1.1" 200 13209
+2019-10-24 22:16:23,712 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/css/admin.css HTTP/1.1" 200 19660
+2019-10-24 22:16:23,712 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/css/common.css HTTP/1.1" 200 1004
+2019-10-24 22:16:23,714 [django.server:124] [basehttp:log_message] [INFO]- "GET /static/assets/js/app.js HTTP/1.1" 200 20844
+2019-10-24 22:16:26,509 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/report_list/1/ HTTP/1.1" 200 14649
+2019-10-24 22:16:51,496 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/test_list/1/ HTTP/1.1" 200 24874
+2019-10-24 22:16:51,721 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/add_case/ HTTP/1.1" 200 0
+2019-10-24 22:16:59,707 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/test_list/1/ HTTP/1.1" 200 24874
+[root@VM_0_2_centos logs]# 
+
+
+遇到的坑
+开始时间和结束时间必须要是日志里面有的，要是没有的时间，那查找就没有结果，这个我也被坑过，看网上的教程都是这句，但评论里面总有人说没成功。
+后来经过实践，指令是没有问题的，只是开始时间和结束时间必须要是日志里面有才行。
+
+如果开始时间日志里面是没有的，那么查询结果为空，比如开始时间没有2019-10-24 22:16:22
+sed -n '/2019-10-24 22:16:22/,/2019-10-24 22:16:59/p' all.log
+
+如果结束时间日志里面是没有的，查询的结果就是开始时间到最后的全部日志
+sed -n '/2019-10-24 22:16:21/,/2019-10-24 22:16:58/p' all.log
+
+
+模糊查询
+
+如果不知道日志的开始时间，不能精确到秒，可以用模糊查询,比如查询时间段2019-10-24 22:14 到 2019-10-24 22:16
+sed -n '/2019-10-24 22:14:*/,/2019-10-24 22:16:*/p' all.log
+[root@VM_0_2_centos logs]# sed -n '/2019-10-24 22:14:*/,/2019-10-24 22:16:*/p' all.log
+2019-10-24 22:14:04,121 [django.server:124] [basehttp:log_message] [INFO]- code 400, message Bad request version ('HTTP')
+2019-10-24 22:14:04,122 [django.server:124] [basehttp:log_message] [WARNING]- "GET ../../mnt/custom/ProductDefinition HTTP" 400 -
+2019-10-24 22:16:21,052 [django.server:124] [basehttp:log_message] [INFO]- "GET /api/login HTTP/1.1" 301 0
+[root@VM_0_2_centos logs]# 
+
+
+也可以按小时模糊查询
+sed -n '/2019-10-24 21*/,/2019-10-24 22*/p' all.log
+
+
+结合grep查询
+sed 也可以结合 grep 使用，比如我查询上面日志某个时间段的带有 POST 的日志行
+sed -n '/2019-10-24 22:16:21/,/2019-10-21 20:16:58/p' all.log | grep POST
+
+[root@VM_0_2_centos logs]# sed -n '/2019-10-24 22:16:21/,/2019-10-21 20:16:58/p' all.log | grep post
+[root@VM_0_2_centos logs]# sed -n '/2019-10-24 22:16:21/,/2019-10-21 20:16:58/p' all.log | grep POST
+2019-10-24 22:16:23,525 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/login/ HTTP/1.1" 302 0
+2019-10-24 22:16:51,721 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/add_case/ HTTP/1.1" 200 0
+2019-10-24 22:16:59,909 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/add_case/ HTTP/1.1" 200 0
+2019-10-24 22:17:19,864 [django.server:124] [basehttp:log_message] [INFO]- "POST /api/add_case/ HTTP/1.1" 200 0
+[root@VM_0_2_centos logs]# 
+
+
+日志导出
+我们可以查询某个时间段的日志，导出到本地
+sed -n '/2019-10-24 22:16:21/,/2019-10-21 20:16:58/p' all.log > yoyo.log
+[root@VM_0_2_centos logs]# sed -n '/2019-10-24 22:16:21/,/2019-10-21 20:16:58/p' all.log > yoyo.log
+[root@VM_0_2_centos logs]# ll
+total 1740
+-rw-r--r-- 1 root root 1907 Oct 24 22:54 11.txt
+-rw-r--r-- 1 root root 1081515 Oct 24 23:04 all.log
+-rw-r--r-- 1 root root 686962 Oct 24 23:04 script.log
+-rw-r--r-- 1 root root 3053 Oct 24 23:08 yoyo.log
+[root@VM_0_2_centos logs]# 
+
+
+
+
+
+
