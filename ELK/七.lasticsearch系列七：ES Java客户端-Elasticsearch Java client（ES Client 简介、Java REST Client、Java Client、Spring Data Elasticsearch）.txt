@@ -1,0 +1,46 @@
+3. ES支持的客户端连接方式
+3.1 REST API ，端口 9200
+　　这种连接方式对应于架构图中的RESTful style API这一层，这种客户端的连接方式是RESTful风格的，使用http的方式进行连接
+
+
+3.2 Transport 连接 端口 9300
+      这种连接方式对应于架构图中的Transport这一层，这种客户端连接方式是直接连接ES的节点，使用TCP的方式进行连接
+	  
+二、Java REST Client介绍
+1. ES提供了两个JAVA REST client 版本
+Java Low Level REST Client: 低级别的REST客户端，通过http与集群交互，用户需自己编组请求JSON串，及解析响应JSON串。兼容所有ES版本。
+Java High Level REST Client: 高级别的REST客户端，基于低级别的REST客户端，增加了编组请求JSON串、解析响应JSON串等相关api。使用的版本需要保持和ES服务端的版本一致，否则会有版本问题。
+
+
+2. Java Low Level REST Client 说明
+特点，maven 引入、使用介绍： https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-low.html
+API doc ：https://artifacts.elastic.co/javadoc/org/elasticsearch/client/elasticsearch-rest-client/6.2.4/index.html.
+
+3. Java High Level REST Client 说明
+从6.0.0开始加入的，目的是以java面向对象的方式来进行请求、响应处理。
+每个API 支持 同步/异步 两种方式，同步方法直接返回一个结果对象。异步的方法以async为后缀，通过listener参数来通知结果。
+高级java REST 客户端依赖Elasticsearch core project
+
+兼容性说明：
+依赖 java1.8 和 Elasticsearch core project
+请使用与服务端ES版本一致的客户端版本
+
+
+4. Java High Level REST Client  maven 集成
+<dependency>
+    <groupId>org.elasticsearch.client</groupId>
+    <artifactId>elasticsearch-rest-high-level-client</artifactId>
+    <version>6.2.4</version>
+</dependency>
+
+5. Java High Level REST Client  初始化
+RestHighLevelClient client = new RestHighLevelClient(
+        RestClient.builder(
+                new HttpHost("localhost", 9200, "http"),
+                new HttpHost("localhost", 9201, "http")));
+				
+给定集群的多个节点地址，将客户端负载均衡地向这个节点地址集发请求
+Client 不再使用了，记得关闭它：
+client.close();
+
+
