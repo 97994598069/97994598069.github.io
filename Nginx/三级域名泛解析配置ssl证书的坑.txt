@@ -1,0 +1,4 @@
+由于业务需要配置了三级域名的泛解析 *.abc.test.com，计划将泛域名解析到公网ip，然后购买ssl证书配置
+
+但是在配置证书的时候（走的文件验证）一直处于待验证的状态，经腾讯云提示不仅要配置泛域名的dns解析而且需要添加abc.test.com这个域名的@解析，（经验证A记录也可以）
+验证的路径是:http://xmtapp.gdwlcloud.com/.well-known/pki-validation/fileauth.txt(域名不是三级域名abc.abc.test.com)
