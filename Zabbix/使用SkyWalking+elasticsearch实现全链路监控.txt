@@ -10,6 +10,16 @@ SkyWalking 是针对分布式系统的 APM 系统，也被称为分布式追踪�
 * 纯 Java 后端分析程序，提供 RESTful 服务，可为其他语言探针提供分析能力。
 * 高性能纯流式分析
 
+服务可用性指标 SLA
+每分钟平均响应数
+平均响应时间
+服务进程 PID
+服务所在物理机的 IP、Host、OS
+运行时 CPU 使用率
+运行时堆内存使用率
+运行时非堆内存使用率
+GC 情况
+
 
 SkyWalking 的核心是数据分析和度量结果的存储平台，通过 HTTP 或 gRPC 方式向 SkyWalking Collecter 提交分析和度量数据，SkyWalking Collecter 对数据进行分析和聚合，存储到 Elasticsearch、H2、MySQL、TiDB 等其一即可，最后我们可以通过 SkyWalking UI 的可视化界面对最终的结果进行查看。Skywalking 支持从多个来源和多种格式收集数据：多种语言的 Skywalking Agent 、Zipkin v1/v2 、Istio 勘测、Envoy 度量等数据格式。
 下面基于Linux环境部署SkyWalking+elasticsearch。
