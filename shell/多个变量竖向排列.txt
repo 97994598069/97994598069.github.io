@@ -1,0 +1,52 @@
+默认情况：
+[root@prometheus zz]# www=$(sed -n "/2019-11-25T13:37/p" /var/log/nginx/access.log |awk '{++state[$8]} END {for(key in state) print key,"\t",state[key]}')
+[root@prometheus zz]# echo $www
+504 1 403 1 200 43 404 2 500 1
+
+不方便做处理以及判断,改为竖向
+[root@prometheus zz]# www=$(sed -n "/2019-11-25T13:37/p" /var/log/nginx/access.log |awk '{++state[$8]} END {for(key in state) print key,"\t",state[key]}')
+[root@prometheus zz]# echo -e "$www\n"
+504 	 1
+403 	 1
+200 	 43
+404 	 2
+500 	 1
+
+
+再来看看awk：
+
+/^tcp/
+滤出tcp开头的记录，屏蔽udp, socket等无关记录。
+
+state[]
+相当于定义了一个名叫state的数组
+
+NF
+表示记录的字段数，如上所示的记录，NF等于6
+
+$NF
+表示某个字段的值，如上所示的记录，$NF也就是$6，表示第6个字段的值，也就是TIME_WAIT
+
+state[$NF]
+表示数组元素的值，如上所示的记录，就是state[TIME_WAIT]状态的连接数
+
+++state[$NF]
+表示把某个数加一，如上所示的记录，就是把state[TIME_WAIT]状态的连接数加一
+
+END
+表示在最后阶段要执行的命令
+
+for(key in state)
+遍历数组
+
+print key,"\t",state[key]
+打印数组的键和值，中间用\t制表符分割，美化一下。
+
+
+
+例如awk分析网络信息:
+[root@prometheus zz]# netstat -ant |awk '/^tcp/ {++sum[$NF]} END {for (key in sum) print key,"\t",sum[key]}'
+LISTEN 	 13
+ESTABLISHED 	 7
+SYN_SENT 	 1
+TIME_WAIT 	 1
