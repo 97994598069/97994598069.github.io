@@ -50,3 +50,8 @@ LISTEN 	 13
 ESTABLISHED 	 7
 SYN_SENT 	 1
 TIME_WAIT 	 1
+
+[root@prometheus ~]# netstat -ant |awk '/^tcp/ {print $NF}' |sort -rn |uniq -c
+      1 TIME_WAIT
+     12 LISTEN
+     10 ESTABLISHED
