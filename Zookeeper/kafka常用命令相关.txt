@@ -1,0 +1,92 @@
+cat cmd_list
+{"catalogID": 17172, "name": "中央厨房"}
+{"catalogID": 17181, "name": "中央厨房"}
+{"catalogID": 17187, "name": "中央厨房"}
+{"catalogID": 17627, "name": "中央厨房"}
+{"catalogID": 17648, "name": "中央厨房"}
+{"catalogID": 17666, "name": "中央厨房"}
+{"catalogID": 17699, "name": "中央厨房"}
+
+
+
+#!/bin/bash
+set -x
+set -o nounset
+set -o errexit
+exec &>>./$0.log
+ka_path=/usr/local/kafka_2.12-2.2.1
+ka_ip=$(ifconfig ens160 |awk '/broadcast/ {print $2}')
+tic_name=executorTopic
+
+cmd=$ka_path/kafka-console-producer.sh --broker-list $ip:9092 --topic $tic_name
+for c in $(cat $path/cmd_list);
+do 
+    sleep 2
+	echo "$c" |bash $cmd 
+done 
+
+
+
+
+
+kafka查看topic和消息内容命令 
+1、查询topic，进入kafka目录：
+[root@kafka-host kafka_2.12-2.2.1]# bin/kafka-topics.sh --list --zookeeper localhost:2181
+COMMENT_LIKE_TOPIC
+PLAY_COUNT_TOPIC
+VIDEO_LIKE_TOPIC
+__consumer_offsets
+executorTopic
+
+
+查询topic内容
+bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic $topicName --from-beginning
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++=
+
+
+
+
+
+
+创建topic
+kafka-topics --create --zookeeper master:2181/kafka2 --replication-factor 2 --partitions 3 --topic mydemo5
+
+
+列出topic
+kafka-topics --list --zookeeper master:2181/kafka2
+
+
+描述topic
+kafka-topics --describe --zookeeper master:2181/kafka2 --topic mydemo5
+
+
+生产者生产消息
+kafka-console-producer --broker-list master:9092 --topic mydemo5
+
+
+消费者消费消息指定消费组名
+kafka-console-consumer --bootstrap-server master:9092,node01:9092,node02:9092 --new-consumer --consumer-property group.id=test_kafka_game_x_g1 --topic mydemo5
+
+
+查看正在运行的消费组
+kafka-consumer-groups --bootstrap-server master:9092 --list --new-consumer  
+
+
+计算消息的消息堆积情况
+kafka-consumer-groups --bootstrap-server master:9092 --describe --group  test_kafka_game_x_g1
+
+####详细说明
+LogEndOffset 下一条将要被加入到日志的消息的位移
+CurrentOffset 当前消费的位移
+LAG 消息堆积量
+
+消息堆积量：消息中间件服务端中所留存的消息与消费掉的消息之间的差值即为消息堆积量也称之为消费滞后量
+
+
+消息发送到LeaderA之后会更新LEO的值，FollowerB和FllowerC也会实时拉取LeaderA中的消息来更新自己，HW就表示A、B、C三者同时达到的日志位移。也就是A、B、C三者中LEO最小的那个值。由于B、C拉取A消息之间延时问题，所有HW必然不会与Leader的LEO相等，即LEO>=HW
+
+
+
+
