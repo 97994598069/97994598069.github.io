@@ -1,0 +1,69 @@
+Caused by: java.lang.ClassNotFoundException: org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse
+
+出现这个问题是因为你选择的spring-boot-starter-data-elasticsearch版本没有对elasticsearch兼容,你找一个有PutMappingResponse的版本，我选择的是6.4.0
+
+
+java调用es 9300端口坑
+Elasticsearch 7.x NoNodeAvailableException: None of the configured nodes are available
+		<dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+        </dependency>
+
+
+spring.data.elasticsearch.cluster-name=es
+spring.data.elasticsearch.cluster-nodes=10.17.12.158:9300
+spring.data.elasticsearch.repositories.enabled=true
+
+
+集群方式
+failed to load elasticsearch nodes : 
+org.elasticsearch.client.transport.NoNodeAvailableException:
+None of the configured nodes are available:
+[{#transport#-1}{HiXBU0PNRV6j7QDw9ZcyNw}{10.17.12.158}{10.17.12.158:9300}, {#transport#-2}{fA87OUrESfCfixlGYDQF3Q}{10.17.12.159}{10.17.12.159:9300}, {#transport#-3}{f7qINyogSoqUf6pv4Gt3Mw}{10.17.12.160}{10.17.12.160:9300}]
+
+
+单节点
+failed to load elasticsearch nodes : org.elasticsearch.client.transport.NoNodeAvailableException: None of the configured nodes are available: [{#transport#-1}{av8BbMdQSe-Ys7hGal7LDw}{10.17.12.158}{10.17.12.158:9300}]
+
+初步判定，应该是spring-boot-starter-data-elasticsearch与Elasticsearch 7.x版本不兼容造成的。
+通过测试发现，将Elasticsearch降级到6.x版本，即可解决。
+
+
+【2019-08-22】更新
+最新版本
+<!-- https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-data-elasticsearch -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+    <version>2.1.7.RELEASE</version>
+</dependency>
+
+
+由https://mvnrepository.com网页可知，spring-boot-starter-data-elasticsearch编译依赖于spring-boot-starter和 spring-data-elasticsearch，进一步知道spring-data-elasticsearch的最新版本时3.1.10
+
+通过github网址：https://github.com/spring-projects/spring-data-elasticsearch
+可知当前最新发布版是3.1版本，对应Elasticsearch版本时6.2.2，尚不支持Elasticsearch 7.x版本
+
+
+Spring Data Elasticserach	           Elasticsearch	
+3.2.x	                                6.8.1	              not yet release
+5.5.0	                                2.1.x	              2.4.0
+2.0.x	                                2.2.0	              1.3.x
+
+
+spring data elasticsearch	                elasticsearch
+3.2.x	                                    6.5.0
+3.1.x	                                    6.2.2
+3.0.x	                                    5.5.0
+2.1.x	                                    2.4.0
+2.0.x	                                    2.2.0
+1.3.x	                                    1.5.2
+
+
+
+
+
+
+
+
