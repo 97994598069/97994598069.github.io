@@ -1,0 +1,9 @@
+常规方法1： gcore或jmap －F 强行dump；
+常规方法2：jinfo／jcmd 增加 HeapDumpBeforeFullGC／HeapDumpAfterFullGC flag
+常规方法3：重启 设置 JVM 参数 -XX:+UseHeapDumpBeforeFullGC
+常规方法4：jmx，mxbean直接动态修改，比如去Jconsole里setVmOption，直接将HeapDumpBeforeFullGC和HeapDumpAfterFullGC设置成true；
+
+
+非常规方法：无限FGC时用先用ps -ef|grep java 到jvm进程，gdb attach上去， 例如gdb -p 34567通过p命令显示HeapDumpBeforeFullGC变量的地址（默认是false）(gdb) p &HeapDumpBeforeFullGC$1 = ( *) 0x10f35754f runtime设置这个变量为true（1）(gdb) set *0x10f35754f=1(gdb) p HeapDumpBeforeFullGC$2 = 1下次FullGC触发前，就会自动HeapDump了到默认的 java_pidxxx.hprof了。有了dump文件后要恢复flag回去(gdb) p HeapDumpBeforeFullGC$1 = 1(gdb) p &HeapDumpBeforeFullGC$2 = ( *) 0x10f35754f (gdb) set *0x10f35754f=0(gdb) p HeapDumpBeforeFullGC$3 = 0
+
+
