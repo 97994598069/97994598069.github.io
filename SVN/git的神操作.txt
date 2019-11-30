@@ -1,3 +1,11 @@
+Git Clone 命令直接使用用户名:密码
+在Clone的时候如果clone非本地配置的用户名密码的项目的时候，可以临时性地用嵌套了【用户名:密码】的git语句来clone项目。
+格式：
+git clone http://userName:password@链接
+举例：
+git clone https://用户名:密码@git.coding.net/sample/HelloWorld.git
+
+
 设置git
 git config --global user.name "Rose" 
 git config --global user.email 
