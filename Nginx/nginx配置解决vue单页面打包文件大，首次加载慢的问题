@@ -1,0 +1,87 @@
+cnpm run build 文件过大，其中主要是vender.js有1.5M，代码部署到服务器，首次访问加载页面时比较慢，耗时6.5s左右，所以需要优化下。
+
+1、Nginx开启gzip
+　　找到nginx.config。关于gzip压缩代码：
+http {
+  gzip on; #开启或关闭gzip on off
+  gzip_disable "msie6"; #不使用gzip IE6
+  gzip_min_length 100k; #gzip压缩最小文件大小，超出进行压缩（自行调节）
+  gzip_buffers 4 16k; #buffer 不用修改
+  gzip_comp_level 3; #压缩级别:1-10，数字越大压缩的越好，时间也越长
+  gzip_types text/plain application/x-javascript text/css application/xml text/javascript application/x-httpd-php image/jpeg image/gif image/png; #  压缩文件类型
+  gzip_vary off;  #跟Squid等缓存服务有关，on的话会在Header里增加 "Vary: Accept-Encoding"
+}
+
+
+配置完重启Nginx
+
+
+
+识别gzip与非gzip请求
+在f12调试模式下：
+点击你所要知道是否走压缩的文件类型，例如js或者图片
+会出现response Headers和Request Headers 
+
+若：Request Headers 有 Accept-Encoding: gzip, deflate并且response Headers 有Content-Encoding: gzip则是走了压缩
+
+否则没有走压缩
+
+备注：gzip与非gzip在响应头中区别就是Content-Encoding是否表明是gzip压缩格式。
+
+
+2、webpack gzip
+vue项目中config/index.js
+productionGzip: true, //是否开启gizp压缩
+productionGzipExtensions: ['js', 'css'],
+
+开启后cnpm run build会生成*.gz文件。
+
+
+3、gzip_static 静态压缩
+上面配置了，Nginx是可以开启gzip压缩，而且能够实现压缩效果。而它是如何工作的呢？
+客户端发起请求
+    -》Nginx接收请求
+　　　　　-》Nginx加载文件进行gzip打包压缩成*.gz
+　　　　　　　　-》返回给浏览器
+　　　　　　　　　　-》浏览器解压*.gz （应该是它干的，反正看不见）
+
+就是说，每次请求，Nginx都会进行压缩返回、压缩返回、压缩返回、 将会导致浪费大量CPU。
+
+这么个大bug是谁设计的？如果请求量大，CPU会不会挂掉？//猜测
+当然，并不会，gizp打包压缩后会临时缓存，
+所以，能不消耗CPU就不消耗CPU。
+废话太多，步入正题。放大招！！
+
+http {　　 
+  gzip on; #开启或关闭gzip on off　　 
+  gzip_static on;#是否开启gzip静态资源
+  gzip_disable "msie6"; #不使用gzip IE6
+  gzip_min_length 100k; #gzip压缩最小文件大小，超出进行压缩（自行调节）
+  gzip_buffers 4 16k; #buffer 不用修改
+  gzip_comp_level 3; #压缩级别:1-10，数字越大压缩的越好，时间也越长
+  gzip_types text/plain application/x-javascript text/css application/xml text/javascript application/x-httpd-php image/jpeg image/gif image/png; #  压缩文件类型
+  gzip_vary off;  #跟Squid等缓存服务有关，on的话会在Header里增加 "Vary: Accept-Encoding"
+}
+
+
+重启nginx，访问服务器效果：变成459K了，耗时也少了不少
+
++++++++++++++++++++++++++++++++++
+
+gzip_static
+配置要点
+以/download开头的请求，会被路由到/opt/app/code目录下，比如请求: 
+以/download开头的请求，会被路由到/opt/app/code目录下，比如请求: 'http://192.168.1.108/download/c.png'，会去寻找/opt/app/code/download/c.png.gz；
+gzip_static开启后，nginx会去找和目标资源（c.png）同目录下的压缩过的资源（c.png.gz），并将压缩过的资源传递给客户端；
+在请求前，压缩版的资源（c.png.gz）要存在，所谓预编译；
+location ~ ^/download {
+    gzip_static on;
+    root /opt/app/code;
+}
+
+
+
+
+
+
+
