@@ -1,0 +1,219 @@
+nginx配置缓存的优点：可以在一定程度上，减少服务器的处理请求压力。比如对一些图片，css或js做一些缓存，那么在每次刷新浏览器的时候，就不会重新请求了，而是从缓存里面读取。这样就可以减轻服务器的压力。
+
+nginx可配置的缓存又有2种：
+1）客户端的缓存(一般指浏览器的缓存)。
+2）服务端的缓存(使用proxy-cache实现的)。
+
+客户端的缓存一般有如下两种方式实现：
+协商缓存和强缓存。具体理解什么是协商缓存或强缓存
+
+当我们在nginx没有配置任何的时候，我们直接在命令行中运行 npm run dev 的时候，然后我们在浏览器访问 http://localhost:7878/ 时候，可以看到不管我刷新多少次，浏览器下图片，css，js所有的请求都会返回200，不会有任何缓存
+F12可以查看状态码status都是200
+
+
+现在我们去我本地安装的nginx中去配置下
+server {
+  location ~* \.(html)$ {
+    access_log off;
+    add_header  Cache-Control  max-age=no-cache;
+  }
+
+  location ~* \.(css|js|png|jpg|jpeg|gif|gz|svg|mp4|ogg|ogv|webm|htc|xml|woff)$ {
+    # 同上，通配所有以.css/.js/...结尾的请求
+    access_log off;
+    add_header    Cache-Control  max-age=360000;
+  }
+}
+
+如上配置解析含义如下：
+~* 的含义是：通配任意字符（且大小写不敏感），\转义字符，因此 ~* \.(html)$的含义是：匹配所有以.html结尾的请求
+access_log off; 的含义是 关闭日志功能。
+add_header Cache-Control max-age=no-cache; 的含义：html文件不设置强制缓存时间，协商缓存，使用 Last-Modified。no-cache 会发起往返通信来验证缓存的响应，但如果资源未发生变化，则不会下载，返回304。
+
+F12选择xx.abc.com 查看Headers可以看到如下
+Status Code为304 Not Modified
+Response Headers中的Last-Modified的时间和Request Headers中的H-Modified-Since的时间相同
+
+add_header Cache-Control max-age=360000; 的含义给上面匹配后缀的文件设置强制缓存，且缓存的时间是360000秒，第一次访问的时候，从服务器请求，当除了第一次以外，再次刷新浏览器，会从浏览器缓存读取，那么强制缓存一般是从内存里面先读取，如果内存没有，再从硬盘读取。
+
+
+再次访问F12可以查看的到，Status为200，Size为from memory cache 
+
+注意：如上只是不对反向代理的页面进行缓存设置的，但是如果是反向代理后的页面，如上设置是不生效的。比如说我node起了一个服务，然后通过访问nginx反向代理的方式代理到我node服务来，上面的配置是不生效的。因此我们需要如下处理配置。
+
+
+
+解决nginx反向代理缓存不起作用的问题
+比如我上面的node服务端口是7878端口。nginx需要如下配置：
+server {
+  listen  8081;
+  server_name  xxx.abc.com;
+  location / {
+    proxy_pass http://localhost:7878;
+    add_header  Cache-Control  max-age=no-cache;
+  }
+}
+
+1) 如果我们要添加缓存功能的话，需要创建一个用于存放缓存文件的文件夹。比如我们这里使用 /data/nuget-cache。
+
+在/usr/local/etc/nginx目录下新建。比如使用命令：mkdir /data/nuget-cache. 创建完成后，我们来查看下：
+
+2）然后我们需要在nginx.conf的http设置部分添加 proxy_cache_path的设置，如下：
+http {
+  // ..... 其他的配置
+  proxy_cache_path  /data/nuget-cache levels=1:2 keys_zone=nuget-cache:20m max_size=50g inactive=168h;
+  server {
+    listen  8081;
+    server_name  xxx.abc.com;
+    location / {
+      proxy_pass http://localhost:7878;
+      add_header  Cache-Control  max-age=no-cache;
+    }
+  }
+}
+
+
+proxy_cache_path 各个配置值的含义解析如下：
+proxy_cache_path 指缓存的目录，目录为：/data/nuget-cache。
+levels=1:2 表示采用2级目录结构；
+keys_zone 指的是缓存空间名称，叫nuget-cache。缓存内存的空间为20M。
+max_size 指的是缓存文件可以占用的最大空间。为50G.
+inactive=168h; 默认过期时间为168个小时。为7天，也可以写成：inactive=7d; 这样的。
+
+
+3）我们还需要在server设置部分添加 proxy_cache 与 proxy_cache_valid的设置：如下代码：
+http {
+  // ..... 其他的配置
+  proxy_cache_path  /data/nuget-cache levels=1:2 keys_zone=nuget-cache:20m max_size=50g inactive=168h;
+  server {
+    listen  8081;
+    server_name  xxx.abc.com;
+    location / {
+      proxy_pass http://localhost:7878;
+      add_header  Cache-Control  max-age=no-cache;
+      proxy_cache nuget-cache;
+      proxy_cache_valid 168h;
+    }
+  }
+}
+
+
+proxy_cache 设置的是 proxy_cache_path中的keys_zone的值。
+proxy_cache_valid：设置的是缓存过期时间，比如设置168个小时过期。
+如上配置完成后，我们保存nginx.conf配置后，重新启动下nginx后，发现还是不能缓存文件了。因此我们还需要进行如下配置：
+需要在server中再加上如下代码：
+proxy_ignore_headers Set-Cookie Cache-Control;
+proxy_hide_header Cache-Control;
+proxy_hide_header Set-Cookie;
+
+proxy_ignore_headers的含义是：忽略Cache-Control的请求头控制，依然进行缓存，比如对请求头设置cookie后，默认是不缓存的，需要我们增加忽略配置。
+因此所有配置变成如下了：
+http {
+  // ..... 其他的配置
+  proxy_cache_path  /data/nuget-cache levels=1:2 keys_zone=nuget-cache:20m max_size=50g inactive=168h;
+  server {
+    listen  8081;
+    server_name  xxx.abc.com;
+    location / {
+      proxy_pass http://localhost:7878;
+      add_header  Cache-Control  max-age=no-cache;
+      proxy_cache nuget-cache;
+      proxy_cache_valid 168h;
+      proxy_ignore_headers Set-Cookie Cache-Control;
+      proxy_hide_header Cache-Control;
+      proxy_hide_header Set-Cookie;
+    }
+  }
+}
+
+但是如上写法看起来很繁琐，因此我们可以使用include命令把文件包含进来，因此我在 /usr/local/etc/nginx 目录下新建一个 nginx_proxy.conf 配置文件，把上面的 proxy相关的配置放到该文件里面，如下所示：
+http {
+  // ..... 其他的配置
+  proxy_cache_path  /data/nuget-cache levels=1:2 keys_zone=nuget-cache:20m max_size=50g inactive=168h;
+  include nginx_proxy.conf;
+  server {
+    listen  8081;
+    server_name  xxx.abc.com;
+    location / {
+      proxy_pass http://localhost:7878;
+      add_header  Cache-Control  max-age=no-cache;
+    }
+  }
+}
+
+
+
+
+如上是对页面使用协商缓存的，但是对于图片，css, 或js这样的，我想使用强制缓存，因此对于其他的类型文件我们统一如下这样处理：
+server {
+  listen       8081;
+  server_name  xxx.abc.com;
+  location / {
+    proxy_pass http://localhost:7878;
+    add_header  Cache-Control  max-age=no-cache;
+  }
+  location ~* \.(css|js|png|jpg|jpeg|gif|gz|svg|mp4|ogg|ogv|webm|htc|xml|woff)$ {
+    access_log off;
+    add_header Cache-Control "public,max-age=30*24*3600";
+    proxy_pass http://localhost:7878;
+  }
+  error_page   500 502 503 504  /50x.html;
+  location = /50x.html {
+    root   html;
+  }
+}
+
+
+如上css或js文件等缓存的时间是30天。使用的是max-age强制缓存。因此如上，如果是页面第二次访问的话，会返回304，如下所示：
+F12 中点击xx.abc.com 下的Headers中的Status Code 为304 Not Modified 
+Response Headers中的Last-Modified的时间和Request Headers中的H-Modified-Since的时间相同
+
+如果是css或js这样的访问的话，就是强制缓存了，状态码还是200，但是先从内存里面读取的。当然如果进程结束了，比如浏览器关闭了，再打开，那么是从硬盘上读取的了。如下所示：
+
+
+因此nginx.conf 所有的配置文件代码如下：
+worker_processes  1;
+events {
+  worker_connections  1024;
+}
+http {
+  include       mime.types;
+  default_type  application/octet-stream;
+  sendfile        on;
+  #tcp_nopush     on;
+  #keepalive_timeout  0;
+  keepalive_timeout  65;
+  include nginx_proxy.conf;
+  proxy_cache_path  /data/nuget-cache levels=1:2 keys_zone=nuget-cache:20m max_size=50g inactive=168h;
+  #gzip  on;
+  server {
+    listen       8081;
+    server_name  xxx.abc.com;
+    location / {
+      proxy_pass http://localhost:7878;
+      add_header  Cache-Control  max-age=no-cache;
+    }
+    location ~* \.(css|js|png|jpg|jpeg|gif|gz|svg|mp4|ogg|ogv|webm|htc|xml|woff)$ {
+      access_log off;
+      add_header Cache-Control "public,max-age=30*24*3600";
+      proxy_pass http://localhost:7878;
+    }
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+      root   html;
+    }
+  }
+}
+
+cat nginx_proxy.conf
+proxy_cache nuget-cache;
+proxy_cache_valid 168h;
+proxy_ignore_headers Set-Cookie Cache-Control;
+proxy_hide_header Cache-Control;
+proxy_hide_header Set-Cookie;
+
+
+
+
+
+
