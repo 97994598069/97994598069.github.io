@@ -1,0 +1,24 @@
+1、首先需要使用github的注册账号登录gitlab,查看右上角用户头像处的settings,
+
+2、在用户设置settings处找到SSH Keys,
+
+3、如果你的电脑或者服务器中没有SSH Key,那就需要生成一个（随便一台即可，不是必须是拉去代码的服务器）
+按照相关提示生成SSH Key,使用git工具，右键打开git bash here,在命令行中输入ssh-keygen -t rsa -C "your_email@example.com"，此处邮箱地址是你github注册邮箱地址哦。然后一路回车就好了。接下来就按照有SSH Key的步骤来操作了。
+
+4.将生成的密钥对，的公钥id_rsa.pub 打开并完全复制内容并粘贴到gitlab中的key当中，
+
+最后点击Add Key按钮，就会生成SSH Key了。
+
+
+4、现在我们就可以在git 工具下用git clone来克隆你想要操作的文件了，git clone 文件路径，
+5、git pull就可以把你的代码拉下来了，现在你可以增删改查你的代码了。
+6、代码修改完成了，你想把你的代码重新放到gitlab上去，执行命令 git add .，此处需要注意，add后面是“空格”和“.”，
+7、添加完了需要提交 ，执行命令git commit -m ‘备注信息（提交的什么内容）‘，
+8、此刻你可以将你的代码推送到远程仓库了，执行命令 git push，这样你的代码基本上就被重新放到了gitlab上了。
+
+格式：
+git clone http://userName:password@链接
+举例：
+git clone https://用户名:密码@git.coding.net/sample/HelloWorld.git
+
+
