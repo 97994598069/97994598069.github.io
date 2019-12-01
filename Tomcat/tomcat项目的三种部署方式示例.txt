@@ -96,6 +96,8 @@ drwxr-xr-x. 7 root root 4096 Dec 15 14:34 jenkins
                 unpackWARs="true" autoDeploy="true">
       <Context path="" docBase="/home/tomcat/www" debug="0" reloadable="true" />
 
+案例：<Context docBase="/usr/local/abc.war" path="/abc" debug="0"  reloadable="true"/>  ##此时你将war包放到/usr/local即可，会在tomcat下webapps下会生成abc目录  访问路径即是：http://$tomcat_ip:8080/abc
+如果需要部署多个tocat或者多节点集群，则可以通过nfs等将war包路共享即可，方便部署
 
 
 	  
