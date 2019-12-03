@@ -1,0 +1,27 @@
+问题：本地的web站需要用到elasticsearch服务。当php使用本地服务器搭建的elasticsearch时，本地的负载都是正常。 当我使用aws 的elasticsearch service服务时，本地服务器出现负载经常过高的情况。查看nginx 和php日志，发现没有异常。系统的并发连接数也不高。
+
+调试过程：
+查找一个php的子进程id
+strace -cp pid 跟踪进程的调用
+
+
+top确定吃资源的进程--->strace -cp $pid查看该进程的调用时间（发现是个access的调用占用大量时间）---->strace -T -e access -p $pid查看这个access为什么占用这么大的时间，例如会访问一个本地服务器上的文件，而这个文件不存在
+
+
+
+
+[root@localhost ~]# netstat -unptl |grep 3306
+tcp6       0      0 :::3306                 :::*                    LISTEN      11006/mysqld        
+[root@localhost ~]# strace -c -p 11006
+strace: Process 11006 attached
+^Cstrace: Process 11006 detached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 88.72    0.052868        8811         6           poll
+ 11.05    0.006586        6586         1           restart_syscall
+  0.16    0.000097           7        14           futex
+  0.06    0.000038           5         7           accept
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.059589                    28           total
+
+strace -T -e poll -p 11006

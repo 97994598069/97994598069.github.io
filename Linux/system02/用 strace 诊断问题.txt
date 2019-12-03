@@ -1,0 +1,11 @@
+strace -cp
+很明显，我们能看到 CPU 主要被 clone 操作消耗了，还可以单独跟踪一下 clone：
+
+shell>strace-T -e clone-p <PID>
+通过「T」选项可以获取操作实际消耗的时间，通过「e」选项可以跟踪某个操作：
+
+
+
+简单来说，就是创建一个新进程。那么在 PHP 里什么时候会出现此类系统调用呢？查询业务代码看到了 exec 函数，通过如下命令验证它确实会导致 clone 系统调用：
+shell>strace-eclone php -r 'exec("ls");'
+

@@ -1,0 +1,114 @@
+Strace是Linux下一款通用的进程动态跟踪工具，用来追踪程序执行时的系统调用和所接收的信号
+首先，简单说说它的使用参数，Strace的参数包括输出参数、过滤参数、统计参数、跟踪参数、启动参数和其他杂项。详细的看帮助文档或者搜索它的用法，我们只简单介绍几个常用的参数：
+-c 统计每一系统调用的所执行的时间,次数和出错的次数等. 
+-d 输出strace关于标准错误的调试信息. 
+-f 除了跟踪当前进程外，还跟踪由fork调用所产生的子进程. 
+-ff 如果提供-o filename,则所有进程的跟踪结果输出到相应的filename.pid中,pid是各进程的进程号. 
+-F 尝试跟踪vfork调用.在-f时,vfork不被跟踪. 
+-h 输出简要的帮助信息. 
+-i 输出系统调用的入口指针寄存器值. 
+-q 禁止输出关于结合(attaching)、脱离(detaching)的消息，当输出重定向到一个文件时，自动抑制此类消息. 
+-r 打印出相对时间关于每一个系统调用，即连续的系统调用起点之间的时间差，与-t对应. 
+-t 打印各个系统调用被调用时的绝对时间秒级，观察程序各部分的执行时间可以用此选项。 
+-tt 在输出中的每一行前加上时间信息,微秒级. 
+-ttt 在每行输出前添加相对时间信息，格式为”自纪元时间起经历的秒数.微秒数”
+-T 显示每一调用所耗的时间，其时间开销在输出行最右侧的尖括号内. 
+-v 冗余显示模式：显示系统调用中argv[]envp[]stat、termio(s)等数组/结构体参数所有的元素/成员内容. 
+-V 输出strace的版本信息. 
+-x 以十六进制形式输出非标准字符串 。
+-xx 所有字符串以十六进制形式输出. 
+-a column 设置返回值的输出位置.默认为40，即"="出现在第40列.
+-e expr 指定一个表达式,用来控制如何跟踪.
+    -e trace=set 只跟踪指定的系统 调用.例如:-e trace=open.
+    -e trace=file 只跟踪有关文件操作的系统调用. 
+    -e trace=process 只跟踪有关进程控制的系统调用. 
+    -e trace=network 跟踪与网络有关的所有系统调用. 
+    -e trace=signal 跟踪所有与系统信号有关的 系统调用 
+    -e trace=ipc 跟踪所有与进程通讯有关的系统调用 
+    -e abbrev=set 设定 strace输出的系统调用的结果集.-v 等与 abbrev=none.默认为abbrev=all. 
+    -e raw=set 将指 定的系统调用的参数以十六进制显示. 
+    -e signal=set 指定跟踪的系统信号.默认为all.如signal=!SIGIO,表示不跟踪SIGIO信号. 
+    -e read=set 输出从指定文件中读出 的数据.例如: -e read=3,5 -e write=set 
+-E var 从命令的环境变量列表中移除var。
+-E var=val 将var=val放入命令的环境变量列表.
+-o filename 将strace的输出写入文件filename，而不是显示到标准错误输出（stderr）.
+-p pid 跟踪指定的进程pid，可指定多达32个(-p pid)选项以同时跟踪多个进程。该选项常用于调试后台进程. 
+-s strsize 限制每行输出中字符串(如read参数)的最大显示长度，默认32字节。但文件名总是完整显示
+-S sortby 按指定规则对-c选项的输出直方图进行排序。sortby取值可为time、calls、name和nothing(默认     time)
+-u username 以username 的UID和GID执行被跟踪的命令
+
+
+
+1、查找实际加载的配置文件
+常有人会问我，为什么我的配置改了，实际沒生效。我问他你改完重启了么，哦，忘了。过了一会又来问，哥我重启了，还是一样没效果。我问你改的那个文件？他说，找网上百度的，不知道为啥不生效。
+
+这个场景估计很多人都遇到过，那对付这类问题有没有啥好的、一劳永逸的办法，还是只凭经验或者频繁的问人老司机呢？
+其实最好的一个方法，就是用strace追踪下进程加载的文件，这里面的加载的配置文件肯定就是真正使用的配置文件，修改这个文件，重启就肯定生效了。
+
+举例，我们要找mysql的配置文件
+[root@prometheus zz]# strace -tf mysql 2>&1|grep cnf
+17:33:17 stat("/etc/my.cnf", {st_mode=S_IFREG|0644, st_size=960, ...}) = 0
+17:33:17 open("/etc/my.cnf", O_RDONLY)  = 3
+17:33:17 stat("/etc/mysql/my.cnf", 0x7ffe29f1edf0) = -1 ENOENT (No such file or directory)
+17:33:17 stat("/data/arkrpm/arkdb/build/mysql57/build_release/etc/my.cnf", 0x7ffe29f1edf0) = -1 ENOENT (No such file or directory)
+17:33:17 stat("/root/.my.cnf", 0x7ffe29f1edf0) = -1 ENOENT (No such file or directory)
+17:33:17 stat("/root/.mylogin.cnf", 0x7ffe29f1edf0) = -1 ENOENT (No such file or directory)
+
+结果如上图，我们看出来了，实际的调用文件是/etc/my.cnf。
+至于命令中的“2>&1” ，有认真的同学会有疑问，去掉可以么？然后去试了，结果grep没起作用，所有内容一股脑全出来了。为什么如此呢？原来starce输出结果是输出到标准错误2的，当做debug信息了。而|管道传递给grep的只是标准输出1 ，所以内容全部显示了（标准错误），而grep 筛选没起作用（标准输出为空）。所以必须要加上“2>&1”，要把标准错误的信息先重定向到标准输出1。这样结果才对。
+同样的方法，适用于查找配置文件，加载类库文件找不到等等。举一反三尝试好了。
+
+
+
+[root@prometheus local]# strace php 2>&1 | grep php.ini
+open("/usr/bin/php.ini", O_RDONLY)      = -1 ENOENT (No such file or directory)
+open("/etc/php.ini", O_RDONLY)          = 3
+
+
+
+2、追踪耗时进程
+如果你突然发现你的程序启动很慢，或者占用cpu，内存等特别大；或者你发现系统负载很大，你通过top，ps等发现是某个进程导致，比如msyql程序；再者可能服务器被黑了，有个木马进程占了很大资源。我们想进一步细化分析，究竟为啥mysql占的资源特别大？这个木马进程都干了什么坏事？这时候祭出strace神器就ok了。
+我们前面说了strace有统计参数，最简单就是-c参数，对一个进程加-c参数，strace会统计程序系统调用的统计。会统计那些项呢？我们上面介绍-c参数时候说了，有系统调用、耗时、和错误次数。
+
+备注：系统调用、耗时、错误次数
+[root@prometheus zz]# strace -c mysql
+ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: NO)
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 34.40    0.000151           7        21           read
+  8.66    0.000038           1        41           mmap
+  7.97    0.000035           2        21           close
+  7.29    0.000032           2        17           open
+  6.61    0.000029          10         3         2 connect
+  5.92    0.000026           5         5           munmap
+  4.78    0.000021           4         6         5 stat
+  3.87    0.000017           1        18           fstat
+  3.64    0.000016           4         4           write
+  3.42    0.000015           5         3           socket
+  2.73    0.000012           1        23           mprotect
+  1.82    0.000008           1         6           rt_sigaction
+  1.82    0.000008           4         2           recvfrom
+  1.59    0.000007           2         4           brk
+  1.59    0.000007           4         2           ioctl
+  0.91    0.000004           4         1           sendto
+  0.91    0.000004           2         2         1 setsockopt
+  0.68    0.000003           3         1           futex
+  0.46    0.000002           2         1           dup
+  0.46    0.000002           2         1           shutdown
+  0.46    0.000002           2         1           geteuid
+  0.00    0.000000           0         1           rt_sigprocmask
+  0.00    0.000000           0         1         1 access
+  0.00    0.000000           0         1           execve
+  0.00    0.000000           0         1           getrlimit
+  0.00    0.000000           0         1           arch_prctl
+  0.00    0.000000           0         1           set_tid_address
+  0.00    0.000000           0         1           set_robust_list
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.000439                   190         9 total
+
+
+我们再通过Pid动态跟踪下，执行-c -p Pid 一段时间，ctrl+c退出，就有结果：
+
+
+
+

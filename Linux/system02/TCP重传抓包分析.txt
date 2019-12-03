@@ -1,0 +1,245 @@
+收到研发反馈，TCP重传严重。主机报文重传是TCP最基本的错误恢复功能，它的目的是防止报文丢失
+
+报文丢失的可能因素有很多种：
+1、 网络设备或线路故障
+案例：设备接口常常出现的CRC数据校验错误
+特点：问题一直持续，所有经过该节点的数据都受影响，影响服务器数量大
+
+2、 数据路径上的流量突发导致链路拥塞
+案例：专线打满导致丢包严重
+特点：突发性极强，持续时间短。更多时候有周期性。所有经过该节点的数据都受影响，影响服务器数量大
+
+3、 客户端服务器故障
+案例：某服务器网卡故障，或者性能下降
+特点：故障常时间持续，仅仅影响单台设备
+
+4、 服务器端服务器故障
+案例：某服务器网卡故障
+特点：故障长时间持续，所有请求到该节点的数据都受影响，影响服务器数量大
+
+5、 服务器端性能下降
+案例：有运营活动的时候服务端请求量太大，导致性能下降
+特点：突发，如果服务端有巨量请求会有周期性，所有请求到这台设备(集群)的数据都有可能受影响，影响服务器数量大
+
+6、 代理节点或者VIP性能下降
+案例：某一负载均衡集群故障或性能下降
+特点：突发，有周期性。所有请求到该节点的数据都受影响，影响服务器数量大
+
+
+先抓包生成pcap文件，tcpdump -i nsdb475e5d-86 -vvv  -w tcp_retry.pcap，保留证据要紧，同时留意值班群和网络应急响应群是否有相同的反馈，如果有其他人反馈，及时确认受影响范围，服务器是否有一些共性，比如集中在某个数据中心上、某个POD下、某台物理机上
+
+
+使用以下命令实时可以观察系统中每秒tcp重传报文数量，线上监控工具推荐使用阿里出品的tsar-Taobao System Activity Reporter
+nstat -z -t 1 | grep -e TcpExtTCPSynRetrans -e TcpRetransSegs  -e TcpOutSegs -e TcpInSegs
+[root@prometheus scripts]# nstat -z -t 1 | grep -e TcpExtTCPSynRetrans -e TcpRetransSegs  -e TcpOutSegs -e TcpInSegs
+nstat: history is aged out, resetting
+TcpInSegs                       8468               0.0
+TcpOutSegs                      7448               0.0
+TcpRetransSegs                  321                0.0
+TcpExtTCPSynRetrans             316                0.0
+
+使用netstat -s查看整体情况，按各个协议进行统计结果如下
+
+[root@prometheus scripts]# netstat -s
+Ip:
+    30056 total packets received
+    0 forwarded
+    0 incoming packets discarded
+    6019 incoming packets delivered
+    5344 requests sent out
+    48 reassemblies required
+    24 packets reassembled ok
+Icmp:
+    636 ICMP messages received
+    318 input ICMP message failed.
+    ICMP input histogram:
+        destination unreachable: 636
+    636 ICMP messages sent
+    0 ICMP messages failed
+    ICMP output histogram:
+        destination unreachable: 636
+IcmpMsg:
+        InType3: 636
+        OutType3: 636
+Tcp:
+    403 active connections openings
+    39 passive connection openings
+    323 failed connection attempts
+    0 connection resets received
+    6 connections established
+    8515 segments received
+    7500 segments send out
+    324 segments retransmited
+    0 bad segments received.
+    16 resets sent
+Udp:
+    113 packets received
+    0 packets to unknown port received.
+    0 packet receive errors
+    127 packets sent
+    0 receive buffer errors
+    0 send buffer errors
+UdpLite:
+TcpExt:
+    71 TCP sockets finished time wait in fast timer
+    27 delayed acks sent
+    1 delayed acks further delayed because of locked socket
+    Quick ack mode was activated 1 times
+    29 packets directly queued to recvmsg prequeue.
+    1998 bytes directly received in process context from prequeue
+    4335 packet headers predicted
+    27 packets header predicted and directly queued to user
+    373 acknowledgments not containing data payload received
+    1565 predicted acknowledgments
+    1 congestion windows recovered without slow start after partial ack
+    321 other TCP timeouts
+    TCPLossProbes: 1
+    1 DSACKs sent for old packets
+    3 connections reset due to unexpected data
+    1 connections aborted due to timeout
+    TCPSackShiftFallback: 3
+    TCPDeferAcceptDrop: 5
+    IPReversePathFilter: 6
+    TCPRcvCoalesce: 135
+    TCPOFOQueue: 26
+    TCPSpuriousRtxHostQueues: 485
+    TCPAutoCorking: 4
+    TCPSynRetrans: 319
+    TCPOrigDataSent: 2712
+IpExt:
+    InNoRoutes: 20
+    InBcastPkts: 6142
+    InOctets: 14038805
+    OutOctets: 403301
+    InBcastOctets: 759432
+    InNoECTPkts: 32240
+[root@prometheus scripts]# 
+
+
+ss -anti |grep -B 1 retrans查看重传统计情况，具体到IP+端口，这里方便显示使用ss -tanl演示
+[root@prometheus scripts]# ss -tanl
+State       Recv-Q Send-Q                                            Local Address:Port                                                           Peer Address:Port              
+LISTEN      0      128                                                           *:10050                                                                     *:*                  
+LISTEN      0      128                                                           *:10051                                                                     *:*                  
+LISTEN      0      128                                                           *:22                                                                        *:*                  
+LISTEN      0      10                                                    127.0.0.1:25                                                                        *:*                  
+LISTEN      0      128                                                          :::9090                                                                     :::*                  
+LISTEN      0      128                                                          :::10050                                                                    :::*                  
+LISTEN      0      128                                                          :::10051                                                                    :::*                  
+LISTEN      0      50                                                           :::10052                                                                    :::*                  
+LISTEN      0      80                                                           :::3306                                                                     :::*                  
+LISTEN      0      128                                                          :::80                                                                       :::*                  
+LISTEN      0      128                                                          :::22                                                                       :::*                  
+LISTEN      0      128                                                          :::3000                                                                     :::*                  
+[root@prometheus scripts]# 
+
+1、 LISTEN 状态：
+这两个值表示的是最大的listen backlog积压数值，这里显示为0，实际上会取内核参数net.core.somaxconn的值
+
+2、 其他状态：
+(1)、 recv-Q:表示网络接收队列，表示收到的数据已经在本地接收缓冲，但是还有多少没有被进程取走，如果短暂不为0，可能是处于半连接状态，如果接收队列Recv-Q一直处于阻塞状态，可能是遭受了拒绝服务 denial-of-service 攻击
+(2)、send-Q:表示网路发送队列，对方没有收到的数据或者说没有Ack的,还是在本地缓冲区.如果发送队列Send-Q不能很快的清零，可能是有应用向外发送数据包过快，或者是对方接收数据包不够快
+
+非LISTEN状态下则通常应该为0，如果不为0可能是有问题的，packets在两个队列里都不应该有堆积状态，可接受短暂的非0情况
+
+
+
+ulimit -a检查服务打开的文件句柄上限,10多万正常是足够的
+[root@prometheus ~]# ulimit -a
+core file size          (blocks, -c) 0
+data seg size           (kbytes, -d) unlimited
+scheduling priority             (-e) 0
+file size               (blocks, -f) unlimited
+pending signals                 (-i) 14996
+max locked memory       (kbytes, -l) 64
+max memory size         (kbytes, -m) unlimited
+open files                      (-n) 65536
+pipe size            (512 bytes, -p) 8
+POSIX message queues     (bytes, -q) 819200
+real-time priority              (-r) 0
+stack size              (kbytes, -s) 8192
+cpu time               (seconds, -t) unlimited
+max user processes              (-u) 4096
+virtual memory          (kbytes, -v) unlimited
+file locks                      (-x) unlimited
+
+
+通过ifconfig查看网卡是否存在持续drop、error现象
+[root@prometheus ~]# ifconfig 
+ens33: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.197.164  netmask 255.255.255.0  broadcast 192.168.197.255
+        inet6 fe80::6f0c:b4b6:2713:7ce8  prefixlen 64  scopeid 0x20<link>
+        ether 00:0c:29:12:05:34  txqueuelen 1000  (Ethernet)
+        RX packets 37868  bytes 16006663 (15.2 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 6253  bytes 558975 (545.8 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 5026  bytes 5532609 (5.2 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 5026  bytes 5532609 (5.2 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+		
+		
+
+容器状态正常，开始使用wiresherk分析抓包文件
+查看IO graph，确保链路不忙，不忙的链路IO会有很多高低起落，峰值以及空闲间隙
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+[root@localhost ~]# tsar --tcp -l -i 1  ###retran表示重传
+Time              -------------------------------tcp------------------------------ 
+Time              active  pasive    iseg  outseg  EstRes  AtmpFa  CurrEs  retran   
+02/12/19-14:15:27   0.00    2.00   71.00   65.00    0.00    0.00  101.00    0.00   
+02/12/19-14:15:28   0.00    0.00   77.00   60.00    0.00    0.00  101.00    0.00   
+02/12/19-14:15:29   0.00    0.00   27.00   21.00    0.00    0.00  101.00    0.00   
+02/12/19-14:15:30   0.00    6.00  302.00  252.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:31   0.00    0.00   73.00   60.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:32   0.00    0.00   21.00   19.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:33   0.00    0.00    3.00    4.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:34   0.00    0.00  177.00  179.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:35   0.00    0.00  302.00  261.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:36   0.00    1.00  137.00  144.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:37   0.00    0.00   75.00   73.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:38   0.00    3.00  537.00  589.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:39   0.00    0.00   11.00    8.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:40   0.00    0.00   19.00   14.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:41   0.00    0.00    1.00    1.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:42   0.00    8.00  113.00   91.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:43   0.00    4.00   57.00   47.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:44   0.00    1.00   15.00   13.00    0.00    0.00   99.00    0.00   
+02/12/19-14:15:45   0.00    1.00   17.00   16.00    0.00    0.00  100.00    0.00   
+Time              -------------------------------tcp------------------------------ 
+Time              active  pasive    iseg  outseg  EstRes  AtmpFa  CurrEs  retran   
+02/12/19-14:15:46   0.00    0.00   18.00   23.00    0.00    0.00  100.00    0.00   
+02/12/19-14:15:47   0.00    0.00   90.00   78.00    0.00    0.00  100.00    0.00   
+02/12/19-14:15:48   0.00    0.00   14.00   10.00    0.00    0.00  100.00    0.00   
+02/12/19-14:15:49   0.00    0.00    1.00    1.00    0.00    0.00  100.00    0.00   
+02/12/19-14:15:50   0.00    1.00   15.00   12.00    0.00    0.00  100.00    0.00   
+02/12/19-14:15:51   0.00    0.00  147.00  132.00    0.00    0.00  100.00    0.00   
+02/12/19-14:15:52   0.00    0.00    1.00    1.00    0.00    0.00  100.00    0.00   
+02/12/19-14:15:53   0.00   11.00  215.00  166.00    0.00    0.00  100.00    0.00   
+
+
+
+[root@localhost ~]# tsar -l -i 1  ###retran表示重传
+Time              ---cpu-- ---mem-- ---tcp-- -----traffic---- --sda--- --dm-0-- --dm-1-- --dm-2--  ---load- 
+Time                util     util   retran    bytin  bytout     util     util     util     util     load1   
+02/12/19-14:17:10   0.56    45.86     0.00     5.5K   12.0K     0.90     0.00     0.00     0.90      0.37   
+02/12/19-14:17:11   0.06    45.86     0.00     1.3K  226.00    39.00     0.00     0.00    39.00      0.37   
+02/12/19-14:17:12   0.50    45.86     0.00    10.6K   16.7K     2.30     0.00     0.00     2.30      0.37   
+02/12/19-14:17:13   0.31    45.86     0.00     6.3K    6.8K     0.30     0.00     0.00     0.30      0.37   
+02/12/19-14:17:14   0.13    45.86     0.00     4.6K    8.2K     8.80     0.00     0.00     8.90      0.37   
+02/12/19-14:17:15   0.06    45.86     0.00     2.8K    4.4K     0.60     0.00     0.00     0.60      0.34   
+02/12/19-14:17:16   0.06    45.86     0.00     1.8K  226.00     7.90     0.00     0.00     7.90      0.34   
+02/12/19-14:17:17   0.06    45.86     0.00     2.4K    3.4K     0.00     0.00     0.00     0.00      0.34   
+
+
+确定ip端口
+ss -anti |grep -B 1 retrans  
+
+进而确定是哪个应用导致的重传，进一步分析排查
+

@@ -1,0 +1,221 @@
+空间的base小域名流量一直增长，但业务方面没有发布变更，其他SET也没有类似的趋势，根据以往的经验，怀疑有CGI被额刷了。
+第一招，分析来源IP是否有聚集。
+tcpdump -itunl0 -c30000 tcp dst port 80 | grep IP | awk '{print $3}' | awk -F. -v OFS=. '{print $1,$2,$3,$4}' | sort | uniq -c | sort -r | head -20
+
+[root@localhost ~]# tcpdump -iens192 -c30000 tcp dst port 80
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on ens192, link-type EN10MB (Ethernet), capture size 262144 bytes
+09:12:54.856726 IP 111.207.166.93.11646 > fuxian.sxbctv.com.http: Flags [P.], seq 2973820891:2973821276, ack 2051584780, win 1023, length 385: HTTP: GET /media/api/advertise HTTP/1.1
+09:12:54.856832 IP 111.207.166.93.11647 > fuxian.sxbctv.com.http: Flags [P.], seq 1186177491:1186177918, ack 3270195616, win 1023, length 427: HTTP: GET /media/api/content/notice?pagesize=8&pageindex=0&label=College HTTP/1.1
+09:12:54.856856 IP 111.207.166.93.11648 > fuxian.sxbctv.com.http: Flags [P.], seq 3807968863:3807969289, ack 1821851222, win 1023, length 426: HTTP: GET /media/api/content/notice?pagesize=8&pageindex=0&label=Notice HTTP/1.1
+09:12:54.856971 IP 111.207.166.93.11649 > fuxian.sxbctv.com.http: Flags [P.], seq 277765242:277765628, ack 3607487510, win 1018, length 386: HTTP: GET /media/api/studio/256 HTTP/1.1
+09:12:54.857077 IP 111.207.166.93.11645 > fuxian.sxbctv.com.http: Flags [P.], seq 2361013700:2361014089, ack 4001381036, win 1019, length 389: HTTP: GET /media/api/content/count HTTP/1.1
+09:12:54.912969 IP 111.207.166.93.11646 > fuxian.sxbctv.com.http: Flags [.], ack 524, win 1021, length 0
+09:12:54.913157 IP 111.207.166.93.11647 > fuxian.sxbctv.com.http: Flags [.], ack 524, win 1021, length 0
+09:12:54.913261 IP 111.207.166.93.11645 > fuxian.sxbctv.com.http: Flags [.], ack 524, win 1024, length 0
+09:12:54.948242 IP 111.207.166.93.11648 > fuxian.sxbctv.com.http: Flags [.], ack 524, win 1021, length 0
+09:12:54.963123 IP 111.207.166.93.11649 > fuxian.sxbctv.com.http: Flags [.], ack 1072, win 1024, length 0
+09:12:55.046737 IP 111.207.166.93.11649 > fuxian.sxbctv.com.http: Flags [P.], seq 386:717, ack 1072, win 1024, length 331: HTTP: GET /media/api/studio/login HTTP/1.1
+09:12:55.075428 IP 111.207.166.93.11649 > fuxian.sxbctv.com.http: Flags [.], ack 1591, win 1021, length 0
+
+
+
+[root@prometheus ~]# cat tcpdump.log |grep IP |awk '{print $3}' |awk -F '.' -v OFS=. '{print $1,$2,$3,$4}'  ##OFS 输出字段分隔符，默认是不输出的，加上后会输出分隔符
+192.168.10.26
+192.168.10.26
+192.168.10.26
+192.168.10.26
+192.168.10.26
+192.168.10.26
+192.168.10.26
+192.168.10.26
+192.168.10.26
+192.168.10.26
+
+
+
+[root@prometheus ~]# cat tcpdump.log |grep IP |awk '{print $3}' |awk -F '.' -v OFS=. '{print $1,$2,$3,$4}' |sort -rn |uniq -c |sort -rn
+     12 111.207.166.93
+从第一招的结果来看，基本可以确认是被刷了，而且浙江电信不应该访问这个域名。
+
+
+
+第二招，分析CGI请求是否有聚集。
+一般有GET和POST两种请求，大家可以根据情况选用，也可以修改一下grep的正则表达式两种都抓。
+tcpdump -itunl0 -s1500 -A -n -c30000 dst port 80 | grep -Eo "POST .*" | awk -F"?" '{print $1}' | sort | uniq -c | sort –r
+
+tcpdump -iens192 -s1500 -A -n -c30000 dst port 80 | grep -Eo "POST .*" | awk -F"?" '{print $1}' | sort | uniq -c | sort –r
+
+[root@localhost ~]# tcpdump -iens192 -s1500 -A -n -c30000 dst port 80 
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on ens192, link-type EN10MB (Ethernet), capture size 1500 bytes
+09:21:18.159364 IP 111.207.166.93.11657 > 124.47.34.223.http: Flags [S], seq 37396286, win 65535, options [mss 1460,nop,wscale 8,nop,nop,sackOK], length 0
+E..4. @.n..ho..]|/".-..P.:.>........................
+09:21:18.159552 IP 111.207.166.93.11656 > 124.47.34.223.http: Flags [S], seq 534675665, win 65535, options [mss 1460,nop,wscale 8,nop,nop,sackOK], length 0
+E..4..@.n..io..]|/".-..P.............M..............
+09:21:18.159574 IP 111.207.166.93.11660 > 124.47.34.223.http: Flags [S], seq 3304985438, win 65535, options [mss 1460,nop,wscale 8,nop,nop,sackOK], length 0
+E..4.#@.n..eo..]|/".-..P...^........................
+09:21:18.159585 IP 111.207.166.93.11658 > 124.47.34.223.http: Flags [S], seq 818313940, win 65535, options [mss 1460,nop,wscale 8,nop,nop,sackOK], length 0
+E..4.!@.n..go..]|/".-..P0.z..........`..............
+09:21:18.159599 IP 111.207.166.93.11659 > 124.47.34.223.http: Flags [S], seq 1499514079, win 65535, options [mss 1460,nop,wscale 8,nop,nop,sackOK], length 0
+E..4."@.n..fo..]|/".-..PY`..........m...............
+09:21:18.184887 IP 111.207.166.93.11657 > 124.47.34.223.http: Flags [.], ack 3151644129, win 1024, length 0
+E..(.$@.n..po..]|/".-..P.:.?..E.P...%.........
+09:21:18.185201 IP 111.207.166.93.11659 > 124.47.34.223.http: Flags [.], ack 1028081195, win 1024, length 0
+E..(.'@.n..mo..]|/".-..PY`..=GF+P...'.........
+09:21:18.185519 IP 111.207.166.93.11656 > 124.47.34.223.http: Flags [.], ack 1557483391, win 1024, length 0
+E..(.%@.n..oo..]|/".-..P....\.O.P...{.........
+09:21:18.185546 IP 111.207.166.93.11658 > 124.47.34.223.http: Flags [.], ack 1985530708, win 1024, length 0
+E..(.&@.n..no..]|/".-..P0.z.vX.TP....v........
+09:21:18.185567 IP 111.207.166.93.11660 > 124.47.34.223.http: Flags [.], ack 412857795, win 1024, length 0
+E..(.(@.n..lo..]|/".-..P..._....P...".........
+09:21:18.624685 IP 111.207.166.93.11656 > 124.47.34.223.http: Flags [P.], seq 0:426, ack 1, win 1024, length 426: HTTP: GET /media/api/content/notice?pagesize=8&pageindex=0&label=Notice HTTP/1.1
+E....)@.n...o..]|/".-..P....\.O.P...In..GET /media/api/content/notice?pagesize=8&pageindex=0&label=Notice HTTP/1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763
+Accept: application/json, text/plain, */*
+Accept-Language: zh-CN
+token: 12ec3b11880aa1ce5175797085918f56366b818a24a54468
+Accept-Encoding: gzip, deflate
+Host: fuxian.sxbctv.com
+Connection: Keep-Alive
+
+
+09:21:18.625125 IP 111.207.166.93.11660 > 124.47.34.223.http: Flags [P.], seq 0:427, ack 1, win 1024, length 427: HTTP: GET /media/api/content/notice?pagesize=8&pageindex=0&label=College HTTP/1.1
+E....*@.n...o..]|/".-..P..._....P....I..GET /media/api/content/notice?pagesize=8&pageindex=0&label=College HTTP/1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763
+Accept: application/json, text/plain, */*
+Accept-Language: zh-CN
+token: 12ec3b11880aa1ce5175797085918f56366b818a24a54468
+Accept-Encoding: gzip, deflate
+Host: fuxian.sxbctv.com
+Connection: Keep-Alive
+
+
+09:21:18.625615 IP 111.207.166.93.11657 > 124.47.34.223.http: Flags [P.], seq 0:386, ack 1, win 1024, length 386: HTTP: GET /media/api/studio/256 HTTP/1.1
+E....,@.n...o..]|/".-..P.:.?..E.P...l\..GET /media/api/studio/256 HTTP/1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763
+Accept: application/json, text/plain, */*
+Accept-Language: zh-CN
+token: 12ec3b11880aa1ce5175797085918f56366b818a24a54468
+Accept-Encoding: gzip, deflate
+Host: fuxian.sxbctv.com
+Connection: Keep-Alive
+
+
+09:21:18.625834 IP 111.207.166.93.11658 > 124.47.34.223.http: Flags [P.], seq 0:385, ack 1, win 1024, length 385: HTTP: GET /media/api/advertise HTTP/1.1
+E....+@.n...o..]|/".-..P0.z.vX.TP...4...GET /media/api/advertise HTTP/1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763
+Accept: application/json, text/plain, */*
+Accept-Language: zh-CN
+token: 12ec3b11880aa1ce5175797085918f56366b818a24a54468
+Accept-Encoding: gzip, deflate
+Host: fuxian.sxbctv.com
+Connection: Keep-Alive
+
+
+09:21:18.626541 IP 111.207.166.93.11659 > 124.47.34.223.http: Flags [P.], seq 0:389, ack 1, win 1024, length 389: HTTP: GET /media/api/content/count HTTP/1.1
+E....-@.n...o..]|/".-..PY`..=GF+P.......GET /media/api/content/count HTTP/1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763
+Accept: application/json, text/plain, */*
+Accept-Language: zh-CN
+token: 12ec3b11880aa1ce5175797085918f56366b818a24a54468
+Accept-Encoding: gzip, deflate
+Host: fuxian.sxbctv.com
+Connection: Keep-Alive
+
+
+09:21:18.677893 IP 111.207.166.93.11658 > 124.47.34.223.http: Flags [.], ack 524, win 1021, length 0
+E..(..@.n..fo..]|/".-..P0.|VvX._P.............
+09:21:18.678118 IP 111.207.166.93.11659 > 124.47.34.223.http: Flags [.], ack 524, win 1021, length 0
+E..(./@.n..eo..]|/".-..PY`.e=GH6P...#~........
+09:21:18.678334 IP 111.207.166.93.11656 > 124.47.34.223.http: Flags [.], ack 524, win 1021, length 0
+E..(.0@.n..do..]|/".-..P...|\.Q.P...x
+........
+09:21:18.680212 IP 111.207.166.93.11660 > 124.47.34.223.http: Flags [.], ack 524, win 1021, length 0
+E..(.1@.n..co..]|/".-..P...
+....P....N........
+09:21:18.695924 IP 111.207.166.93.11657 > 124.47.34.223.http: Flags [.], ack 1072, win 1019, length 0
+E..(.2@.n..bo..]|/".-..P.:....J.P.............
+09:21:18.822118 IP 111.207.166.93.11657 > 124.47.34.223.http: Flags [P.], seq 386:717, ack 1072, win 1019, length 331: HTTP: GET /media/api/studio/login HTTP/1.1
+E..s.3@.n...o..]|/".-..P.:....J.P....k..GET /media/api/studio/login HTTP/1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763
+Accept: application/json, text/plain, */*
+Accept-Language: zh-CN
+Accept-Encoding: gzip, deflate
+Host: fuxian.sxbctv.com
+Connection: Keep-Alive
+
+
+09:21:18.850155 IP 111.207.166.93.11657 > 124.47.34.223.http: Flags [.], ack 1591, win 1024, length 0
+E..(.4@.n..`o..]|/".-..P.:....L.P.............
+^C
+22 packets captured
+22 packets received by filter
+0 packets dropped by kernel
+
+从第二招的结果来看，也基本可以确认被刷的CGI了。
+
+
+第三招，确认该IP是否真的在刷。
+确认的逻辑比较简单，就是分析该IP的所有请求包，是否只针对一个CGI，一个正常用户是不可能在短时间内只访问一个CGI的。
+tcpdump -itunl0 -s1500 -A -n -c3000 dst port 80 and host 60.190.219.211 | grep -Eo "POST .*" | awk -F"?" '{print $1}' | sort | uniq -c | sort -r
+
+从第三招的结果可以肯定该IP是恶意在刷这个CGI，联系业务、安全中心的同时帮忙确认后实施打击策略即可。
+
+
+
+
+
+[root@prometheus ~]# cat tcpdump.log |grep IP |awk '{print $3}' |awk -F '.' -v OFS=. '{print $1,$2,$3,$4}'  ###-v OFS=保留分隔符.
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+111.207.166.93
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++
+
+空间的base小域名流量一直增长，但业务方面没有发布变更，其他SET也没有类似的趋势，根据以往的经验，怀疑有CGI被额刷了。
+
+上机器，使用root用户开始抓包分析。
+第一招，分析来源IP是否有聚集。  ##应该是外网网卡，内网抓不到
+tcpdump -ieth0 -c30000 tcp dst port 80 | grep IP | awk '{print $3}' | awk -F. -v OFS=. '{print $1,$2,$3,$4}' | sort | uniq -c | sort -r | head -20
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
