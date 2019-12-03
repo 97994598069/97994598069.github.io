@@ -28,6 +28,31 @@ LISTEN
 LISTEN
 
 
+[root@prometheus ~]# awk -F: '{if($1~/mail|sshd/){print$1}}' /etc/passwd  ##多个条件
+mail
+sshd
+mailnull
+
+[root@prometheus ~]# awk -F: '{if($1~/mail|sshd/){print$1}else{print$2}}' /etc/passwd   
+#如果第一个字段为mail或者sshd，输出第一个字段；其余输出第二个字段
+
+条件表达式 
+==   !=   >   >=   
+例：
+awk -F: '{if($1=="mail"){print$1}}' /etc/passwd #如果第一个字段等于mail，输出该行第一个字段
+awk -F: '{if($1!="mail"){print$1}}' /etc/passwd#如果第一个段不等于mail，输出该行第一个字段
+awk -F: '{if($3>100){print$1}}' /etc/passwd #如果第三个字段大于100，输出该行第一个字段
+
+逻辑运算符 
+&&　|| 
+awk -F: '{if($1~/mail/&&$3>1){print$1}}' /etc/passwd#如果该行的第一个字段为mail，并且第三个字段大于1，输出该行的第一个字段
+awk -F: '{if($1~/mail/||$3>100){print$1}}' /etc/passwd#如果该行的第一个字段为mail，或者第三个字段大于100，输出该行的第一个字段
+
+数值运算
+awk -F: '{if($3>1&&$3<100){print$1}}' /etc/passwd#输出字段3大于1小于100行的第一个字段
+awk -F: '{if($3+$4==7){print$1}}' /etc/passwd#如果该行字段3和字段4的和为7，输出该行的第一个字段
+减法，乘积，除法等类似
+
 [root@prometheus ~]# cat tcpdump.log |grep IP |awk '{print $3}' |awk -F '.' -v OFS=. '{print $1,$2,$3,$4}'  ##OFS 输出字段分隔符，默认是不输出的，加上后会输出分隔符
 192.168.10.26
 192.168.10.26
