@@ -9,17 +9,23 @@ ps aux |awk ‘{if ($1 == “root”) print $2}’
 
 
 cat access.log |awk '{if ($6 ~ "POST") print $6,"\t"$7,"\t"$9}' |sed 's/^"//'
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
-POST 	/media/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
+POST 	/innerapi/user/login 	200
 
+
+[root@prometheus ~]# netstat -ant |awk '{if($NF ~ /LIST/) print $NF}'   ##模糊查询
+LISTEN
+LISTEN
+LISTEN
+LISTEN
 
 
 [root@prometheus ~]# cat tcpdump.log |grep IP |awk '{print $3}' |awk -F '.' -v OFS=. '{print $1,$2,$3,$4}'  ##OFS 输出字段分隔符，默认是不输出的，加上后会输出分隔符
