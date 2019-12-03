@@ -1,0 +1,208 @@
+7.1 网络I/O介绍
+Linux和其他主流操作系统中的网络流量被抽象为一系列的硬件和软件层次。
+链路层，也就是最低的一层，包含网络硬件，如以太网设备。在传送网络流量时，这一层并不区分流量类型，而仅仅以尽可能快的速度发送和接收数据（帧）。
+链路层上面是网络层。这一层使用IP协议和ICMP协议在机器间寻址并路由数据包。IP/ICMP尽其最大努力尝试在机器之间传递数据包，但是它们不能保证数据包是否能真正达到其目的地。
+
+网络层上面是传输层，它定义了TCP和UDP。TCP是可靠的协议，它保证消息通过网络送达，如果消息无法送达它就会产生一个错误。而UDP则一个不可靠的协议，它无法保证信息能够送达（为了更高的速率）。TCP和UDP增加了“服务”的概念。UDP和TCP接收的编号“端口”的消息。按照惯例，每个类型的网络服务都会被分配不懂的编号，也就是不同的端口。比如HTTP是80端口，SSH是22端口，FTP是23.通常服务会区分端口的类型，但是为了避免端口被混用，通常著名端口的TCP端口和UDP端口都设置为一样。比如大家都说ssh是22端口，虽然使用的是TCP协议，但是通常SSH也会占用22端口的UDP服务，所以说著名端口很多时候都不针对协议的。在Linux系统中，文件/etc/services定义了全部的端口以及它们提供的服务类型。
+
+最上层是应用层。这一层包含了各种的应用程序。
+Linux内核实现或控制的是最低三层（链路层、网络层、传输层）。内核可以提供每层的性能统计信息，包括数据流经过每一层的带宽使用情况信息和错误计数信息。
+
+
+7.1.1 链路层的网络流量
+链路层，通常是以太网，以帧序列的形式将信息发送到网络上。即便是其上层次的信息片段大小比帧大很多，链路层也会把它们分割为帧，再发送到网络上。数据帧的最大尺寸叫做最大传输单位（MTU）。你可以用网络配置工具，如ip或者ifconfig来设置MTU、对以太网而言，最大大小一般为1500字节，虽然有些硬件支持巨型帧高达9000字节。MTU的大小对网络效率有直接的影响。由于每个帧都有一个小容量的头部，所以MTU越大，传输的效率也就越高，但是数据组被损坏或丢弃的几率就越高。对于清洁的网络链路来说，大尺寸的MTU带来更好的性能，但是嘈杂的链路来说更小的MTU会有更好的性能。因为，当单个帧损坏时，它要重传的数据更少。
+
+在物理层，帧流经物理网络，Linux内核可以收集大量有关帧数量和类型不同的统计信息。
+l  发送/接收——如果一个帧成功地流入或流出机器，那么它就会被计为一个已发送或已接收的帧。
+l  错误——有错误的帧（可能是网络电缆坏了，或者双工不匹配）
+l  丢弃——被丢弃的帧（很可能是因为内存或缓冲区容量小）
+l  溢出——由于内核或网卡有过多的帧，因此被网络丢弃的帧。通常这种情况不应该发生。
+l  帧——由于物理问题导致被丢弃的帧。其原因可能是循环冗余校验（CRC）错误或者其他低级别的问题。
+l  多播——这些帧不直接寻址到当前系统，而是同时广播到一组节点。
+l  压缩——一些底层接口，如点对点协议（PPP）设备在把帧发送到网络上之前，会对其进行压缩。该值表示的就是被压缩帧的数量。
+
+
+7.1.2 协议层网络流量
+对TCP/UDP流量而言，Linux使用套接字/端口来抽象两台机器的连接。当与远程机器连接时，本地应用程序用一个网络套接字来打开远程机器的一个端口。如HTTP的80端口，web服务器会监听80端口上的连接，当发生连接时，web服务器就为web页面的传输设置该连接。
+
+
+7.2网络性能工具
+7.2.1 mii-tool（媒体无关接口工具）
+mii-tool是以太网专用硬件工具，主要用来设以太网设备，但它也可以提供当前相关的设置信息。这个信息，诸如链接速度和双工设置，对于追踪性能不佳的设备的成因是非常有用的。
+第一行的信息告诉我们网络设备正在使用100baseTx-FD全双工连接。
+[root@prometheus zz]# mii-tool -v
+
+
+7.2.2 ethtool
+对比mii-tool，ethtool 的功能更加强大，包含更多的配置选项和设备统计信息。
+[root@prometheus zz]# ethtool ens33
+Settings for ens33:
+	Supported ports: [ TP ]
+	Supported link modes:   10baseT/Half 10baseT/Full 
+	                        100baseT/Half 100baseT/Full 
+	                        1000baseT/Full 
+	Supported pause frame use: No
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10baseT/Half 10baseT/Full 
+	                        100baseT/Half 100baseT/Full 
+	                        1000baseT/Full 
+	Advertised pause frame use: No
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Speed: 1000Mb/s  ##千兆网卡
+	Duplex: Full
+	Port: Twisted Pair
+	PHYAD: 0
+	Transceiver: internal
+	Auto-negotiation: on
+	MDI-X: off (auto)
+	Supports Wake-on: d
+	Wake-on: d
+	Current message level: 0x00000007 (7)
+			       drv probe link
+	Link detected: yes
+	
+	
+
+
+7.2.3 ifconfig（接口配置）
+ifconfig的主要工作就是在Linux机器上安装和配置网络接口。它还提供了系统中所有的网络设备的基本性能统计信息。
+ifconifg的性能统计信息
+RX packets	设备已接收的数据包数
+TX packets	设备已发送的数据包数
+errors	发送或者接收时的错误数
+dropped	发送或者接收时丢弃的数据包数
+overruns	网络设备没有足够的缓冲区来发送或者接收一个数据包的次数
+frame	底层以太网帧错误的数量
+carrier	由于链路介质故障（如电缆故障）而丢弃的数据包数量
+
+
+[root@prometheus zz]# ifconfig 
+ens33: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.197.164  netmask 255.255.255.0  broadcast 192.168.197.255
+        inet6 fe80::6f0c:b4b6:2713:7ce8  prefixlen 64  scopeid 0x20<link>
+        ether 00:0c:29:12:05:34  txqueuelen 1000  (Ethernet)
+        RX packets 214799  bytes 51178948 (48.8 MiB)  （接收）
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 23973  bytes 7429404 (7.0 MiB)      （发送）
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 15336  bytes 17946861 (17.1 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 15336  bytes 17946861 (17.1 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+		
+		
+		
+		
+7.2.4 ip
+ip命令是用来取代老旧的ifconfig的，ip不仅可以让你对Linux联网的各个不同方面进行配置，还可以显示每个网络设备的性能统计信息。
+和ifconfig类似，ip提供的是自系统启动以来的数据的汇总。
+[root@prometheus zz]# ip -s link
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    RX: bytes  packets  errors  dropped overrun mcast   
+    17947534   15346    0       0       0       0       
+    TX: bytes  packets  errors  dropped carrier collsns 
+    17947534   15346    0       0       0       0       
+2: ens33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000
+    link/ether 00:0c:29:12:05:34 brd ff:ff:ff:ff:ff:ff
+    RX: bytes  packets  errors  dropped overrun mcast   
+    51329703   215548   0       0       0       0       
+    TX: bytes  packets  errors  dropped carrier collsns 
+    7432699    24001    0       0       0       0   
+	
+	
+	
+
+7.2.5 sar
+sar除了能提供链路层的网络性能数据之外，还能提供一些关于传输层打开的套接字数量的基本信息。
+sar显示所有网络设备收发的统计信息
+[root@prometheus zz]# 
+[root@prometheus zz]# sar -n DEV 1
+Linux 3.10.0-862.el7.x86_64 (prometheus) 	2019年11月26日 	_x86_64_	(2 CPU)
+
+18时33分44秒     IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s
+18时33分45秒        lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+18时33分45秒     ens33      7.00      1.00      2.92      0.18      0.00      0.00      0.00
+
+
+sar显示套接字的数量
+[root@prometheus zz]# sar -n SOCK 1 2
+Linux 3.10.0-862.el7.x86_64 (prometheus) 	2019年11月26日 	_x86_64_	(2 CPU)
+
+18时34分30秒    totsck    tcpsck    udpsck    rawsck   ip-frag    tcp-tw
+18时34分31秒       569         6         1         0         0         0
+18时34分32秒       569         6         1         0         0         0
+平均时间:       569         6         1         0         0         0
+
+
+
+
+7.2.6 netstat
+netstat是一个基本的网络性能工具，它几乎出现在所有的Linux设备上。可以用它抽象的信息包括：当前正在使用的网络套接字的数量和类型，以及有关流入和流出当前系统的UDP和TCP数据包数量的特定接口统计数据。它还能将一个套接字回溯到其特定进程或PID，这在试图确定哪个应用程序要对网络流量负责时是很有用的。
+
+每秒都更新一次活跃的tcp连接
+[root@prometheus scripts]# netstat -t -c
+Active Internet connections (w/o servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State      
+tcp        0      0 prometheus:ssh          localhost:51926         ESTABLISHED
+tcp        0      1 prometheus:38622        node1:jetdirect         SYN_SENT   
+tcp        0     52 prometheus:ssh          localhost:51928         ESTABLISHED
+tcp6       0      0 localhost:55766         localhost:websm         ESTABLISHED
+tcp6       0      0 localhost:websm         localhost:55770         ESTABLISHED
+tcp6       0      0 localhost:websm         localhost:55766         ESTABLISHED
+tcp6       0      0 localhost:55770         localhost:websm         ESTABLISHED
+Active Internet connections (w/o servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State      
+tcp        0      0 prometheus:ssh          localhost:51926         ESTABLISHED
+tcp        0      1 prometheus:38622        node1:jetdirect         SYN_SENT   
+tcp        0      0 prometheus:ssh          localhost:51928         ESTABLISHED
+tcp6       0      0 localhost:55766         localhost:websm         ESTABLISHED
+tcp6       0      0 localhost:websm         localhost:55770         ESTABLISHED
+tcp6       0      0 localhost:websm         localhost:55766         ESTABLISHED
+tcp6       0      0 localhost:55770         localhost:websm         ESTABLISHED
+Active Internet connections (w/o servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State      
+tcp        0      0 prometheus:ssh          localhost:51926         ESTABLISHED
+tcp        0      1 prometheus:38622        node1:jetdirect         SYN_SENT   
+tcp        0      0 prometheus:ssh          localhost:51928         ESTABLISHED
+tcp6       0      0 localhost:55766         localhost:websm         ESTABLISHED
+tcp6       0      0 localhost:websm         localhost:55770         ESTABLISHED
+tcp6       0      0 localhost:websm         localhost:55766         ESTABLISHED
+tcp6       0      0 localhost:55770         localhost:websm         ESTABLISHED
+
+
+
+显示系统自启动以来UDP流量的统计信息：
+[root@prometheus scripts]# netstat -s -u
+IcmpMsg:
+    InType3: 658
+    OutType3: 659
+Udp:
+    173 packets received
+    1 packets to unknown port received.
+    0 packet receive errors
+    200 packets sent
+    0 receive buffer errors
+    0 send buffer errors
+UdpLite:
+IpExt:
+    InNoRoutes: 3
+    InBcastPkts: 23200
+    InOctets: 14085006
+    OutOctets: 1054771
+    InBcastOctets: 2999025
+    InNoECTPkts: 76829
+
+
+
+
+
+
+

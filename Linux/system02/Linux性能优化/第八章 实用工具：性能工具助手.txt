@@ -1,0 +1,175 @@
+8.1性能工具助手
+Linux有丰富的工具，这些工具组合来使用会更加强大。性能工具也一样，单独使用虽然也没有问题，但是和其他的工具组合起来就能显著提高有效性和易用性。
+
+8.1.1 自动执行和记录命令
+如同前面章节所述，性能调查最有价值的步骤之一就是保存在调查过程中发出的命令和产生的结果。Linux提供了两个命令：tee和script，前者能够将工具的输出保存为文件，后者能记录每个按键和屏幕上的每一个输出。这些信息保存下来，便于以后的查看。
+
+自动执行命令很重要，因为它可以减少出错的机会，是你在思考问题时不需记住所有的细节。在你一次性键入又长又复杂的命令行之后，bash shell和watch命令能够可以让你周期性地自动执行这些命令，不需要再次输入。
+
+
+8.1.2 性能统计信息的绘图与分析
+Linux有提供gnumeric电子表格，没有装图形界面，不介绍。
+
+
+8.1.3 调查应用程序使用的库
+还有一些Linux的工具能使你确定应用程序使用了哪些库，以及显示给定库提供的所有函数。ldd命令给出一个特定应用程序使用的全部共享库的列表。在你想要跟踪被应用程序使用的库的数量和位置时，这个命令很有效。Linux中还有一个命令，objdump，它可以在指定库或应用程序中搜索并显示其提供全部函数。ltrace只能给出一个应用程序调用函数的名称，但是结合命令ldd和objdump，你就能够利用ltrace的输出来确定指定函数属于哪个库。
+
+
+8.1.4 创建和调试应用程序
+这个需要gcc工具，不介绍。
+
+
+
+8.2 工具
+8.2.1 bash
+bash是Linux默认的shell，在每次使用Linux的时候，最有可能使用到它。bash通常用来编写功能强大的脚本，但是也可以直接在命令行中调用，从而能够让一些复杂的任务自动化。
+bash运行时脚本选项，使用while来周期性执行命令
+选项	                 说明
+while condition	         条件为真时，循环执行
+do	                     表示循环开始
+done	                 表示循环结束
+
+用例示范，ifconfig不能周期性显示它们的统计信息，我们可以使用while来周期性执行ifconfig命令，用来查询接收数据包的实时情况。
+while true;do sleep 1;ifconfig eth0|grep "RX   packets";done;
+
+
+8.2.2 tee
+tee是个简单的命令，可以将命令的标准输出保存为文件并且同时进行显示。在想要保存并同时查看性能工具输出的时候，tee是很有帮助的。比如，正在监控一个实时系统的性能统计信息的同时，保存这些数据已备将来对它们进行分析。
+
+语法: -a是追加模式，否则会直接覆盖文件
+<command>|tee [-a] [file]
+vmstat 1 5 |tee /tmp/vmstat_out
+
+
+8.2.3 script
+script命令可以将一个shell会话过程中产生的全部输入和输出保存为文本文件。在调查性能问题的时候，准确记录被执行的命令是很有用的，因为你可以在之后的时间查看执行过的测试。
+
+script命令在执行的时候会启动一个新的shell，并记录这个shell存续期间所有的键盘动作和输入，已经生成的输出，并保存为文件。如果屏幕的输出有彩色或者加粗，会在输出文件中显示为esc字符。可以把TERM环境变量设置为dumb来解决。export TERM=dumb
+
+语法:-a是追加输入，-t是增加计时信息
+script [-a] [-t] [file]
+
+用法示例：输入exit或者ctrl-d组合来退出该shell
+[root@prometheus nginx]# export TERM=dump
+[root@prometheus nginx]# script test_output
+Script started, file is test_output
+[root@prometheus nginx]# ls
+auto	 CHANGES.ru	   conf       contrib	    html     logs      man   proxy_temp  sbin	    src		 uwsgi_temp
+CHANGES  client_body_temp  configure  fastcgi_temp  LICENSE  Makefile  objs  README	 scgi_temp  test_output
+[root@prometheus nginx]# ll
+总用量 752
+drwxr-xr-x 6 ark    ark     326 11月  6 14:56 auto
+-rw-r--r-- 1 ark    ark  296223 4月  23 2019 CHANGES
+-rw-r--r-- 1 ark    ark  451813 4月  23 2019 CHANGES.ru
+drwx------ 2 nobody root      6 11月 11 09:07 client_body_temp
+drwxr-xr-x 2 ark    ark     168 11月 21 10:01 conf
+-rwxr-xr-x 1 ark    ark    2502 4月  23 2019 configure
+drwxr-xr-x 4 ark    ark      72 11月  6 14:56 contrib
+drwx------ 2 nobody root      6 11月 11 09:07 fastcgi_temp
+drwxr-xr-x 2 ark    ark      55 11月 11 09:08 html
+-rw-r--r-- 1 ark    ark    1397 4月  23 2019 LICENSE
+drwxr-xr-x 2 root   root     58 11月 11 09:07 logs
+-rw-r--r-- 1 root   root    368 11月  6 14:57 Makefile
+drwxr-xr-x 2 ark    ark      21 11月  6 14:56 man
+drwxr-xr-x 4 root   root    187 11月  6 14:58 objs
+drwx------ 2 nobody root      6 11月 11 09:07 proxy_temp
+-rw-r--r-- 1 ark    ark      49 4月  23 2019 README
+drwxr-xr-x 2 root   root     19 11月  6 14:58 sbin
+drwx------ 2 nobody root      6 11月 11 09:07 scgi_temp
+drwxr-xr-x 9 ark    ark      91 11月  6 14:56 src
+-rw-r--r-- 1 root   root      0 11月 27 13:17 test_output
+drwx------ 2 nobody root      6 11月 11 09:07 uwsgi_temp
+[root@prometheus nginx]# cat README 
+
+Documentation is available at http://nginx.org
+
+[root@prometheus nginx]# exit
+exit
+Script done, file is test_output
+
+
+##查看记录结果
+[root@prometheus nginx]# cat test_output 
+脚本启动于 2019年11月27日 星期三 13时17分49秒
+[root@prometheus nginx]# ls
+auto	 CHANGES.ru	   conf       contrib	    html     logs      man   proxy_temp  sbin	    src		 uwsgi_temp
+CHANGES  client_body_temp  configure  fastcgi_temp  LICENSE  Makefile  objs  README	 scgi_temp  test_output
+[root@prometheus nginx]# ll
+总用量 752
+drwxr-xr-x 6 ark    ark     326 11月  6 14:56 auto
+-rw-r--r-- 1 ark    ark  296223 4月  23 2019 CHANGES
+-rw-r--r-- 1 ark    ark  451813 4月  23 2019 CHANGES.ru
+drwx------ 2 nobody root      6 11月 11 09:07 client_body_temp
+drwxr-xr-x 2 ark    ark     168 11月 21 10:01 conf
+-rwxr-xr-x 1 ark    ark    2502 4月  23 2019 configure
+drwxr-xr-x 4 ark    ark      72 11月  6 14:56 contrib
+drwx------ 2 nobody root      6 11月 11 09:07 fastcgi_temp
+drwxr-xr-x 2 ark    ark      55 11月 11 09:08 html
+-rw-r--r-- 1 ark    ark    1397 4月  23 2019 LICENSE
+drwxr-xr-x 2 root   root     58 11月 11 09:07 logs
+-rw-r--r-- 1 root   root    368 11月  6 14:57 Makefile
+drwxr-xr-x 2 ark    ark      21 11月  6 14:56 man
+drwxr-xr-x 4 root   root    187 11月  6 14:58 objs
+drwx------ 2 nobody root      6 11月 11 09:07 proxy_temp
+-rw-r--r-- 1 ark    ark      49 4月  23 2019 README
+drwxr-xr-x 2 root   root     19 11月  6 14:58 sbin
+drwx------ 2 nobody root      6 11月 11 09:07 scgi_temp
+drwxr-xr-x 9 ark    ark      91 11月  6 14:56 src
+-rw-r--r-- 1 root   root      0 11月 27 13:17 test_output
+drwx------ 2 nobody root      6 11月 11 09:07 uwsgi_temp
+[root@prometheus nginx]# cat README 
+
+Documentation is available at http://nginx.org
+
+[root@prometheus nginx]# exit
+exit
+
+Script done on 2019年11月27日 星期三 13时18分01秒
+[root@prometheus nginx]# 
+
+
+
+
+8.2.4 watch
+默认情况下，watch命令会每秒运行一条命令并将其输出显示到屏幕上。与那些不能周期性显示结果的性能工具一起工作时，watch就能发挥作用了。虽说watch的功能可以用shell脚本代替，但是watch的使用更加简单，并且几乎哪里都可以使用。
+
+语法
+watch [-d[=cumulative]] [-n sec] <command>
+
+watch命令行选项
+-d [=cumulative]	突出显示样本之间变化的输出
+-n sec	            更新等待的秒数
+
+[root@prometheus ~]# watch w
+
+
+
+8.2.5 ldd
+ldd会列出对应的二进制文件所需的所有库，以及系统中有哪些文件能实现这些需求
+[root@prometheus ~]# ldd /bin/ls
+	linux-vdso.so.1 =>  (0x00007ffe8c9c8000)
+	libselinux.so.1 => /lib64/libselinux.so.1 (0x00007f744aef2000)
+	libcap.so.2 => /lib64/libcap.so.2 (0x00007f744aced000)
+	libacl.so.1 => /lib64/libacl.so.1 (0x00007f744aae4000)
+	libc.so.6 => /lib64/libc.so.6 (0x00007f744a717000)
+	libpcre.so.1 => /lib64/libpcre.so.1 (0x00007f744a4b5000)
+	libdl.so.2 => /lib64/libdl.so.2 (0x00007f744a2b1000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007f744b119000)
+	libattr.so.1 => /lib64/libattr.so.1 (0x00007f744a0ac000)
+	libpthread.so.0 => /lib64/libpthread.so.0 (0x00007f7449e90000)
+	
+
+
+8.2.6 objdump
+对于分析二进制文件和库的各个方面来说，objdump是一种复杂而强大的工具。尽管它有其他许多功能，它可以被用来确定给定的库提供了那些函数。
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,179 @@
+6.1 磁盘I/O介绍
+一般来说，Linux磁盘的每个分区要么包含一个文件系统，要么包含一个交换分区。这些分区被挂载到Linux根文件系统，该系统由/etc/fstab指定。这些被挂载的文件系统包含了应用程序要读写的文件。
+当一个应用程序进行读写时，Linux内核可以在其高速缓存或者缓冲区中保存文件的副本，并且可以在不访问磁盘的情况下返回被请求的信息。但是，如果Linux内核没有在内存中保存数据副本，那它就向磁盘I/O队列添加一个请求。若Linux内核注意到多个请求都指向磁盘内相邻的区域，它会把它们合并为一个大的请求。这种合并能消除第二次请求的寻道时间，以此提高磁盘的整体性能。当请求被放入磁盘队列，而磁盘当前不忙时，它就开始为I/O请求服务。如果磁盘正忙，则请求就在队列中等待，直到该设备可用，请求将被服务。
+
+6.2 磁盘I/O性能工具
+6.2.1 vmstat
+vmstat [-D] [-d] [-p partition] [interval count]
+
+vmstat选项说明
+-D	         显示Linux I/O子系统的统计信息，显示的是系统启动以来的总信息
+-d	         按每interval一个样本的速率显示单个磁盘的统计数据，显示的是系统启动以来的总信息。
+-p           partition	按照每interval一个采样的速率显示给定分区性能统计数据，显示的是系统启动以来的总信息。
+interval	 采样之间的频率
+count	     所取的样本总数
+
+
+vmstat默认显示的信息：
+[root@prometheus ~]# vmstat 1 3
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 1  0      0 2769408   2108 619780    0    0    12     4  125  137  0  0 100  0  0
+ 0  0      0 2769408   2108 619780    0    0     0     0  271  288  1  0 99  0  0
+ 0  0      0 2769408   2108 619780    0    0     0     0  294  309  0  0 100  0  0
+ 
+ 
+[root@prometheus ~]# vmstat -D
+            5 disks 
+            2 partitions 
+        22141 total reads
+           73 merged reads
+      1912439 read sectors
+        17446 milli reading
+        19108 writes
+          640 merged writes
+       660055 written sectors
+        14075 milli writing
+            0 inprogress IO
+           16 milli spent IO
+		   
+部分统计信息说明
+disks	系统中磁盘的总数
+partitions	系统中分区的总数
+total   reads	读请求的总数
+merged   reads	为了提升性能而被合并的不同读请求的数量，这些读请求访问的是磁盘上的相邻位置。
+writes	写请求的总数
+inprogress   IO	当前正在处理的I/O总数
+
+
+
+vmstat  –d部分统计信息说明
+reads：total	读请求的总数
+reads：merged	为了提升性能而被合并的不同读请求的数量
+reads：sectors	从磁盘读取的扇区的总数
+ms	磁盘读所花费的时间
+
+
+vmstat –d 显示的信息：
+[root@prometheus ~]# vmstat -d
+disk- ------------reads------------ ------------writes----------- -----IO------
+       total merged sectors      ms  total merged sectors      ms    cur    sec
+sda    11411     73  980081    8793   9267    640  332528    6601      0      8
+sdb      112      0    4352      27      0      0       0       0      0      0
+sr0       18      0    2056      21      0      0       0       0      0      0
+dm-0   10506      0  921494    8582   9891      0  328351    7496      0      8
+dm-1      94      0    4456      23      0      0       0       0      0      0
+
+
+6.2.2 iostat
+与vmstat相似，但它是一个专门用于显示磁盘I/O子系统统计信息的工具。iostat提供的信息细化到每个设备和每个分区从特定磁盘读写了多少个块。此外，iostat还可以提供大量的信息来显示磁盘是如何被利用的，以及Linux花费了多长时间来等待将请求提交到磁盘。
+
+iostat命令行选项
+-d	只显示磁盘I/O的统计信息，而不是默认信息。
+-k	按KB显示统计数据，而不是按块显示
+-x	显示拓展性能I/O统计信息
+device	若指定设备，则iostat只显示该设备的信息
+[root@prometheus ~]# iostat -d -x 1
+[root@prometheus ~]# iostat -dt 1
+[root@prometheus ~]# iostat -dmt 1
+
+
+iostat设备统计信息
+tps	        每秒传输次数，该项为每秒对设备/分区读写请求的次数
+Blk_read/s	每秒读取磁盘块的速率
+Blk_wrtn/s	每秒写入磁盘块的速率
+Blk_read	在时间间隔内读取块的总数量
+Blk_wrtn	在时间间隔内写入块的总数量
+
+
+[root@prometheus ~]# iostat -d 1
+Linux 3.10.0-862.el7.x86_64 (prometheus) 	2019年11月26日 	_x86_64_	(2 CPU)
+
+Device:            tps    kB_read/s    kB_wrtn/s    kB_read    kB_wrtn
+sda               0.84        19.27         6.76     490040     171834
+sdb               0.00         0.09         0.00       2176          0
+scd0              0.00         0.04         0.00       1028          0
+dm-0              0.83        18.12         6.68     460747     169746
+dm-1              0.00         0.09         0.00       2228          0
+
+Device:            tps    kB_read/s    kB_wrtn/s    kB_read    kB_wrtn
+sda               0.00         0.00         0.00          0          0
+sdb               0.00         0.00         0.00          0          0
+scd0              0.00         0.00         0.00          0          0
+dm-0              0.00         0.00         0.00          0          0
+dm-1              0.00         0.00         0.00          0          0
+
+Device:            tps    kB_read/s    kB_wrtn/s    kB_read    kB_wrtn
+sda               0.00         0.00         0.00          0          0
+sdb               0.00         0.00         0.00          0          0
+scd0              0.00         0.00         0.00          0          0
+dm-0              0.00         0.00         0.00          0          0
+dm-1              0.00         0.00         0.00          0          0
+
+
+6.2.3 sar
+[root@prometheus ~]# sar -d 1
+Linux 3.10.0-862.el7.x86_64 (prometheus) 	2019年11月26日 	_x86_64_	(2 CPU)
+
+15时54分33秒       DEV       tps  rd_sec/s  wr_sec/s  avgrq-sz  avgqu-sz     await     svctm     %util
+15时54分34秒    dev8-0      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分34秒   dev8-16      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分34秒   dev11-0      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分34秒  dev253-0      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分34秒  dev253-1      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+
+15时54分34秒       DEV       tps  rd_sec/s  wr_sec/s  avgrq-sz  avgqu-sz     await     svctm     %util
+15时54分35秒    dev8-0      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分35秒   dev8-16      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分35秒   dev11-0      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分35秒  dev253-0      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+15时54分35秒  dev253-1      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+
+
+
+
+6.2.4 lsof
+lsof提供了一种方法来确定哪些进程打开了一个特定的文件，除了跟踪单个文件的用户外，lsof还可以显示使用了特定目录下的进程。
+lsof [-r   delay] [+D directory] [+d directory] [file]
+
+lsof命令选项说明
+-r delay	使得lsof每间隔delay秒输出一次统计数据
++D directory	使得lsof递归搜索给定目录下的所有文件，并报告哪些进程正在使用
++d   directory	使得lsof报告哪些进程正在使用给定目录下的文件
+
+
+lsof显示访问了/usr/bin下所有文件的进程
+[root@prometheus zz]# lsof -r 2 +D /usr/bin/
+COMMAND    PID USER  FD   TYPE DEVICE SIZE/OFF      NODE NAME
+dbus-daem  663 dbus txt    REG  253,0   223344 100989730 /usr/bin/dbus-daemon
+VGAuthSer  664 root txt    REG  253,0   128424 101050935 /usr/bin/VGAuthService
+vmtoolsd   670 root txt    REG  253,0    48904 101050938 /usr/bin/vmtoolsd
+firewalld  690 root txt    REG  253,0     7216 100733081 /usr/bin/python2.7
+tuned     1025 root txt    REG  253,0     7216 100733081 /usr/bin/python2.7
+bash      2566 root txt    REG  253,0   964544 100664425 /usr/bin/bash
+bash      2805 root txt    REG  253,0   964544 100664425 /usr/bin/bash
+=======
+COMMAND    PID USER  FD   TYPE DEVICE SIZE/OFF      NODE NAME
+dbus-daem  663 dbus txt    REG  253,0   223344 100989730 /usr/bin/dbus-daemon
+VGAuthSer  664 root txt    REG  253,0   128424 101050935 /usr/bin/VGAuthService
+vmtoolsd   670 root txt    REG  253,0    48904 101050938 /usr/bin/vmtoolsd
+firewalld  690 root txt    REG  253,0     7216 100733081 /usr/bin/python2.7
+tuned     1025 root txt    REG  253,0     7216 100733081 /usr/bin/python2.7
+bash      2566 root txt    REG  253,0   964544 100664425 /usr/bin/bash
+bash      2805 root txt    REG  253,0   964544 100664425 /usr/bin/bash
+=======
+COMMAND    PID USER  FD   TYPE DEVICE SIZE/OFF      NODE NAME
+dbus-daem  663 dbus txt    REG  253,0   223344 100989730 /usr/bin/dbus-daemon
+VGAuthSer  664 root txt    REG  253,0   128424 101050935 /usr/bin/VGAuthService
+vmtoolsd   670 root txt    REG  253,0    48904 101050938 /usr/bin/vmtoolsd
+firewalld  690 root txt    REG  253,0     7216 100733081 /usr/bin/python2.7
+tuned     1025 root txt    REG  253,0     7216 100733081 /usr/bin/python2.7
+bash      2566 root txt    REG  253,0   964544 100664425 /usr/bin/bash
+bash      2805 root txt    REG  253,0   964544 100664425 /usr/bin/bash
+=======
+
+
+
+
+
+
