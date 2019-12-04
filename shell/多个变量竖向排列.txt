@@ -5,12 +5,15 @@
 
 不方便做处理以及判断,改为竖向
 [root@prometheus zz]# www=$(sed -n "/2019-11-25T13:37/p" /var/log/nginx/access.log |awk '{++state[$8]} END {for(key in state) print key,"\t",state[key]}')
-[root@prometheus zz]# echo -e "$www\n"  ##一定要-e
+[root@prometheus zz]# echo -e "$www\n"  ##一定要-e，而且第一行的行首会多出一个空格，而且最后一行会多出一个空行
 504 	 1
 403 	 1
 200 	 43
 404 	 2
 500 	 1
+
+echo -e "$Date $ip$key\n" |sed 's/^ //'  ##去掉第一行行首的空格
+echo -e "$Date $ip$key\n" |sed -e 's/^ //' -e '/^$/d'  #去除行首空格及最后一行的空行
 
 [root@prometheus opt]# state=$(netstat -ant |awk '/^tcp/ {print $NF}' |sort |uniq -c)
 [root@prometheus opt]# echo -e "$state\n"
