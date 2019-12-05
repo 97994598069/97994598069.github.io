@@ -1,0 +1,9 @@
+[root@localhost ~]# cat 1.sh 
+#!/bin/bash
+[[ $1 ]] && abc=$1 || abc=fff
+echo $abc
+[root@localhost ~]# sh 1.sh 
+fff
+[root@localhost ~]# sh 1.sh rr
+rr
+[root@localhost ~]# 
