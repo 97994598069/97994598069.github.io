@@ -13,6 +13,7 @@ ps aux |awk ‘{if ($1 == “root”) print $2}’
 /dev/mapper/centos-root 38770180 1803772 36966408    5% /
 [root@localhost ~]# df /root/tsar-master/ | awk '{if (NR==2) print $1}'
 /dev/mapper/centos-root
+或者awk 'NR==1{print}' filename
 
 
 cat access.log |awk '{if ($6 ~ "POST") print $6,"\t"$7,"\t"$9}' |sed 's/^"//'
