@@ -7,6 +7,13 @@ for (i in array) {print array[i]}
 ps aux |awk ‘{if ($1 == “root”) print $2}’
 
 
+直接打印第2行
+[root@localhost ~]# df /root/tsar-master/
+文件系统                   1K-块    已用     可用 已用% 挂载点
+/dev/mapper/centos-root 38770180 1803772 36966408    5% /
+[root@localhost ~]# df /root/tsar-master/ | awk '{if (NR==2) print $1}'
+/dev/mapper/centos-root
+
 
 cat access.log |awk '{if ($6 ~ "POST") print $6,"\t"$7,"\t"$9}' |sed 's/^"//'
 POST 	/innerapi/user/login 	200
