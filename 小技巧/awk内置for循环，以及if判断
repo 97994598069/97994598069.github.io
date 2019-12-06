@@ -72,3 +72,28 @@ awk -F: '{if($3+$4==7){print$1}}' /etc/passwd#如果该行字段3和字段4的�
 192.168.10.26
 192.168.10.26
 192.168.10.26
+
+awk 打印匹配内容之后的指定行
+1、awk 匹配文档的某行内容，再打印某行内容之前或者之后的指定行
+// 先取出某行内容的行号，再基于此行号来打印某行内容之前或者之后的指定行
+# cat awk.txt 
+1 aa
+2 bb
+3 cc
+4 dd
+5 ee
+6 ff
+7 gg
+
+// 匹配 "4 dd" 后，打印 "4 dd" 后的第 2 行
+# awk -v line=$(awk '/dd/{print NR}' awk.txt) '{if(NR==line+2){print $0}}' awk.txt
+6 ff
+
+// 匹配 "4 dd" 后，打印 "4 dd" 前的第 3 行
+# awk -v line=$(awk '/dd/{print NR}' awk.txt) '{if(NR==line-3){print $0}}' awk.txt
+1 aa
+
+
+
+
+
