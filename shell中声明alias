@@ -1,0 +1,4 @@
+shopt -s  expand_aliases
+shopt expand_aliases
+alias ssh="ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
+alias scp="scp -i $SSH_KEY -o StrictHostKeyChecking=no"
