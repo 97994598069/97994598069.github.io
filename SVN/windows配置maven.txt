@@ -1,0 +1,29 @@
+﻿配置完maven
+指定本地仓库路径：
+编辑setting.xml
+
+ |
+ |-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <!-- localRepository
+   | The path to the local repository maven will use to store artifacts.
+   |
+   | Default: ${user.home}/.m2/repository
+  <localRepository>/path/to/local/repo</localRepository>
+  -->
+  <localRepository>C:\repo</localRepository>  ###增加此行，C:\repo为本地目录，
+  <!-- interactiveMode
+   | This will determine whether maven prompts you when it needs input. If set to false,
+   | maven will use a sensible default value, perhaps based on some other setting, for
+   | the parameter in question.
+   |
+   | Default: true
+  <interactiveMode>true</interactiveMode>
+
+cd C:\clouddev\java\new-media-gov  ##切换仓库目录
+git pull
+C:\maven\maven-3.6.3\bin/mvn clean -Dmaven.test.skip=true package -Pproduct    ##因为这里没有配置环境变量
+
+此时target里会出现最新的jar包
