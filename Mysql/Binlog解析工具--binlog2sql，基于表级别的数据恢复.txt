@@ -1,0 +1,133 @@
+概述
+最近碰到某个表需要做数据回退，如果回退整个数据库动作又太大，所以用了binlog2sql来实现，这里先介绍一下binlog2sql的相关内容。
+
+binlog2sql是一个开源的Python开发的MySQL Binlog解析工具，能够将Binlog解析为原始的SQL，也支持将Binlog解析为回滚的SQL，以便做数据恢复。
+
+
+gihub:https://github.com/danfengcao/binlog2sql
+
+一、闪回原理简析
+开始之前，先说说闪回。我们都知道 MySQL binlog 以 event 为单位，记录数据库的变更信息，这些信息能够帮助我们重现这之间的所有变化，也就是所谓的闪回。
+binlog 有三种可选的格式：
+statement：基于 SQL 语句的模式，binlog 数据量小，但是某些语句和函数在复制过程可能导致数据不一致甚至出错；
+mixed：混合模式，根据语句来选用是 statement 还是 row 模式；
+row：基于行的模式，记录的是行的完整变化。安全，但 binlog 会比其他两种模式大很多；
+
+
+利用 binlog 做闪回，需要将 binlog 格式设置为 row，因为我们需要最详尽的信息来确定操作之后数据不会出错。既然 binlog 以 event 形式记录了所有的变更信息，那么我们把需要回滚的 event，从后往前回滚回去即可。
+
+
+二、基本要求
+1、MySQL server建议设置以下参数:
+[mysqld]
+#二进制配置
+server-id = 1
+#log-bin = mysql-bin
+log-bin = /pasdata/log/mysql-bin.log
+log-bin-index =/pasdata/log/binlog.index
+log_bin_trust_function_creators=1
+expire_logs_days=7
+max_binlog_size = 1G
+binlog_format = row
+binlog_row_image = full
+
+
+2、最小权限集合
+select, super/replication client, replication slave
+
+--建议授权
+GRANT SELECT, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO binlog2sql@'%' identified by 'binlog2sql';
+GRANT SELECT, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO binlog2sql@'localhost' identified by 'binlog2sql';
+flush privileges;
+
+权限说明
+select：需要读取server端information_schema.COLUMNS表，获取表结构的元信息，拼接成可视化的sql语句
+super/replication client：两个权限都可以，需要执行'SHOW MASTER STATUS', 获取server端的binlog列表
+replication slave：通过BINLOG_DUMP协议获取binlog内容的权限
+
+
+三、binlog2sql参数选项
+1、mysql连接选项，与mysql客户端的选项一致
+-h host
+
+-P port
+
+-u user
+
+-p password
+
+
+2、解析模式
+--stop-never 持续解析binlog。可选。默认False，同步至执行命令时最新的binlog位置。
+
+-K, --no-primary-key 对INSERT语句去除主键。可选。默认False
+
+-B, --flashback 生成回滚SQL，可解析大文件，不受内存限制。可选。默认False。与stop-never或no-primary-key不能同时添加。
+
+--back-interval -B模式下，每打印一千行回滚SQL，加一句SLEEP多少秒，如不想加SLEEP，请设为0。可选。默认1.0。
+
+
+
+3、解析范围控制
+--start-file 起始解析文件，只需文件名，无需全路径 。必须。（注意，--start-file直接填binlog名称就可以，不要加路径）
+
+--start-position/--start-pos 起始解析位置。可选。默认为start-file的起始位置。
+
+--stop-file/--end-file 终止解析文件。可选。默认为start-file同一个文件。若解析模式为stop-never，此选项失效。
+
+--stop-position/--end-pos 终止解析位置。可选。默认为stop-file的最末位置；若解析模式为stop-never，此选项失效。
+
+--start-datetime 起始解析时间，格式'%Y-%m-%d %H:%M:%S'。可选。默认不过滤。
+
+--stop-datetime 终止解析时间，格式'%Y-%m-%d %H:%M:%S'。可选。默认不过滤。
+
+
+
+4、对象过滤
+-d, --databases 只解析目标db的sql，多个库用空格隔开，如-d db1 db2。可选。默认为空。
+
+-t, --tables 只解析目标table的sql，多张表用空格隔开，如-t tbl1 tbl2。可选。默认为空。
+
+--only-dml 只解析dml，忽略ddl。可选。默认False。
+
+--sql-type 只解析指定类型，支持INSERT, UPDATE, DELETE。多个类型用空格隔开，如--sql-type INSERT DELETE。可选。默认为增删改都解析。用了此参数但没填任何类型，则三者都不解析。
+
+
+四、常用命令
+1、解析出标准SQL
+在没有加 --only-dml 参数的情况下，会连ddl语句也解析出来，加上 --only-dml 参数，看到只解析dml语句。
+python binlog2sql.py -ubinlog2sql -pbinlog2sql -ddatabase_name -t table1 table2 --start-file='mysql-bin.000007' 
+--start-datetime='2019-12-xx 06:00:00' --stop-datetime='2019-12-xx 11:30:00' >/tmp/binlog.txt 
+
+
+2、解析出回滚SQL
+python binlog2sql.py --flashback -h127.0.0.1 -P 3306 -ubinlog2sql -pbinlog2sql -ddatabase_name -t table1 table2 
+--start-file='mysql-bin.000007' --start-position=763 --stop-position=1147 >/tmp/rollback.txt
+
+
+3、定位误操作SQL的binlog位置
+mysqlbinlog --base64-output=decode-rows -v --start-datetime='2019-12-04 05:00:00' /data/log/mysql-bin.000007 > /opt/binlog.sql
+
+说明：配置文件使用了binlog_format= row，查看数据库binlog内容时候就看不到增删改查的具体语句，都是经过64位编码转换后的内容，所以需要加参数--base64-output=decode-rows转换。
+
+
+
+
+五、优缺点
+1、限制（对比mysqlbinlog）
+mysql server必须开启，离线模式下不能解析
+参数 binlog_row_image 必须为FULL，暂不支持MINIMAL
+解析速度不如mysqlbinlog
+
+
+2、优点（对比mysqlbinlog）
+纯Python开发，安装与使用都很简单
+自带flashback、no-primary-key解析模式，无需再装补丁
+flashback模式下，更适合闪回实战
+解析为标准SQL，方便理解、筛选
+代码容易改造，可以支持更多个性化解析
+
+
+ 
+ 
+ 
