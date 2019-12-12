@@ -1,0 +1,319 @@
+通过将elasticsearch的data、ingest、master角色进行分离，搭建起高性能+高可用的ES架构
+▪ 用途
+▪ 架构
+▪ 步骤说明
+▪ elasticsearch-data部署
+▪ elasticsearch-ingest部署
+▪ elasticsearch-master部署
+
+将进行角色分离部署，并且每个角色分别部署三节点，在实现性能最大化的同时保障高可用。
+▷ elasticsearch的master节点：用于调度，采用普通性能服务器来部署
+▷ elasticsearch的ingest节点：用于数据预处理，采用性能好的服务器来部署
+▷ elasticsearch的data节点：用于数据落地存储，采用存储性能好的服务器来部署
+
+
+名称	                    IP	      CPU	内存	SAS硬盘
+filebeat	            192.168.1.11	2	2	    /
+kibana	                192.168.1.21	2	2	    /
+elasticsearch-master-1	192.168.1.31	2	4	    /
+elasticsearch-master-2	192.168.1.33	2	4	    /
+elasticsearch-master-3	192.168.1.33	2	4	    /
+elasticsearch-ingest-1	192.168.1.41	2	4	    /
+elasticsearch-ingest-2	192.168.1.42	2	4	    /
+elasticsearch-ingest-3	192.168.1.43	2	4	    /
+elasticsearch-data-1	192.168.1.51	2	4	    10G
+elasticsearch-data-2	192.168.1.52	2	4	    10G
+elasticsearch-data-3	192.168.1.53	2	4	    10G
+
+
+步骤说明
+1️⃣ 部署3台data节点，加入原集群
+2️⃣ 部署3台ingest节点，加入原集群
+3️⃣ 将原有的es索引迁移到data节点
+4️⃣ 将原有的es节点改造成master节点
+
+
+elasticsearch-data部署
+之前已完成了基础的elasticsearch架构，现需要新增三台存储节点加入集群，同时关闭master和ingest功能
+
+elasticsearch-data安装：3台均执行相同的安装步骤
+
+tar -zxvf elasticsearch-7.3.2-linux-x86_64.tar.gz
+mv elasticsearch-7.3.2 /opt/elasticsearch
+useradd elasticsearch -d /opt/elasticsearch -s /sbin/nologin
+mkdir -p /opt/logs/elasticsearch
+chown elasticsearch.elasticsearch /opt/elasticsearch -R
+chown elasticsearch.elasticsearch /opt/logs/elasticsearch -R
+# 数据盘需要elasticsearch写权限
+chown elasticsearch.elasticsearch /data/SAS -R
+
+# 限制一个进程可以拥有的VMA(虚拟内存区域)的数量要超过262144，不然elasticsearch会报max virtual memory areas vm.max_map_count [65535] is too low, increase to at least [262144]
+echo "vm.max_map_count = 655350" >> /etc/sysctl.conf
+sysctl -p
+
+
+
+elasticsearch-data配置
+▷ 192.168.1.51 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.51
+# 数据盘位置，如果有多个硬盘位置，用","隔开
+path.data: /data/SAS
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.51
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+# 关闭master功能
+node.master: false
+# 关闭ingest功能
+node.ingest: false
+# 开启data功能
+node.data: true
+
+
+▷ 192.168.1.52 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.52
+# 数据盘位置，如果有多个硬盘位置，用","隔开
+path.data: /data/SAS
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.52
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+# 关闭master功能
+node.master: false
+# 关闭ingest功能
+node.ingest: false
+# 开启data功能
+node.data: true
+
+
+▷ 192.168.1.53 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.53
+# 数据盘位置，如果有多个硬盘位置，用","隔开
+path.data: /data/SAS
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.53
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+# 关闭master功能
+node.master: false
+# 关闭ingest功能
+node.ingest: false
+# 开启data功能
+node.data: true
+
+
+elasticsearch-data启动
+sudo -u elasticsearch /opt/elasticsearch/bin/elasticsearch
+
+elasticsearch集群状态
+curl "http://192.168.1.31:9200/_cat/health?v"
+
+elasticsearch-data状态
+curl "http://192.168.1.31:9200/_cat/nodes?v"
+
+
+elasticsearch-data参数说明
+status: green  # 集群健康状态
+node.total: 6  # 有6台机子组成集群
+node.data: 6  # 有6个节点的存储
+node.role: d  # 只拥有data角色
+node.role: i  # 只拥有ingest角色
+node.role: m  # 只拥有master角色
+node.role: mid  # 拥master、ingest、data角色
+
+
+
+elasticsearch-ingest部署
+现需要新增三台ingest节点加入集群，同时关闭master和data功能
+elasticsearch-ingest安装：3台es均执行相同的安装步骤
+tar -zxvf elasticsearch-7.3.2-linux-x86_64.tar.gz
+mv elasticsearch-7.3.2 /opt/elasticsearch
+useradd elasticsearch -d /opt/elasticsearch -s /sbin/nologin
+mkdir -p /opt/logs/elasticsearch
+chown elasticsearch.elasticsearch /opt/elasticsearch -R
+chown elasticsearch.elasticsearch /opt/logs/elasticsearch -R
+
+# 限制一个进程可以拥有的VMA(虚拟内存区域)的数量要超过262144，不然elasticsearch会报max virtual memory areas vm.max_map_count [65535] is too low, increase to at least [262144]
+echo "vm.max_map_count = 655350" >> /etc/sysctl.conf
+sysctl -p
+
+
+elasticsearch-ingest配置
+▷ 192.168.1.41 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.41
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.41
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+# 关闭master功能
+node.master: false
+# 开启ingest功能
+node.ingest: true
+# 关闭data功能
+node.data: false
+
+
+▷ 192.168.1.42 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.42
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.42
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+# 关闭master功能
+node.master: false
+# 开启ingest功能
+node.ingest: true
+# 关闭data功能
+node.data: false
+
+
+▷ 192.168.1.43 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.43
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.43
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+# 关闭master功能
+node.master: false
+# 开启ingest功能
+node.ingest: true
+# 关闭data功能
+node.data: false
+
+
+elasticsearch-ingest启动
+sudo -u elasticsearch /opt/elasticsearch/bin/elasticsearch
+
+elasticsearch集群状态
+curl "http://192.168.1.31:9200/_cat/health?v"
+
+
+curl "http://192.168.1.31:9200/_cat/nodes?v"
+
+
+elasticsearch-ingest参数说明
+status: green  # 集群健康状态
+node.total: 9  # 有9台机子组成集群
+node.data: 6  # 有6个节点的存储
+node.role: d  # 只拥有data角色
+node.role: i  # 只拥有ingest角色
+node.role: m  # 只拥有master角色
+node.role: mid  # 拥master、ingest、data角色
+
+
+elasticsearch-master部署
+将之前es简单集群中部署的3台es（192.168.1.31、192.168.1.32、192.168.1.33）改成只有master的功能， 因此需要先将这3台上的索引数据迁移到本次所做的data节点中
+
+1️⃣ 索引迁移：一定要做这步，将之前的索引放到data节点上
+curl -X PUT "192.168.1.31:9200/*/_settings?pretty" -H 'Content-Type: application/json' -d'
+{
+  "index.routing.allocation.include._ip": "192.168.1.51,192.168.1.52,192.168.1.53"
+}'
+
+
+2️⃣ 确认当前索引存储位置：确认所有索引不在192.168.1.31、192.168.1.32、192.168.1.33节点上
+curl "http://192.168.1.31:9200/_cat/shards?h=n"
+
+
+
+elasticsearch-master配置
+注意事项：修改配置，重启进程，需要一台一台执行，要确保第一台成功后，再执行下一台。重启进程的方法：由于上一篇文章《EFK教程 - 快速入门指南》里，是执行命令跑在前台，因此直接ctrl - c退出再启动即可，启动命令如下
+sudo -u elasticsearch /opt/elasticsearch/bin/elasticsearch
+▷ 192.168.1.31 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.31
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.31
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+#开启master功能
+node.master: true
+#关闭ingest功能
+node.ingest: false
+#关闭data功能
+node.data: false
+
+
+▷ 192.168.1.32 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.32
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.32
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+#开启master功能
+node.master: true
+#关闭ingest功能
+node.ingest: false
+#关闭data功能
+node.data: false
+
+
+▷ 192.168.1.33 /opt/elasticsearch/config/elasticsearch.yml
+cluster.name: my-application
+node.name: 192.168.1.33
+path.logs: /opt/logs/elasticsearch
+network.host: 192.168.1.33
+
+discovery.seed_hosts: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+cluster.initial_master_nodes: ["192.168.1.31","192.168.1.32","192.168.1.33"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+#开启master功能
+node.master: true
+#关闭ingest功能
+node.ingest: false
+#关闭data功能
+node.data: false
+
+
+elasticsearch集群状态
+curl "http://192.168.1.31:9200/_cat/health?v"
+
+
+elasticsearch-master状态
+curl "http://192.168.1.31:9200/_cat/nodes?v"
+
+至此，当node.role里所有服务器都不再出现“mid”，则表示一切顺利完成。
+
+
+
