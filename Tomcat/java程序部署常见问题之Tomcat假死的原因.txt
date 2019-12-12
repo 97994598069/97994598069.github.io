@@ -1,0 +1,116 @@
+服务器配置:linux+tomcat
+现象：Linux服务器没有崩，有浏览器中访问页面，出现无法访问的情况,没有报4xx或5xx错误(假死),并且重启tomcat后，恢复正常。
+
+原因:tomcat默认最大连接数(线程数)200个,默认每一个连接的生命周期2小时(7200秒),tomcat使用http 1.1协议，而http1.1默认是长连接。tomcat接受处理完请求后，socket没有主动关闭，因此如果在2小时内，请求数超过200个，服务器就会出现上述假死现象。
+
+
+解决方案1：及时断开socket
+
+解决方案2：修改tomcat配置文件，修改最大连接数(增大)
+修改server.xml配置文件，Connector节点中增加acceptCount和maxThreads这两个属性的值，并且使acceptCount大于等于maxThreads：
+<Connector port="8080" protocol="HTTP/1.1"
+connectionTimeout="20000" 
+redirectPort="8443" acceptCount="500" maxThead="400"
+
+解决方案3：修改linux的TCP超时时间(socket生命周期)限制
+vi /etc/sysctl.conf
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_keepalive_time = 1800
+net.ipv4.tcp_keepalive_probes=2
+net.ipv4.tcp_keepalive_intvl=2
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++
+
+springboot tomcat 挂掉，假死无响应原因总结和解决方案
+tomcat假死原因
+以前遇到tomcat莫名奇妙的假死了，没有任何的响应，然后重启后又可以了，隔段时间又假死了。以前不懂的处理和排除原因，纠结的半死。无从入手，都想砸电脑，小伙伴们有遇到过，我遇到过4次。
+
+其实tomcat假死引起的原因有很多，要具体分析一下和排查一下。
+tomcat假死有以下几种可能的原因：
+1.redis的连接池资源没释放掉（tcp没释放掉，tcp状态为close_wait）
+2.数据库连接池资源没释放掉（tcp没释放掉，tcp状态为close_wait）
+3.上传文件资源没关闭掉 （tcp没释放掉，tcp状态为close_wait）
+4.httpclient请求没关闭掉 （tcp没释放掉，tcp状态为close_wait）
+5.线程死锁
+6.线程被阻塞了，没继续往下执行
+
+
+案例1
+顺便说我遇到的一个坑，我曾经部署专门做定时任务项目，这个是用spring的quartz做的。发现定时任务执行一段时间后，居然没响应了，tomcat没挂掉，cpu和内存也正常。就是定时任务不执行。查看了线程，也没有死锁。后面查了很久，居然quartz的定时任务调度居然开启的是单线程的。由于我其中一个定时任务要执行消息写入数据库，这个量非常大，而且服务器配置比较差，写入比较慢。所以导致这个任务要执行差不多1天，导致其他定时任务不执行，所以还以为tomcat挂掉了。所以有时候要排查线程数是否足够。
+
+案例2
+当服务器挂掉的时候，查看一下日志看能不能查出问题。日志查看不出来的时候，查看运行时候cpu和内存的波动，如果cpu和内存波动很大，就去查看堆栈信息，看哪个线程占用的cpu和内存比较高。dump线程信息，查看一下具体代码哪个位置引起的。
+查看堆栈信息可以使用以下工具
+jdk自带的console.exe （window）
+jdk自带的jvisualvm.exe （window）
+jstack(linux)
+alibaba/arthas 阿里巴巴的插件，挺好用的，推荐使用，还可以反编译源码
+
+
+首先查看cpu和内存
+用jvisualvm
+
+如果是linux系统的话，可以用top -c 查看cpu和内存
+top -c
+
+查看线程信息
+linux
+jstack java的进程id
+
+
+如果要查看有没有线程死锁，你可以按照下面命令做
+jstack java的进程id >1.txt
+然后在1.txt文件查找一下有没有DeadThread关键词。没有就是没死锁
+
+
+查看进程中最耗cpu的子线程
+top -p 7149 -H
+
+将最耗cpu的线程id转换为16进制输出
+ printf "%x \n" 7166
+ 
+查询具体出现问题的代码位置
+jstack 7149 | grep 1bfe -A 30
+
+
+我曾经遇到过一个坑，就是activemq的广播消息太多，然后程序用线程池消费，线程池线程数配置太小，消费速度跟不上，就会堆到线程池队列中排队，内存剧增，cpu最后也跟这剧增。导致tomcat挂掉。最后把线程池的线程数配置大点，后面就正常了。
+
+
+
+案例3
+当cpu和内存正常的时候，线程也没有死锁，tomcat也没有死掉，就是访问不了，全部访问状态502超时。这个是怎么回事呢。别急，下面介绍怎么解决。
+当出现这种情况的时候，先去查一下tcp连接情况，
+Docker容器中安装netstat命令,如果没有netstat命令
+apt-get update
+
+apt-get install net-tools
+linux查看方式如下：
+netstat -n | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'
+
+
+如果出现大量的close_wait的状态。那表示tcp没有正确释放。
+定位到是tcp问题了，那接下来怎么办呢
+http请求进来，都是502超时响应，那就表示处理http请求的线程都阻塞了，查看具体哪行代码阻塞就行了。
+查找线程http-nio-28001-exec这个些线程的线程信息，dump下来，看具体是请求什么阻塞了。
+
+
+如果是请求redis线程池资源阻塞了，那看一下redis资源为什么没释放，或者什么不够用了。查看一下最近代码都对redis进行什么操作。
+数据库和上传文件和httpclient请求没关闭掉 都是跟redis一样的道理。
+我之前遇到的坑就是redis引起的。我一个同事用redisTemplate.getConnect（）的到一个管道连接，然后在连接里面有for循环调用redisTempate.get()方法，这样导致了redis连接池不够用。管道没释放。然后http请求都是用经过权限校验的，是shiro+redis做的。所有请求经过redis的时候就阻塞了。所有tomcat假死了。
+
+总之tomcat假死大概就这些原因，还有需要注意点，有写批量操作，最好都用同个管道，不要每个都请求一个资源，这样会导致资源不够用，tcp都是close_wait状态。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
