@@ -1,0 +1,47 @@
+早上突然收到nagios服务器check_icmp的报警，报警显示一台网站服务器的内网网络有问题。因为那台服务器挂载了内网的NFS，因此内网的网络就采用nagios的check_icmp来做监控。
+赶紧登录服务器进行排查。首先使用ping 内网IP的方式查看内网的连通性，ping的过程中出现丢包现象，信息如下: 
+64 bytes from 10.1.1.1: icmp_seq=34 ttl=255 time=0.928 ms
+64 bytes from 10.1.1.1: icmp_seq=35 ttl=255 time=1.01 ms
+ping: sendmsg: Operation not permitted
+ping: sendmsg: Operation not permitted
+
+
+显示ping不被允许，奇怪，防火墙上明明开通了icmp的协议。有问题先看日志，日志文件一般会有所记录，tail –f /var/log/messages，发现大量的如下内容：
+Sep 13 09:11:21 dowload_server1 kernel: printk: 261 messages suppressed.
+Sep 13 09:11:21 dowload_server1 kernel: ip_conntrack: table full, dropping packet
+
+发现是当前会话数已经满了，因此出现丢包现象。这里对ip_conntrack做一下简单的介绍：IP_conntrack表示连接跟踪数据库(conntrack database)，代表NAT机器跟踪连接的数目，连接跟踪表能容纳多少记录是被一个变量控制的，它可由内核中的ip-sysctl函数设置。每一个跟踪连接表会占用350字节的内核存储空间，时间一长就会把默认的空间填满，那么默认空间是多少？在内存为64MB的机器上是4096,内存为128MB是 8192,内存为256MB是16384
+
+
+通过如下命令查看当前的会话数：
+cat /proc/net/ip_conntrack | wc –l
+
+或者使用：
+cat /proc/sys/net/ipv4/netfilter/ip_conntrack_count
+
+使用如下命令查看设置的最大会话数
+cat /proc/sys/net/ipv4/ip_conntrack_max
+
+
+解决办法：
+发现确实已经达到了最大会话数，通过google发现，可以直接调大用户的最大会话数，命令为：
+echo "102400" > /proc/sys/net/ipv4/ip_conntrack_max
+
+执行此命令后，不在丢包了，ping也正常了。但是这样设置不会永久保存，当系统重启后设置会丢失，因此需要保存到/etc/sysctl.conf，在/etc/sysctl.conf中加入：net.ipv4.ip_conntract_max =102400，然后执行/sbin/sysctl –p刷新内核参数即可，如果出现error: "net.ipv4.ip_conntract_max" is an unknown key报错的话，需要加载ip_conntract模块，使用modprobe  ip_conntrack加载，使用lsmod | grep ip_conntrack查看模块是否加载。
+
+
+终极解决：
+为了使彻底解决此问题，还需要再设置一个东西，那就是会话连接超时变量，这个参数设置太长的话就会导致会话连接数不断增加，默认是设置为432000秒，很显然这个值太大了，通过如下命令设置小一点：
+echo 21600 >/proc/sys/net/ipv4/netfilter/ip_conntrack_tcp_timeout_established
+设置成21600也就是6小时，这样会自动清除6小时候后的无效链接。记得将这句话加到自动启动文件/etc/rc.local文件中去。
+
+
+故障总结：       此次故障显示我们必须加强服务器的监控，这样才能第一时间获取故障问题并在第一时间解决，减少此类问题给公司造成损失。另外出现问题多看日志，日志往往能看出问题的蛛丝马迹，通过日志我们能更快地定位问题，从而找到问题的解决办法。
+
+
+
+
+
+
+
+
