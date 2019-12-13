@@ -1,0 +1,100 @@
+FTP与SFTP的区别
+FTP（File Transfer Protocol），即文件传输协议，用于Internet上控制文件的双向传输。
+FTP在linux系统中，传输默认的端口为21端口，通常以ASCII码和二进制的方式传输数据，支持主动模式和被动模式两种方式。
+
+SFTP（Secure File Transfer Protocol），即文件加密传输协议，
+SFTP在linux系统中，传输默认的端口为22端口，这种传输方式更为安全，传输双方既要进行密码安全验证，还要进行基于密钥的安全验证，有效的防止了“中间人”的威胁和攻击。
+在使用linux的centos服务器系统中，两个比较起来，ftp传输会比sftp传输速率快，毕竟sftp牺牲了一定的效率，以保证传输过程的安全。
+
+
+1.需求
+搭建多账号SFTP，不同的用户只能够查看自己所属的目录
+禁止SFTP账号通过SSH连接
+SFTP 用户demo1、demo2，所属目录：/data/sftp/demo1、/data/sftp/demo2
+
+
+2.操作步骤
+创建目录
+mkdir /data/sftp/{demo1,demo2} -p
+
+创建用户demo1、demo2
+useradd -G sftp -d /data/sftp/demo1 -m  -s /sbin/nologin demo1
+useradd -G sftp -d /data/sftp/demo2 -m  -s /sbin/nologin demo2
+-G sftp ：加入sftp用户组 
+-s /sbin/nologin：禁止用户ssh登录 
+-d /data/sftp/demo1：指定用户的根目录
+
+
+修改密码
+passwd demo1
+passwd demo2
+
+
+修改配置文件sshd_config
+cp /etc/ssh/sshd_config  /etc/ssh/sshd_config.ori.20190531
+vim /etc/ssh/sshd_config
+#下面这行注释掉#Subsystem sftp /usr/libexec/openssh/sftp-server##后面加入
+Subsystem sftp internal-sftp
+#注意，以下要 放在 本文件的最后行，否则 root用户无法登陆
+Match Group sftp
+X11Forwarding no
+AllowTcpForwarding no
+ChrootDirectory %h
+ForceCommand internal-sftp
+
+说明 ：
+Match Group sftp 匹配sftp用户组中的用户
+ChrootDirectory %h 只能访问默认的用户目录(自己的目录)，例如 /data/sftp/demo1
+
+
+重启ssh服务
+systemctl restart sshd.service
+
+
+设置目录权限
+chown root:sftp /data/sftp/demo1/
+chown root:sftp /data/sftp/demo2/
+
+chmod 755 /data/sftp/demo1
+chmod 755 /data/sftp/demo2
+
+#设置用户可以上传的目录upload
+mkdir /data/sftp/demo1/upload
+mkdir /data/sftp/demo2/upload
+
+chown -R demo1:sftp /data/sftp/demo1/upload/
+chown -R demo2:sftp /data/sftp/demo2/upload/
+
+
+
+3.测试连接
+测试SFTP功能
+#登录sftp
+sftp demo1@192.168.47.111
+
+#进入upload目录
+cd upload
+
+#上传文件
+put /root/nginx-1.15.12.tar.gz
+#查看目录下的文件
+
+ls
+#下载文件
+get nginx-1.15.12.tar.gz 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
