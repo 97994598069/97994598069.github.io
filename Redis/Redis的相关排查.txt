@@ -1,0 +1,80 @@
+上周经常听到组里同事说项目又双叒叕挂了, Redis连不上, 笔者在另一套正常的环境忙着开发新需求, 没空关心这个问题.(PS: 反正我的环境能用(´థ౪థ）σ , 先忙完我的再说).
+
+于是乎, 看了一眼日志, 连接数过多... emmm, 顺手帮同事把Redis配置里连接数上限加了个0, 问题排查什么的等忙完再说.
+ERR max number of clients reached
+
+终于... 该来的总逃不掉, 笔者用的环境也被搞崩了, 而且是莫名其妙地就凉了.
+
+
+
+修改连接数上限毕竟治标不治本, 本来连接数上限就是10000, 微服务总共才几十个, 按理说根本用不完.
+
+已知:
+Redis服务重启后, 用一段时间连接就又满了. 服务总共几十个, 配置的一万连接数正常情况下不大可能用完.
+
+第一步 重启并抢先占一个连接
+笔者重启了Redis后, 立即连接到Redis, 查看客户端数量(晚了就连不上了):
+127.0.0.1:6379> info
+...
+# Clients
+connected_clients:391
+...
+
+备注:
+info命令能查看关于 Redis 服务器的各种信息和统计数值.
+
+
+
+第二步 记录全部客户端
+几分钟后再次查看:
+127.0.0.1:6379> info
+...
+# Clients
+connected_clients:10002
+...
+
+此时, 连接已经被全部占满了.
+
+
+
+排查：
+127.0.0.1:6379> client list
+id=7863 addr=172.18.0.104:56836 fd=6150 name= age=72 idle=72 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=ping
+id=7864 addr=172.18.0.50:56262 fd=6151 name= age=72 idle=72 flags=N db=9 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=ping
+id=7865 addr=172.18.0.104:56840 fd=6152 name= age=72 idle=72 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=ping
+...
+备注:
+client list: 列出全部客户端信息.
+
+
+第三步 找出异常IP
+有了全部的客户端连接信息, 就能找出到底是谁的锅了. 使用命令输出连接数前五的IP:
+$ cat client-list | awk '{print $2}' | awk -F "[=:]" '{print $2}' | sort | uniq -c | sort -k1,1nr | head -5
+5432 172.18.0.50
+4244 172.18.0.104
+  43 172.18.0.59
+  40 172.18.0.54
+  32 172.18.0.55
+  
+到目前为止, 锁定了172.18.0.50和172.18.0.104两个IP. 这两个都是docker内部网络的地址.
+备注:
+awk '{print $2}: 输出第二列, 即IP. addr=172.18.0.104:56836.
+awk -F "[=:]" '{print $2}': 通过等号和冒号拆分addr=172.18.0.104:56836, 并输出中间的IP.
+sort: 排序.
+uniq -c: 统计数量并在每列旁边显示该行重复出现的次数.
+
+
+第四步 定位服务并把锅扔过去
+拿到了IP就离目标不远了, 通过docker inspect能输出docker实例的信息, 其中就包括IP.
+$ docker inspect --format='{{.Name}} - {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(docker ps -aq) | grep 172.18.0.50
+/docker_xxxxx-service - 172.18.0.50
+$ docker inspect --format='{{.Name}} - {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(docker ps -aq) | grep 172.18.0.104
+/docker_yyyyy-service - 172.18.0.104
+
+备注:
+docker inspect: 获取容器/镜像的元数据. --format: 用模板格式化输出.
+
+
+至此, 定位到了xxxxx和yyyyy,嗯... 隔壁Py (thon)组的服务. 来, 锅给你.
+
+
