@@ -1,0 +1,70 @@
+一、BEGIN模块
+BEGIN模块在awk读取文件之前就执行，BEGIN模式常常被用来修改内置变量ORS，RS，FS，OFS等的值。可以不接任何输入文件
+
+二、awk内置变量（预定义变量）
+变量名属性$0当前记录，一整行$1,$2,$3....$a当前记录的第n个区域，区域间由FS分隔。FS输入区域分隔符，默认是空格。field separatorNF当前记录中的区域个数，就是有多少列。number of fieldNR已经读出的记录数，就是行号，从1开始。number of recordRS输入的记录分隔符默认为换行符。record separatorOFS输出区域分隔符，默认也是空格。output record separatorFNR当前文件的读入记录号，每个文件重新计算。FILENAME当前正在处理的文件的文件名
+
+特别提示：FS RS支持正则表达式
+
+
+2.1 第一个作用: 定义内置变量
+[root@creditease awk]# awk 'BEGIN{RS="#"}{print $0}' awk.txt 
+ABC
+DEF
+GHI
+GKL$123
+BAC
+DEF
+GHI
+GKL$213
+CBA
+DEF
+GHI
+GKL$321
+
+2.2 第二个作用:打印标识
+[root@creditease awk]# awk 'BEGIN{print "=======start======"}{print $0}' awk.txt 
+=======start======
+ABC#DEF#GHI#GKL$123
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+
+2.3 awk实现计算功能
+ [root@creditease files]# awk 'BEGIN{a=8;b=90;print a+b,a-c,a/b,a%b}'
+98 8 0.0888889 8
+
+三、END模块
+END在awk读取完所有的文件的时候，再执行END模块，一般用来输出一个结果（累加，数组结果）。也可以是和BEGIN模块类似的结尾标识信息。
+
+3.1 第一个作用：打印标识
+[root@creditease awk]# awk 'BEGIN{print "=======start======"}{print $0}END{print "=======end======"}' awk.txt
+=======start======
+ABC#DEF#GHI#GKL$123
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+=======end======
+
+3.2 第二个作用：累加
+1）统计空行(/etc/services文件)
+grep sed awk
+[root@creditease awk]# grep "^$" /etc/services |wc -l
+17
+[root@creditease awk]# sed -n '/^$/p' /etc/services |wc -l
+17
+[root@creditease awk]# awk '/^$/' /etc/services |wc -l
+17
+[root@creditease awk]# awk '/^$/{i=i+1}END{print i}' /etc/services
+17
+
+
+2）算术题
+1+2+3......+100=5050，怎么用awk表示？
+[root@creditease awk]# seq 100|awk '{i=i+$0}END{print i}'
+5050
+
+四、awk详解小结
+1、BEGIN和END模块只能有一个，BEGIN{}BEGIN{}或者END{}END{}都是错误的。
+2、找谁干啥模块，可以是多个。
+
+
+

@@ -1,0 +1,63 @@
+正则实例
+1）显示awk.txt中GHI列
+[root@creditease awk]# cat awk.txt 
+ABC#DEF#GHI#GKL$123
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+[root@creditease awk]# awk -F "#" '{print $3}' awk.txt 
+GHI
+GHI
+GHI
+[root@creditease awk]# awk -F "#" '{print $(NF-1)}' awk.txt 
+GHI
+GHI
+GHI
+
+2）显示包含321的行
+[root@creditease awk]# awk '/321/{print $0}' awk.txt 
+CBA#DEF#GHI#GKL$321
+
+3）以#为分隔符，显示第一列以B开头或最后一列以1结尾的行
+[root@creditease awk]# awk -F "#" '$1~/^B/{print $0}$NF~/1$/{print $0}' awk.txt 
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+
+4）以#为分隔符，显示第一列以B或C开头的行
+[root@creditease awk]# awk -F "#" '$1~/^B|^C/{print $0}' awk.txt 
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+[root@creditease awk]# awk -F "#" '$1~/^[BC]/{print $0}' awk.txt 
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+[root@creditease awk]# awk -F "#" '$1~/^(B|C)/{print $0}' awk.txt 
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+[root@creditease awk]# awk -F "#" '$1!~/^A/{print $0}' awk.txt 
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+
+
+五、比较表达式
+awk是一种编程语言，能够进行更为复杂的判断，当条件为真时，awk就执行相关的action，主要是在针对某一区域做出相关的判断，比如打印成绩在80分以上的，这样就必须对这一个区域作比较判断.
+
+下表列出了awk可以使用的关系运算符，可以用来比较数字字符串，还有正则表达式，当表达式为真的时候，表达式结果为1，否则为0，只有表达式为真，awk才执行相关的action。
+awk支持的关系运算符
+运算符含义示例<小于x>y<=小于或等于。x<=y==等于x==y!=不等于x!=y>=大于或等于x>=y>大于x<y
+
+5.1 比较表达式实例
+显示awk.txt的第2 ,3 行
+NR //,//
+
+[root@creditease awk]# awk 'NR==2{print $0}NR==3{print $0}' awk.txt 
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+
+[root@creditease awk]# awk 'NR>=1{print $0}' awk.txt 
+ABC#DEF#GHI#GKL$123
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+
+[root@creditease awk]# awk '/BAC/,/CBA/{print $0}' awk.txt 
+BAC#DEF#GHI#GKL$213
+CBA#DEF#GHI#GKL$321
+

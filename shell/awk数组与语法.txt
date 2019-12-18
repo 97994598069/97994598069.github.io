@@ -1,0 +1,204 @@
+1.1 数组结构
+people[police]=110
+people[doctor]=120
+
+[root@creditease awk]# awk 'BEGIN{word[0]="credit";word[1]="easy";print word[0],word[1]}'
+credit easy
+
+[root@creditease awk]# awk 'BEGIN{word[0]="credit";word[1]="easy";for(i in word)print word[i]}'
+credit
+easy
+
+1.2 数组分类
+索 引数组：以数字为下标
+关联数组：以字符串为下标
+
+1.3 awk关联数组
+现有如下文本，格式如下：即左边是随机字母，右边是随机数字, 即将相同的字母后面的数字加在一起，按字母的顺序输出
+a 1
+b 3
+c 2
+d 7
+b 5
+a 3 
+g 2
+f 6
+
+以$1为下标，创建数组a[$1]=a[$1]+$2（a[$1]+=$2）然后配合END和for循环输出结果：
+[root@creditease awk]# awk '{a[$1]=a[$1]+$2}END{for(i in a)print i,a[i]}' jia.txt 
+a 4
+b 8
+c 2
+d 7
+f 6
+g 2
+注意：for(i in a) 循环的顺序不是按照文本内容的顺序来处理的，排序可以在命令后加sort排序
+
+1.4 awk索引数组
+以数字为下标的数组 seq生成1-10的数字，要求只显示计数行
+[root@creditease awk]# seq 10|awk '{a[NR]=$0}END{for(i=1;i<=NR;i+=2){print a[i]}}'
+1
+3
+5
+7
+9
+
+
+seq生成1-10的数字，要求不显示文件的后3行
+[root@creditease awk]# seq 10|awk '{a[NR]=$0}END{for(i=1;i<=NR-3;i++){print a[i]}}'
+1
+2
+3
+4
+5
+6
+7
+解析：改变i的范围即可，多用于不显示文件的后几行
+
+
+
+
+1.5 awk数组实战去重
+a++ 和 ++a
+[root@creditease awk]# awk 'BEGIN{print a++}'
+0
+[root@creditease awk]# awk 'BEGIN{print ++a}'
+1
+[root@creditease awk]# awk 'BEGIN{a=1;b=a++;print a,b}'
+2 1
+[root@creditease awk]# awk 'BEGIN{a=1;b=++a;print a,b}'
+2 2
+注：
+都是 b = a+1
+b=a++ 先把 a 的值赋予b，然后 a + 1
+b=++a 先执行a+1,然后把a的值赋予b
+
+
+对一下文本进行去重处理 针对第二列去重
+[root@creditease awk]# cat qc.txt 
+2018/10/20 xiaoli 13373305025
+2018/10/25 xiaowang 17712215986
+2018/11/01 xiaoliu 18615517895 
+2018/11/12 xiaoli 13373305025
+2018/11/19 xiaozhao 15512013263
+2018/11/26 xiaoliu 18615517895
+2018/12/01 xiaoma 16965564525
+2018/12/09 xiaowang 17712215986
+2018/11/24 xiaozhao 15512013263
+解法一：
+[root@creditease awk]# awk '!a[$2]++' qc.txt 
+2018/10/20 xiaoli 13373305025
+2018/10/25 xiaowang 17712215986
+2018/11/01 xiaoliu 18615517895 
+2018/11/19 xiaozhao 15512013263
+2018/12/01 xiaoma 16965564525
+解析：
+!a[$3]++是模式（条件），命令也可写成awk '!
+a[$3]=a[$3]+1{print $0}' qc.txt
+a[$3]++ ，“++”在后，先取值后加一
+!a[$3]=a[$3]+1：是先取a[$3]的值，比较“！a[$3]”是否符合条件(条件非0)，后加1
+注意：此方法去重后的结果显示的是文本开头开始的所有不重复的行
+解法二：
+[root@creditease awk]# awk '++a[$2]==1' qc.txt 
+2018/10/20 xiaoli 13373305025
+2018/10/25 xiaowang 17712215986
+2018/11/01 xiaoliu 18615517895 
+2018/11/19 xiaozhao 15512013263
+2018/12/01 xiaoma 16965564525
+解析：
+++a[$3]==1是模式（条件），也可写成a[$3]=a[$3]+1==1即只有当条件（a[$3]+1的结果）为1的时候才打印出内容
+++a[$3] ，“++”在前，先加一后取值
+++a[$3]==1：是先加1，后取a[$3]的值，比较“++a[$3]”是否符合条件（值为1）
+注意：此方法去重后的结果显示的是文本开头开始的所有不重复的行
+解法三：
+[root@creditease awk]# awk '{a[$2]=$0}END{for(i in a){print a[i]}}' qc.txt
+2018/11/12 xiaoli 13373305025
+2018/11/26 xiaoliu 18615517895
+2018/12/01 xiaoma 16965564525
+2018/12/09 xiaowang 17712215986
+2018/11/24 xiaozhao 15512013263
+解析：
+注意此方法去重后的结果显示的是文本结尾开始的所有不重复的行
+
+
+1.6 awk处理多个文件（数组、NR、FNR）
+使用awk取file.txt的第一列和file1.txt的第二列然后重定向到一个新文件new.txt中
+[root@creditease awk]# cat file1.txt 
+a b
+c d
+e f
+g h
+i j
+[root@creditease awk]# cat file2.txt 
+1 2
+3 4
+5 6
+7 8
+9 10
+[root@creditease awk]# awk 'NR==FNR{a[FNR]=$1}NR!=FNR{print a[FNR],$2}' file1.txt file2.txt 
+a 2
+c 4
+e 6
+g 8
+i 10
+解析：NR==FNR处理的是第一个文件，NR!=FNR处理的是第二个文件.
+注意：当两个文件NR(行数)不同的时候，需要把行数多的放前边.
+解决方法：把行数多的文件放前边，行数少的文件放后边.
+把输出的结果放入一个新文件new.txt中：
+[root@creditease awk]# awk 'NR==FNR{a[FNR]=$1}NR!=FNR{print a[FNR],$2>"new.txt"}' file1.txt file2.txt 
+[root@creditease awk]# cat new.txt 
+a 2
+c 4
+e 6
+g 8
+i 10
+
+
+
+1.7 awk分析日志文件，统计访问网站的个数
+[root@creditease awk]# cat url.txt 
+http://www.baidu.com
+http://mp4.video.cn
+http://www.qq.com
+http://www.listeneasy.com
+http://mp3.music.com
+http://www.qq.com
+http://www.qq.com
+http://www.listeneasy.com
+http://www.listeneasy.com
+http://mp4.video.cn
+http://mp3.music.com
+http://www.baidu.com
+http://www.baidu.com
+http://www.baidu.com
+http://www.baidu.com
+[root@creditease awk]# awk -F "[/]+" '{h[$2]++}END{for(i in h) print i,h[i]}' url.txt
+www.qq.com 3
+www.baidu.com 5
+mp4.video.cn 2
+mp3.music.com 2
+www.crediteasy.com 3
+
+
+二、awk简单语法
+2.1 函数sub gsub
+替换功能
+格式：sub(r, s ,目标) gsub(r, s ,目标)
+[root@creditease awk]# cat sub.txt 
+ABC DEF AHI GKL$123
+BAC DEF AHI GKL$213
+CBA DEF GHI GKL$321
+[root@creditease awk]# awk '{sub(/A/,"a");print $0}' sub.txt 
+aBC DEF AHI GKL$123
+BaC DEF AHI GKL$213
+CBa DEF GHI GKL$321
+[root@creditease awk]# awk '{gsub(/A/,"a");print $0}' sub.txt 
+aBC DEF aHI GKL$123
+BaC DEF aHI GKL$213
+CBa DEF GHI GKL$321
+注：sub只会替换行内匹配的第一次内容；相当于sed ‘s###’
+	gsub 会替换行内匹配的所有内容；相当于sed ‘s###g’
+[root@creditease awk]# awk '{sub(/A/,"a",$1);print $0}' sub.txt 
+aBC DEF AHI GKL$123
+BaC DEF AHI GKL$213
+CBa DEF GHI GKL$321
