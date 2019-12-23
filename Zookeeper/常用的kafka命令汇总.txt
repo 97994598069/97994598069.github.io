@@ -1,0 +1,80 @@
+启动kafka
+首先启动zookeeper zkServer.sh start（相当于一个server,kafka会连接这个server）
+启动kafka bin/kafka-server-start.sh config/server.properties
+
+
+查看集群的broker id
+在zookeeper中查看，登录客户端bin/zkCli.sh 执行ls /brokers/ids 查看节点数目及节点ID，[0, 1, 2] 或者通过其他zk管理工具比如：zkui查看
+
+集群之间拷贝数据：
+bin/Kafka-run-class.sh Kafka.tools.MirrorMaker –consumer.config consumer-1.properties –consumer.config consumer-2.properties –producer.config producer.properties –whitelist your-Topic
+
+主题相关命令
+创建topic
+bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic test --config x=y //动态添加config
+
+
+查看集群中的topic
+bin/kafka-topics.sh --list --zookeeper localhost:2181
+
+
+查看topic详细信息
+bin/kafka-topics.sh --describe --zookeeper localhost:2181 --topic panteng
+该命令会列出topic的分区数量、每个分区的leader、ISR列表（不明白ISR的详见：kafka架构体系解读）
+
+
+改变主题分区数量
+bin/kafka-topics.sh --zookeeper 192.168.91.231:2181 --alter -partitions 8 -topic panteng
+
+
+删除topic
+./bin/kafka-topics.sh --delete --zookeeper localhost:2181 --topic my-topic
+
+
+清除topic中的数据
+kafka中并没有清除topic数据的命令，但是可以通过设置数据过期时间来清除数据；
+$ ./bin/kafka-topics.sh --alter --zookeeper localhost:2181 --topic my-topic --config retention.ms=1000
+
+
+之后记得将该配置项置为默认
+$ ./bin/kafka-topics.sh --alter --zookeeper localhost:2181 --topic my-topic --delete-config retention.ms
+
+
+修改主题的其他配置
+bin/Kafka-Topics.sh –zookeeper zk_host:port/chroot –alter –Topic my_Topic_name –config x=y
+
+
+删除配置：
+bin/Kafka-Topics.sh –zookeeper zk_host:port/chroot –alter –Topic my_Topic_name –deleteConfig x
+
+
+数据重新分区：
+bin/Kafka-reassign-partitions.sh –zookeeper localhost:2181 –Topics-to-move-json-file Topics-to-move.json –broker-list “5,6” –generate
+
+验证重分区是否符合预期：
+bin/Kafka-reassign-partitions.sh –zookeeper localhost:2181 –reassignment-json-file expand-cluster-reassignment.json –verify
+//返回：Reassignment of partition [top1,0] completed successfully
+
+
+
++++++++++++++++++++++++
+
+生产者命令
+发布消息的shell
+bin/kafka-console-producer.sh --broker-list 192.168.91.231:9092,192.168.91.231:9093,192.168.91.231:9094 --topic test
+
+消费者命令
+启动消费者并接收消息
+bin/kafka-console-consumer.sh --zookeeper localhost:2181 --topic test --from-beginning
+
+查看消费者的offset
+bin/Kafka-run-class.sh Kafka.tools.ConsumerOffsetChecker –zkconnect localhost:2181 –group test
+
+
+
+
+
+
+
+
+
