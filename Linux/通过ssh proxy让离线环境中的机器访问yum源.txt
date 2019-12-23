@@ -1,0 +1,47 @@
+场景如下:
+环境是一个离线环境,里面的机器只有一台跳板机通过外面的端口映射可以从本地机器登录上去. 其他的机器都需要通过跳板机登录. 本地机器就是一台PC机,它一边可以连接到公网,一边可以连接到跳板机.
+
+现在,我们通过本地机器和环境跳板机作为跳板,让环境里面一台离线的机器可以访问公网yum源,并进行包安装.
+
+0x01 使用ssh打好socks5通道
+先对跳板机的sshd默认配置进行一些修改,避免通道不稳定.
+修改跳板机sshd配置文件/etc/ssh/sshd_config. 修改下面的这些值.
+# 这三个选项保持连接不断
+ClientAliveInterval 20
+ClientAliveCountMax 3
+TCPKeepAlive yes
+# 这个选项让socks可以在跳板机上的监听在0.0.0.0上,如果不做这个修改,监听只能在127.0.0.1上,离线机器还是不能访问.
+GatewayPorts yes
+
+修改完成之后使用如下命令重启sshd使配置生效.
+systemctl restart sshd
+
+在本地机器上,使用如下命令连接到环境跳板机,并在跳板机上的28080端口上开启socks5代理
+ssh -CfNgR 28080 跳板机IP
+
+
+其中-C选项表示所有的数据都压缩,这样传输的数据量更少. -f选项表示让ssh在后台运行. -N表示不在跳板机上运行命令,只是用来进行port forward. -g选项表示在跳板机上开的socks端口监听在0.0.0.0而不是在127.0.0.1上.
+
+完成之后在跳板机机上使用netstat -ntap可以看到28080端口开启了.
+
+
+
+0x02 配置离线机器的yum使用socks5代理
+默认情况下,离线机器的yum访问yum源时走直接连接的,但是离线环境无法进入公网,所以直接不通,可以看到yum makecache直接报错.
+
+
+而离线机器是可以和跳板机通的,通过在离线机器的/etc/yum.conf中添加如下的配置.
+proxy=socks5h://跳板机ip:28080
+可以看到yum makecache成功了
+
+
+在跳板机上netstat -ntap|grep 28080,可以看到一条ESTABLISHED的连接,说明流量走这儿出去了.
+
+
+尝试使用yum install -y tree进行装包,发现可以成功,直接ping yum源的域名centos.ustc.edu.cn不通,因为yum设置了代理,而ping没有.
+
+注意这儿需要使用socks5h而不是socks5. 多的这个h表示对于dns域名的解析放到proxy上来做,而不是在离线机器上做. 因为离线机器自己做域名解析也是完不成的(上面ping显示域名解析不了).
+
+
+0xff 总结
+通过对yum进行proxy设置,让yum可以访问公网了. 同样的,如果对curl等命令进行proxy设置,那么它们也可以访问公网. 实际上,通过使用tsocks或者proxychains之类的命令,可以让本身无法进行proxy设置的命令也有通过proxy访问公网的能力. 
