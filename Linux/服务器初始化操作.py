@@ -19,6 +19,7 @@ yum install ntpdate lsof net-tools gcc gcc-c++ make mtr nethogs iftop lrzsz vim 
 安装最新版的sysstat
 cd /usr/local/src
 wget http://ftp5.gwdg.de/pub/linux/archlinux/community/os/x86_64//sysstat-12.1.5-1-x86_64.pkg.tar.xz
+ （http://pagesperso-orange.fr/sebastien.godard/sysstat-12.2.0.tar.gz）
 tar xf sysstat-12.1.5-1-x86_64.pkg.tar.xz
 cp /usr/local/src/usr/bin/* /usr/bin
 
