@@ -1,0 +1,58 @@
+##shell脚本发送微信
+注册企业微信
+https://qy.weixin.qq.com/  
+
+1.进入后按照提示填写注册信息
+理论上注册完之后，通讯录中会有一个用户，就是刚才注册时填写的用户
+
+2.点击应用管理-->创建应用-->配置logo等信息，记录：AgentId和Secret的值
+
+3.点击我的企业--进入并记录企业ID的值 (最后一行)
+
+
+上述完成之后编写脚本
+
+vi monitor.sh 
+#!/bin/bash
+
+##获取登录token
+function getToken(){
+    curl -s "https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=$1&corpsecret=$2" | awk -F '"' '{print $10}' 
+}
+ 
+发送信息
+function sendText(){ 
+    curl -d '{"touser": "'$3'", "msgtype": "text", "agentid": 1000002, "text": {"content": "'$2'"}, "safe":"0"}'  "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$1" 
+}
+
+corpid='wwf9a5990b39' 
+corpsecret='KyHPHXeDK_aolZlciv9r43bofR8PvM'
+text='test_sh'  ##发送的内容
+receiver='user1'  ##发送给谁
+token=`getToken $corpid $corpsecret`
+
+sendText $token $text $receiver  ##调用函数
+
+
+运行脚本：
+sh monitor.sh 
+
+##上述脚本只是示例，根据不同的情况发送信息
+
+
+可以将上述脚本封装成函数，供不同的监控调用
+
+function send_wx() {
+    receiver_list=(user1 user2)  ##理论上设置为全局变量
+    local corpid='wwf90b2f599'
+	local corpsecret='KyHPHXeDK_aolZlP4cK9r43bofR8PvM'
+	local agentid=1000002
+	local Token=$(curl -s "https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=corpid&corpsecret=corpsecret" | awk -F '"' '{print $10}' )
+	
+	for user in ${receiver_list[*]}
+	do 
+	   curl -d '{"touser": "$user", "msgtype": "text", "agentid": "$agentid", "text": {"content": "$message"}, "safe":"0"}'  "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$Token"
+	done
+}
+
+也就是说不同的监控，只需要定义不同的message就可以，当然可以添加上时间（将时间写在message中）
