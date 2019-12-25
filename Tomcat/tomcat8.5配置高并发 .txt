@@ -1,0 +1,151 @@
+最近部署的tomcat应用，有一天压测的时候，测试一致反馈下载不了，结果查看日志才发现如下错误：
+INFO: Maximum number of threads (200) created for connector with address null and port 8091
+
+才惊醒这个tomcat根本知识解压就使用的，配置都没动过，肯定不能支持高并发了。所以这里给出一个高并发的配置。百度一下也会发现很多类似的配置文章，经本人亲测，特别是压力测试下是没问题的；
+开始修改tomcat的server.xml文件：
+<Executor name="tomcatThreadPool" # 配置TOMCAT共享线程池，NAME为名称　
+　　namePrefix="HTTP-8088-exec-"  # 线程的名字前缀，用于标记线程名称
+　　prestartminSpareThreads="true" # executor启动时，是否开启最小的线程数
+　　maxThreads="5000"    # 允许的最大线程池里的线程数量，默认是200，大的并发应该设置的高一些，这里设置可以支持到5000并发
+　　maxQueueSize="100"  # 任务队列上限
+　　minSpareThreads="50"# 最小的保持活跃的线程数量，默认是25.这个要根据负载情况自行调整了。太小了就影响反应速度，太大了白白占用资源
+　　maxIdleTime="10000"  # 超过最小活跃线程数量的线程，如果空闲时间超过这个设置后，会被关别。默认是1分钟。
+/>
+
+
+同时配置下Connector：
+<Connector port="8088" protocol="org.apache.coyote.http11.Http11NioProtocol"
+　　connectionTimeout="5000" redirectPort="443" proxyPort="443" executor="tomcatThreadPool"   # 采用上面的共享线程池
+　　URIEncoding="UTF-8"/>
+
+这里本人的最大线程数是5000，当然先上压测的时候并发4000是完全没压力的，当时服务器的资源20%都没用到，所以这一个配置完全足够实现5000高并发。
+
+在这补充下tomcat的知识。
+tomcat8.0的内存优化配置及垃圾回收管理
+
+一、Tomcat并发优化
+tomcat并发量与其配置息息相关，一般的机器几百的并发量足矣，如果设置太高可能引发各种问题，内存、网络等问题也能在高并发下暴露出来，因此，配置参数的设置非常重要。
+
+(1) tomcat并发参数
+1.
+maxThreads：最大的并发请求数，当cpu利用率高的时候，不宜增加线程的个数,当cpu利用率不高，大部分是io阻塞类的操作时，可以适当增加该值。
+maxSpareThreads：Tomcat连接器的最大空闲 socket 线程数
+acceptCount：当处理任务的线程数达到最大时，接受排队的请求个数
+connectionTimeout：网络连接超时，单位毫秒
+enableLookups：若为false则不进行DNS查询，提高业务能力应设置为false
+disableUploadTimeout：若为true则禁用上传超时
+
+以上是一些比较常用的参数，Tomcat中server.xml配置详解 会有更加详细的介绍。
+
+2. tomcat并发配置
+在conf下的server.xml文件中<Connector>节点进行配置
+<Connector port="8080" protocol="HTTP/1.1"
+connectionTimeout="30000"
+redirectPort="8443"
+maxThreads="400"
+minSpareThreads="50"
+maxSpareThreads="200"
+acceptCount="400"
+enableLookups="false"
+disableUploadTimeout="true" />
+
+
+二、Tomcat内存配置
+tomcat一般都有默认的内存大小，其默认值对整个物理内存来说非常小，如果不配置tomcat的内存，会大大浪费服务器的资源，验证影响系统的性能，所以对tomcat的内存配置对用户量比较大的系统尤为重要。
+
+(1) tomcat内存参数
+　　-server：一定要作为第一个参数，在多个CPU时性能佳
+　　-Xms：java Heap初始大小。 默认是物理内存的1/64。
+　　-Xmx：java heap最大值。建议均设为物理内存的一半。不可超过物理内存。
+　　-XX:PermSize：设定内存的永久保存区初始大小。缺省值为64M。
+　　-XX:MaxPermSize：设定内存的永久保存区最大 大小。缺省值为64M。
+　　-Xmn：young generation(年轻代)的heap大小。一般设置为Xmx的3、4分之一
+
+
+(2) tomcat内存配置
+　　在bin下的catalina.bat文件中echo Using CATALINA_BASE: "%CATALINA_BASE%"的前一行加入如下代码。
+　　set JAVA_OPTS=%JAVA_OPTS% -server -Xms8192m -Xmx8192m -Xmn1890m
+
+
+三、Tomcat垃圾回收
+垃圾回收(gc)机制非常重要，有时系统会因为内存没有及时回收导致内存溢出，或是内存饱和出现无法响应用户请求的情况，这就要要求我们对空闲内存进行清理，以确保系统正常运行，tomcat GC的最佳配置是确保系统正常运行的关键。
+
+(1) JVM中对象的划分及管理
+JVM根据运行于其中的对象的生存时间大致的分为3种。并且将这3种不同的对象分别存放在JVM从系统分配到的不同的内存空间。这种对象存放空间的管理方式叫做Generation管理方式。
+　　Young Generation（年轻代）：用于存放“早逝”对象（即瞬时对象）。例如：在创建对象时或者调用方法时使用的临时对象或局部变量。
+　　Tenured Generation(年老代)：用于存放“驻留”对象（即较长时间被引用的对象）。往往体现为一个大型程序中的全局对象或长时间被使用的对象。
+　　Perm Generation(永久保存区域)：用于存放“永久”对象。这些对象管理着运行于JVM中的类和方法。
+
+(2) jvm垃圾搜集参数
+　　-verbose:gc：显示垃圾收集信息(在虚拟机发生内存回收时在输出设备显示信息)
+　　UseConcMarkSweepGC：开启此参数使用ParNew & CMS(serial old为替补)搜集器
+　　MaxTenuringThreshold：晋升老年代的最大年龄。默认为15，比如设为10，则对象在10次普通GC后将会被放入年老代。
+　　-XX:+ExplicitGCInvokesConcurrent：System.gc()可以与应用程序并发执行。
+　　GCTimeRatio：设置系统的吞吐量。比如设为99，则GC时间比为1/1+99=1%，也就是要求吞吐量为99%。若无法满足会缩小新生代大小。
+　　CMSInitiatingOccupancyFraction：触发CMS收集器的内存比例。比如60%的意思就是说，当内存达到60%，就会开始进行CMS并发收集。
+　　CMSFullGCsBeforeCompaction：设置在几次CMS垃圾收集后，触发一次内存整理。
+　　-Xnoclassgc：禁用类垃圾回收，性能会高一点；
+　　-XX:SoftRefLRUPolicyMSPerMB=N：官方解释是：Soft reference在虚拟机中比在客户集中存活的更长一些。其清除频率可以用命令行参数 -XX:SoftRefLRUPolicyMSPerMB=来控制，这可以指定每兆堆空闲空间的 soft reference 保持存活（一旦它不强可达了）的毫秒数，这意味着每兆堆中的空闲空间中的 soft reference 会（在最后一个强引用被回收之后）存活1秒钟。注意，这是一个近似的值，因为 soft reference 只会在垃圾回收时才会被清除，而垃圾回收并不总在发生。系统默认为一秒。
+　　以上是一些基本的参数配置，通过JVM内存管理——垃圾搜集器参数精解查看更详细的配置，通过Tomcat中Java垃圾收集调优查看原理
+
+
+(3) tomcat垃圾搜集配置
+　　tomcat的垃圾搜集是和内存设置一起配置的，内存和gc的设置也不是越大越好，良好的比例可以使你的系统性能提升一般甚至更多，下面是tomcat7 ，服务器物理内存16g的标准配置
+在bin下的catalina.bat文件中echo Using CATALINA_BASE: "%CATALINA_BASE%"的前一行加入如下代码。
+　　set JAVA_OPTS=%JAVA_OPTS% 
+　　-server -Xms8192m -Xmx8192m -Xmn1890m -verbose:gc 
+　　-XX:+UseConcMarkSweepGC -XX:MaxTenuringThreshold=5 -XX:+ExplicitGCInvokesConcurrent -XX:GCTimeRatio=19 -XX:CMSInitiatingOccupancyFraction=70 -　　　　XX:CMSFullGCsBeforeCompaction=0 -Xnoclassgc -XX:SoftRefLRUPolicyMSPerMB=0
+
+
+可以看到系统在内存到达2g(向下的拐点)后就会回收空闲内存，基本不会发生溢出的情况，8g的最大内存最高才用了2g，说明系统的性能还是很优越的，用户数再增加也能在一定程度上保证系统稳定性。
+
+
+
+四、Tomcat宕机预防
+tomcat在运行一段时间后，出现无法访问的情况，检查内存完全正常，查看服务器端口发现大量close_wait，导致网络阻塞，以至于无法响应无法的请求，这就是tomcat最经常发生的宕机假死现象。
+
+
+(1) TCP端口状态
+1.LISTENING状态 
+FTP服务启动后首先处于侦听（LISTENING）状态。
+
+2.ESTABLISHED状态 
+ESTABLISHED的意思是建立连接。表示两台机器正在通信
+
+3.CLOSE_WAIT 
+对方主动关闭连接或者网络异常导致连接中断，这时我方的状态会变成CLOSE_WAIT 此时我方要调用close()来使得连接正确关闭
+
+4.TIME_WAIT 
+我方主动调用close()断开连接，收到对方确认后状态变为TIME_WAIT。TCP协议规定TIME_WAIT状态会一直持续2MSL(即两倍的分段最大生存期)，以此来确保旧的连接状态不会对新连接产生影响。处于TIME_WAIT状态的连接占用的资源不会被内核释放，所以作为服务器，在可能的情况下，尽量不要主动断开连接，以减少TIME_WAIT状态造成的资源浪费。
+
+
+
+(2) Windows系统下的TCP参数
+1. KeepAliveTime 
+　　KeepAliveTime的值控制系统尝试验证空闲连接是否仍然完好的频率。如果该连接在一段时间内没有活动，那么系统会发送保持连接的信号，如果网络正常并且接收方是活动的，它就会响应。如果需要对丢失接收方的情况敏感，也就是说需要更快地发现是否丢失了接收方，请考虑减小该值。而如果长期不活动的空闲连接的出现次数较多，但丢失接收方的情况出现较少，那么可能需要增大该值以减少开销。 
+　　缺省情况下，如果空闲连接在7200000毫秒（2小时）内没有活动，系统就会发送保持连接的消息。
+
+
+2.KeepAliveInterval 
+　　KeepAliveInterval的值表示未收到另一方对“保持连接”信号的响应时，系统重复发送“保持连接”信号的频率。在无任何响应的情况下，连续发送“保持连接”信号的次数超过TcpMaxDataRetransmissions（下文将介绍）的值时，将放弃该连接。如果网络环境较差，允许较长的响应时间，则考虑增大该值以减少开销；如果需要尽快验证是否已丢失接收方，则考虑减小该值或TcpMaxDataRetransmissions值。 
+　　缺省情况下，在未收到响应而重新发送“保持连接”的信号之前，系统会等待1000毫秒（1秒）。
+
+3.KeepAliveInterval 
+　　KeepAliveInterval的值表示未收到另一方对“保持连接”信号的响应时，系统重复发送“保持连接”信号的频率。在无任何响应的情况下，连续发送“保持连接”信号的次数超过TcpMaxDataRetransmissions（下文将介绍）的值时，将放弃该连接。如果网络环境较差，允许较长的响应时间，则考虑增大该值以减少开销；如果需要尽快验证是否已丢失接收方，则考虑减小该值或TcpMaxDataRetransmissions值。 
+　　缺省情况下，在未收到响应而重新发送“保持连接”的信号之前，系统会等待1000毫秒（1秒）。
+
+
+
+(3) tomcat假死分析及预防
+close_wait发生的原因是TCP连接没有调用关闭方法，需要应用来处理网络链接关闭，对于Web请求出现这个原因，经常是因为Response的BodyStream没有调用Close，除了调整代码外，可以调整windows系统参数解决tomcat假死问题
+
+KeepLive在Windows操作系统下默认是7200000毫秒，也就是2个小时才清理一次，对与大量close_wait情况下，可以减小其时间 
+在注册表的[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters]改动或创建以下项 
+“KeepAliveTime”=dword:afc8 (45000毫秒) 
+“KeepAliveInterval”=dword:1 
+“TcpMaxDataRetransmissions”=dword:”5″ 
+情况会明显改善，但不保证大并发下服务器不会出现假死现象，毕竟代码的规范性也占很大比重。
+
+
+
+
