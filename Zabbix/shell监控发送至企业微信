@@ -28,7 +28,7 @@ function sendText(){
 corpid='wwf9a5990b39' 
 corpsecret='KyHPHXeDK_aolZlciv9r43bofR8PvM'
 text='test_sh'  ##发送的内容
-receiver='user1'  ##发送给谁
+receiver='user1'  ##发送给谁，企业微信账号
 token=`getToken $corpid $corpsecret`
 
 sendText $token $text $receiver  ##调用函数
