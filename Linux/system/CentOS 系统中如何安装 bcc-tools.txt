@@ -1,4 +1,5 @@
 CentOS 7
+yum -y install bcc-tools   不知道是否需要epel-release  
 
 # 升级系统
 yum update -y
