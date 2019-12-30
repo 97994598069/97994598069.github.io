@@ -18,7 +18,7 @@ CLOSED->LISTEN->SYN收到->ESTABLISHED->CLOSE_WAIT->LAST_ACK->CLOSED
 CLOSED->LISTEN->SYN收到->ESTABLISHED   为完成三次握手 （被动连接）
 CLOSE_WAIT->LAST_ACK->CLOSED      为完成四次挥手（被动断开连接），在close_wait和last_ack之间，服务端会发送2个数据包
 
-如果服务端主动断开连接，则服务器则会出现time_wait;;例如mysql的连接超时主动断开连接，则mysql服务器则会出现time_wait.(理论上mysql服务器只做服务端，不会出现time_wait)
+如果服务端主动断开连接，则服务端则会出现time_wait;;例如mysql的连接超时主动断开连接，则mysql服务器则会出现time_wait.(理论上mysql服务器只做服务端，不会出现time_wait)
 
 }}
 
