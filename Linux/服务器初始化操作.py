@@ -86,13 +86,13 @@ source /etc/profile
 
 
 
-6.内核参数调整
+6.tcp快速回收
 cp /etc/sysctl.conf /etc/sysctl.conf.default
 略
 至少如下4个：
 net.ipv4.tcp_syncookies = 1
 net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_tw_recycle = 1
+net.ipv4.tcp_tw_recycle = 1  ##系统bug，可造成网站不可预知的访问异常
 net.ipv4.tcp_fin_timeout = 30
 
 
