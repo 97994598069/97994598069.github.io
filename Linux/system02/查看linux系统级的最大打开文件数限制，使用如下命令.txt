@@ -1,0 +1,90 @@
+
+如果进程已经退出，ps看不到，但是端口还被占用，就要查询端口使用的PID
+fuser命令需要安装yum install psmisc 
+[root@namenode2 ~]# fuser -v -n tcp 5602
+                     USER        PID ACCESS COMMAND
+5602/tcp:            esuser    35995 F.... node
+[root@namenode2 ~]# kill -9 35995 
+[root@namenode2 ~]# netstat -anp | grep 5602
+
+
+
+1、总结系统限制有：
+    /proc/sys/kernel/pid_max #查系统支持的最大线程数，一般会很大，相当于理论值
+    /proc/sys/kernel/thread-max
+    max_user_process（ulimit -u） #系统限制某用户下最多可以运行多少进程或线程
+    /proc/sys/vm/max_map_count
+    硬件内存大小
+
+
+2、Java虚拟机本身限制：
+    -Xms  #intial java heap size
+    -Xmx  #maximum java heap size
+    -Xss  #the stack size for each thread
+	
+	
+3、查询当前某程序的线程或进程数
+pstree -p `ps -e | grep java | awk '{print $1}'` | wc -l
+或
+pstree -p <pid> | wc -l
+
+
+4、查询当前整个系统已用的线程或进程数
+pstree -p | wc -l
+
+5、查看所有存在的线程
+ps xH
+
+6、查看一个进程起的线程数
+ps -mp <pid>
+
+
+++++++++++++++++++++++++++
+
+常用配置
+echo 1000000 > /proc/sys/kernel/pid_max 
+
+ 
+
+a) 当前环境生效
+ulimit -d unlimited 
+ulimit -m unlimited 
+ulimit -s unlimited 
+ulimit -t unlimited 
+ulimit -v unlimited 
+ulimit -n 1000000
+b)下次重启生效
+vi /etc/security/limits.conf
+# 添加或者修改如下的行
+* soft noproc 75535
+* hard noproc 75535
+* soft nofile 75535
+* hard nofile 75535
+
+# * soft memlock -1
+# * hard memlock -1
+# 配置文件不能直接用unlimited，nofile不能用-1
+
+
+查看linux系统级的最大打开文件数限制，使用如下命令：
+#查看限制数 fs.file-max
+[root@web01]# sysctl fs.file-max
+fs.file-max = 65535
+#修改限制数
+[root@web01]# sysctl -w fs.file-max=6553500
+fs.file-max = 6553500
+需要永久生效则 echo "fs.file-max=6553500" >>/etc/sysctl.conf
+
+# sysctl fs.file-nr
+fs.file-nr = 960        0       6553500
+
+
+对用户同时打开文件数的限制，但仍会出现并发TCP连接数增加到一定数量时，在也无法成功建立新的TCP连接的现象
+修改/etc/sysctl.conf文件，在文件中添加如下行：
+
+net.ipv4.ip_local_port_range = 1024 65000
+执行sysctl命令：
+
+# sysctl -p
+如果系统没有错误提示，就表面新的本地端口范围设置成功
+
