@@ -8,7 +8,7 @@ linux      32位的320KB    64位的1MB
 windows    32位的320KB    64位的1MB 
 
 可以通过如下命令打印输出默认值的大小，命令：jinfo -flag ThreadStackSize；例如
-[root@host-192-168-202-229 ~]#jinfo -flag ThreadStackSize 1807
+[root@host-192-168-202-229 ~]#jinfo -flag ThreadStackSize 1807  ##1807为java进程pid
 -XX:ThreadStackSize=1024
 
 不考虑系统限制，可以通过如下公式计算，得出最大线程数量
