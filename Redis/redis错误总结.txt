@@ -1,0 +1,96 @@
+1、同步错误。不停重试一直不成功
+Full resync from master: e51165e2868c541e28134a287f9bfe36372bae34:80575961684
+MASTER <-> SLAVE sync: receiving 3320957238 bytes from master
+I/O error trying to sync with MASTER: connection lost
+
+原因：
+client-output-buffer-limit 这个参数对slave 同步时候所用的buffer做限制了
+
+默认值是这个 client-output-buffer-limit slave 256mb 64mb 60(这是说负责发数据给slave的client，如果buffer超过256m或者连续60秒超过64m，就会被立刻强行关闭！！！ Traffic大的话一定要设大一点。否则就会出现一个很悲剧循环，Master传输一个大的RDB给Slave，Slave努力的装载，但还没装载 完，Master对client的缓存满了，再来一次
+
+
+output buffer是Redis为client分配的缓冲区（这里的"client"可能是真正的client，也可能是slave或monitor），若为某个客户端分配的output buffer超过了预留大小，Redis可能会根据配置策略关闭与该端的连接。
+
+例如，若Redis被用作message queue，订购消息的consumer处理速度跟不上发布消息的producer时，就会发生对应的output buffer超限的情况。
+该配置项格式如下：
+client-output-buffer-limit <class> <hard limit> <soft limit> <soft seconds> 
+<class>：目前支持3种客户端：1) normal => normal clients; 2) slave clients and MONITOR clients; 3) pubsub => clients subcribed to at least one pubsub channel or pattern
+ 
+<hard limit>：若output buffer大小超过该值，Redis会立即关闭与对应client的连接
+ 
+<soft limit> <soft seconds>：若output buffer大小超过soft limit且这种情况的持续时间超过soft seconds，则Redis会关闭与对应client的连接。
+ 
+默认的配置如下： 
+client-output-buffer-limit normal 0 0 0
+client-output-buffer-limit slave 256mb 64mb 60
+client-output-buffer-limit pubsub 32mb 8mb 60
+
+
+解决：
+config set client-output-buffer-limit 'slave 536870912 134217728 120'
+
+备注：感觉这个参数只针对运行中的redis，如果是重启slave，这时候会拷贝文件同步成功。由于redis属于弱一致性，而且完全同步的时候从库不能访问，所以，不建议主从服务器跨机房，这样同步时间会很长。导致从库不能访问的时间很长
+
+
+另外一个可能配置是：Redis复制超时的默认值是60秒（见redis.conf文件的repl-timeout指令，或使用redis-cli运行“config get repl-timeout”）。
+低速存储器：如果主服务器或从服务器是基于低速存储器的，如果是主服务器将导致后台进程花费很多时间；如果是服务器磁盘读写数据时间将延长。
+大数据集：更大的数据集将需要更长的存储时间和传输时间。
+网络性能：当主服务器和从服务器的网络链路有限制带宽和高延迟时，这会直接影响数据传输传输速率。
+
+
+我们可以通过将复制超时设置为更合适的值来修正这个问题。首先是一个可接受复制数据库的的估计时间。第一步，检查Redis通过BGSAVE指令和检查相关行（如“Background saving started by pid nnn ”表示进程开始，“ Background saving terminated with success”表示进程结束）的日志文档执行后台进程所花的时间。然后，测量CN将主服务器上的结果RDB文件拷贝到从服务器硬盘所需的时间。最后，测量从硬盘加载数据实际消耗的时间（如重启Redis，在日志文件中寻找“DB loaded from disk”行）。这些方法可以大致估计复制超时值，保险起见，我们可能需要在上面加上10~20%。
+config set client-output-buffer-limit 'slave 536870912 134217728 300' 
+config set repl-timeout '300'
+
+
+2、由于Redis的单线程模型，理论上每个redis实例只会用到一个CPU, 也就是说可以在一台多核的服务器上部署多个实例（实际就是这么做的）。但是Redis的AOF重写是通过fork出一个Redis进程来实现的，所以有经验的Redis开发和运维人员会告诉你，在一台服务器上要预留一半的内存（防止出现AOF重写集中发生，出现swap和OOM）。
+
+还有一个可能是组合字符串，使用hmset或者hmget命令，同时操作多个key，超过redis硬编码的1G限制
+MSET key field value [field value ...]
+同时将多个 field-value (域-值)对设置到哈希表 key 中。
+
+
+3、查看连接占用内存
+redis-cli -a 密码 -h 127.0.0.1 -p 6379 client list
+redis-cli -a 密码 -h 127.0.0.1 -p 6379 client list | grep -v "omem=0"
+
+各项信息：
+addr: 客户端的TCP地址，包括IP和端口
+fd: 客户端连接 socket 对应的文件描述符句柄号
+name: 连接的名字，默认为空，可以通过 CLIENT SETNAME 设置
+age: 客户端存活的秒数
+idle: 客户端空闲的秒数
+flags: 客户端的类型 (N 表示普通客户端，更多类型见 http://redis.io/commands/client-list)
+omem: 输出缓冲区的大小
+cmd: 最后执行的命令名称
+
+
+如果看到cmd=monitor
+说明是监控进程缓存了很多内存。关闭监控。
+
+
+
+4、maxclients
+客户端的并发连接数，默认10000。当redis实例无法更改系统fd限制时，会以系统限制数n减去32作为Redis支持的最大连接数（减32是因为Redis保留32个fd供内部逻辑使用）。当达到Redis支持的最大连接数后，新连接会被close，对应的client会收到"max number of clients reached"的出错提示。
+
+
+5、
+redis的数据持久化有两种方案：
+1 写aof文件
+2 写快照rdb文件
+如果两种同时打开，redis启动后会优先尝试从aof文件中恢复数据。另外如果做主从，redis以slave会向master拉aof文件来实现主从同步的目的。
+
+在redis中执行的命令，会被写入aof文件，并且在master中执行的命令，会将aof文件同步到slave(准确的说是由slave向master发送sync命令拉aof文件)。
+假如公共数据存储在0库，那cache就存储在1库。我向master执行
+select 0
+flushdb
+select 1
+flushdb
+
+接下来问题就来了，由于master的cache分区1库中一条数据都没有。所以这条flushdb实际并不会写入本机aof文件，更不会被同步到各个slave。
+解决方案嘛也很简单：
+A 修改为统一向master写数据
+B 晚上脚本在master上清理cache分区时，先随便set一个key，然后再执行flushdb
+
+
+

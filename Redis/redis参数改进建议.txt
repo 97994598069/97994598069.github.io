@@ -1,0 +1,44 @@
+1、修改stop-writes-on-bgsave-error为no
+当前配置为yes，分别修改redis.conf和当前实例
+#redis.conf
+stop-writes-on-bgsave-error no
+
+#登陆redis执行
+config set stop-writes-on-bgsave-error no
+
+查看
+config get stop-writes-on-bgsave-error
+
+此参数设置为no，可以避免MISCONF Redis is configured to save RDB snapshots, but is currently not able to persist on disk。
+
+
+2、开启appendonly
+当前配置为appendonly no，即禁用了appendonly功能，这样的风险是一旦redis实例crash，重启后只能恢复到最近1次快照(即bgsave产生的rdb文件)，可能会丢失很长时间的数据。
+appendonly可以实现准实时刷盘，默认每1s将数据追加到磁盘文件，也可以配置成每次修改都刷盘，当redis crash时最大限度的保证数据完整性。
+
+修改redis.conf和当前实例
+#redis.conf
+appendonly yes
+appendfsync everysec
+
+#登陆redis执行
+config set appendonly yes
+config get appendonly
+
+
+同时需要设置no-appendfsync-on-rewrite yes
+这两个参数可以确保redis每1分钟刷盘一次，也可以设置appendfsync always，即每次写都实时刷盘，避免redis crash造成数据丢失
+
+
+3、添加最大内存阈值maxmemory
+此参数限制redis可以占有的最大内存，一旦超出便淘汰过期key，可以避免因内存不足触发OOM。
+这个参数和实际部署环境有关，要根据实际情况指定参数值，比如3G或者4G。
+
+参考配置
+maxmemory 3G
+maxmemory-policy volatile-lru
+maxmemory-samples 5
+此参数可以避免redis过度占用机器内存，避免因内存不足导致的各种错误
+
+
+
