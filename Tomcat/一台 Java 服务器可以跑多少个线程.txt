@@ -25,7 +25,7 @@ windows    32位的320KB    64位的1MB
 刚才说的是不考虑系统限制的情况，那如果考虑系统限制呢，主要跟以下几个参数有关系
 /proc/sys/kernel/pid_max 增大，线程数量增大，pid_max有最高值，超过之后不再改变，而且32，64位也不一样
 
-/proc/sys/kernel/thread-max 系统可以生成最大线程数量
+/proc/sys/kernel/threads-max 系统可以生成最大线程数量
 max_user_process（ulimit -u）centos系统上才有，没有具体研究
 /proc/sys/vm/max_map_count 增大，数量增多
 
