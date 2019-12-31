@@ -1,0 +1,29 @@
+1. 新建一个文本文件redis_commands.txt，包含redis命令
+SET Key0 Value0
+SET Key1 Value1
+...
+SET KeyN ValueN
+
+如果有了原始数据，其实构造这个文件并不难，譬如shell，python都可以
+#!/usr/bin/python
+for i in range(100000):
+    print 'set name'+str(i),'helloworld'
+	
+	
+2. 将这些命令转化成Redis Protocol。
+因为Redis管道功能支持的是Redis Protocol，而不是直接的Redis命令。
+redis2pro.sh
+#!/bin/bash
+
+while read CMD; do
+  # each command begins with *{number arguments in command}\r\n
+  XS=($CMD); printf "*${#XS[@]}\r\n"
+  # for each argument, we append ${length}\r\n{argument}\r\n
+  for X in $CMD; do printf "\$${#X}\r\n$X\r\n"; done
+done < redis_commands.txt
+
+redis2pro.sh.sh > data.txt
+
+
+3. 利用管道插入
+cat data.txt | redis-cli --pipe
