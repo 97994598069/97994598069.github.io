@@ -1,0 +1,49 @@
+一、location匹配路径末尾没有 /
+location /sta
+{
+proxy_pass http://192.168.1.1/sta;
+}
+外面访问：http://外网IP/sta/sta1.html
+相当于访问：http://192.168.1.1/sta/sta1.html
+
+
+二、location匹配路径末尾有 /
+此时proxy_pass后面的路径需要分为以下四种情况讨论：
+（1）proxy_pass后面的路径只有域名且最后没有 /
+location /sta/
+{
+proxy_pass http://192.168.1.1;
+}
+外面访问：http://外网IP/sta/sta1.html
+相当于访问：http://192.168.1.1/sta/sta1.html
+
+
+（2）proxy_pass后面的路径只有域名同时最后有 /
+location /sta/
+{
+proxy_pass http://192.168.1.1/;
+}
+外面访问：http://外网IP/sta/sta1.html
+相当于访问：http://192.168.1.1/sta1.html
+
+
+（3）proxy_pass后面的路径还有其他路径但是最后没有 /：
+location /sta/
+{
+proxy_pass http://192.168.1.1/abc;
+}
+外面访问：http://外网IP/sta/sta1.html
+相当于访问：http://192.168.1.1/abcsta1.html
+
+
+
+（4）proxy_pass后面的路径还有其他路径同时最后有 /：
+location /sta/
+{
+proxy_pass http://192.168.1.1/abc/;
+}
+外面访问：http://外网IP/sta/sta1.html
+相当于访问：http://192.168.1.1/abc/sta1.html
+
+
+
