@@ -1,0 +1,162 @@
+说明：
+1.正向代理的nginx安装正常安装就可以，没有特别的要求，
+2.nginx当正向代理的时候，通过代理访问https的网站会失败，而失败的原因是客户端同nginx代理服务器之间建立连接失败，并非nginx不能将https的请求转发出去。因此要解决的问题就是客户端如何同nginx代理服务器之间建立起连接。有了这个思路之后，就可以很简单的解决问题。我们可以配置两个SERVER节点，一个处理HTTP转发，另一个处理HTTPS转发，而客户端都通过HTTP来访问代理，通过访问代理不同的端口，来区分HTTP和HTTPS请求。
+
+
+下面看nginx的配置文件如下：
+# cat nginx.conf
+# For more information on configuration, see:
+#   * Official English Documentation: http://nginx.org/en/docs/
+#   * Official Russian Documentation: http://nginx.org/ru/docs/
+
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+
+    include /etc/nginx/conf.d/*.conf;
+
+#HTTP proxy       #这里位http的正向代理配置
+    server{
+        resolver 8.8.8.8;
+        access_log /var/log/nginx/access_proxy-80.log main;
+    listen 80;
+    location / {
+    root html;
+    index index.html index.htm;
+    proxy_pass $scheme://$host$request_uri;
+    proxy_set_header HOST $http_host;
+    proxy_buffers 256 4k;
+    proxy_max_temp_file_size 0k;
+    proxy_connect_timeout 30;
+    proxy_send_timeout 60;
+    proxy_read_timeout 60;
+    proxy_next_upstream error timeout invalid_header http_502;
+    }
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+    root html;
+        }
+    }
+
+#HTTPS proxy        #这里为：https的正向代理配置      
+    server{
+    resolver 8.8.8.8;
+    access_log /var/log/nginx/access_proxy-443.log main;
+    listen 443;
+    location / {
+    root html;
+    index index.html index.htm;
+    proxy_pass https://$host$request_uri;
+    proxy_buffers 256 4k;
+    proxy_max_temp_file_size 0k;
+    proxy_connect_timeout 30;
+    proxy_send_timeout 60;
+    proxy_read_timeout 60;
+    proxy_next_upstream error timeout invalid_header http_502;
+    }
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+    root html;
+    }
+    }
+}
+
+
+配置后重启nginx，
+然后我们来访问测试下：
+1、如果访问HTTP网站，可以直接这样的方式: curl --proxy proxy_server-ip:80 http://www.hm.net/
+
+2、如果访问HTTPS网站，例如https://www.alipay.com，那么可以使用nginx的HTTPS转发的server：
+curl --proxy proxy_server:443 http://www.alipay.com
+
+3、使用浏览器访问
+这里使用的是firefox浏览器
+选项-->网络代理-->手动配置代理-->http代理
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+正向代理功能比较简单，但是原生nginx不支持https代理，如果访问https网站，会报错。
+# nginx代理不支持http CONNECT方法：
+curl: (56) Received HTTP code 400 from proxy after CONNECT
+
+为了实现对https代理的支持，需要对原有nginx源码打补丁，就可以让nginx支持CONNECT模式了。
+https://github.com/chobits/ngx_http_proxy_connect_module#build-openresty
+
+二、下载并安装openresty
+shell> yum -y install lua-devel
+shell> wget http://dlsw.91donkey.com/software/source/nginx/openresty-1.15.8.1.tar.gz
+shell> wget http://dlsw.91donkey.com/software/source/nginx/ngx_http_proxy_connect_module.tgz && tar zxf ngx_http_proxy_connect_module.tgz
+shell> tar zxf openresty-1.15.8.1.tar.gz
+shell> vim bundle/nginx-1.15.8/auto/cc/gcc
+# 将下列代码注释掉，能够减少编译后nginx二级制文件的大小，提高程序执行效率。
+# debug
+CFLAGS="$CFLAGS -g"
+
+shell> cd openresty-1.15.8.1
+shell> ./configure --prefix=/opt/openresty --with-http_stub_status_module --with-http_sub_module \
+    --with-http_auth_request_module --with-http_addition_module \
+    --add-module=/usr/local/src/ngx_http_proxy_connect_module
+shell> patch -d build/nginx-1.15.8/ -p 1 < /usr/local/src/ngx_http_proxy_connect_module/patch/proxy_connect_rewrite_101504.patch
+shell> gmake -j 8 && gmake install
+shell> echo "/opt/openresty/nginx/sbin/nginx" >> /etc/rc.d/rc.local
+shell> /opt/openresty/nginx/sbin/nginx
+
+
+三、配置服务器端nginx正向代理
+# 在nginx.conf中增加server{}块，具体如下：
+  server {
+      listen 8080;
+      resolver 8.8.8.8;
+      resolver_timeout 5s;
+      proxy_connect;
+      proxy_connect_allow 443 563;
+      proxy_connect_connect_timeout 10s;
+      proxy_connect_read_timeout 10s;
+      proxy_connect_send_timeout 10s;
+      location / {
+          proxy_pass $scheme://$host$request_uri;
+          proxy_set_header Host $http_host;
+          proxy_buffers 256 4k;
+          proxy_max_temp_file_size 0;
+          proxy_connect_timeout 30;
+      }
+      access_log /export/home/logs/proxy/access.log main;
+      error_log /export/home/logs/proxy/error.log;
+  }
+  
+
+四、配置终端代理
+# 在 /etc/profile 文件中增加如下三项。
+export proxy="http://{proxy_server_ip}:8080"
+export http_proxy=$proxy
+export https_proxy=$proxy
+
+# 使配置生效
+shell> source /etc/profile
