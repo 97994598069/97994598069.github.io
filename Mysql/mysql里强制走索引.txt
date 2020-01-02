@@ -1,0 +1,21 @@
+mysql里强制指定索引
+
+在分析线上慢sql的时候，若发现线上数据没有添加索引，则不可能上来直接添加索引，可以先不添加索引，然后在sql里强制指定索引
+示例:
+
+原sql:
+SELECT  * FROM XXX_log WHERE (`ctime` BETWEEN '2017-09-11 09:34:13'  AND '2017-10-11 09:34:13')
+and     id > 27851
+AND column1 = 'xxx'
+AND (column2 = 'null' OR LENGTH(column2) > 91)
+ORDER BY  id DESC LIMIT 0, 30
+
+
+强制走索引:
+SELECT  * FROM XXX_log force index(ctime) WHERE (`ctime` BETWEEN '2017-09-11 09:34:13'  AND '2017-10-11 09:34:13')
+and     id > 27851
+AND column1 = 'xxx'
+AND (column2 = 'null' OR LENGTH(column2) > 91)
+ORDER BY  id DESC LIMIT 0, 30
+
+##其中的force index(ctime)就是强制走索引
