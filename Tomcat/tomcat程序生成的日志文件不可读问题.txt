@@ -1,0 +1,55 @@
+现象描述：
+线上机器的程序文件（包括TOMCAT自身）使用APP账号作为属主运行，同时禁止了APP账号的BASH。登录系统使用了统一认证，这样每个人都有自己的账号登录系统。为了方便开发人员登录查看日志，日志文件的文件权限为"rw-r-r"，同时也是系统默认的umask。这里简单说下umask权限码。在Linux系统下，新建目录的权限是777减去umask码值，新建文件的权限是666减去umaks码值，由于linux默认的umask是0022，所以一般新建目录和文件的默认权限分别是755和644。
+[root@localhost ~]# umask 
+0022
+
+但是，在部署tomcat后，发现tomcat的日志文件catalina.out的权限是640(即"rw-r-----"),新生成的日志文件权限全都是640，开发者使用其他用户登录后对这些日志文件均不可读！
+-rw-r-----  1  app app 356K 12月 08  19:09  catalina.out
+-rw-r-----  1  app app 27M  12月 02  10:17  catalina.out.7.gz
+-rw-r-----  1  app app 29M  12月 03  13:08  catalina.out.6.gz
+-rw-r-----  1  app app 23M  12月 04  15:25  catalina.out.5.gz
+-rw-r-----  1  app app 33M  12月 05  11:30  catalina.out.4.gz
+-rw-r-----  1  app app 31M  12月 06  08:44  catalina.out.3.gz
+-rw-r-----  1  app app 31M  12月 07  10:02  catalina.out.2.gz
+-rw-r-----  1  app app 45M  12月 08  19:09  catalina.out.1.gz
+
+原因分析一：Tomcat在启动(catalina.sh)时会重新设置UMASK
+Tomcat在启动服务时可能会重新设置UMASK值，其默认值为0027，而操作系统的默认值0022，两者不一样。解决办法：需要到catalina.sh脚本里修改UMASK值：
+cat catalina.sh 
+# Set UMASK unless it has been overridden
+if [ -z "$UMASK" ]; then
+    UMASK="0027"
+fi
+umask $UMASK
+
+如上，将catalina.sh脚本中的"UMASK"的值由"0027"改为"0022"，即改成系统当前用户的umask即可！
+
+
+原因分析二：log4j2设置日志文件读写权限（filePermissions）
+由于日志比较大，并且实时输出，需要每天做日志轮询，如果日志轮询的过程是通过log4j插件自动切割完成的，则可能会由lig4j2的filePermissions设置引起日志文件不可读现象。log4j2在2.9版本以上有一个filePermissions，可以指定文件权限。
+spring-boot使用log4j2作为日志插件的时候需要设置日志文件的读写权限，可以File 上增加filePermissions，如：
+<File name="File" fileName="logs/catalina.log" filePermissions="rw-r--rw-">
+   <PatternLayout pattern="%m%n" />
+</File>
+
+
+需要注意的是，spring-boot version1.5.7.release的spring-boot-starter-log4j2中引用的log4j2的版本是2.7，而filePermissions只有在2.9以上的版本才有，所以需要在pom.xml中添加2.9的依赖
+<dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>2.9.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>2.9.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>2.9.1</version>
+        </dependency>
+		
+		
+
+
