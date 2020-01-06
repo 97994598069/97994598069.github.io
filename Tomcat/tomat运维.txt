@@ -1,0 +1,225 @@
+Tomcat是一个开箱即用的软件，配置java环境变量即可把Tomcat进程运行起来，但要投入生产环境，有哪些需要注意的呢？
+一、性能，默认的Tomcat配置可以正常提供服务，但对于高负载的应用就相当吃力。
+1.调JVM
+1)调整为server模式，默认为client模式，针对生产环境有做优化，启动速度慢，运行速度快（官方说的）；
+2)为了减少JVM垃圾回收和重新分配内存的频率可以把Xms和Xmx设置同样的值，从而tomcat提供更多的服务；
+3)JVM有几种垃圾回收算法：【阅读一篇文章：建议开发不要主动去调用System.gc()，这会导致stop-the-world，让JVM自己去解决垃圾回收吧】 
+
+总结GC 调优目标基本有三个思路： 
+降低 GC 频率，可以通过增大堆空间，减少不必要对象生成；
+降低 GC 暂停时间，可以通过减少堆空间，使用 CMS GC 算法实现；
+避免 Full GC，调整 CMS 触发比例，避免 Promotion Failure 和 Concurrent mode failure（老年代分配更多空间，增加 GC 线程数加快回收速度），减少大对象生成等。
+
+
+2.配置连接器（有三种连接器供选择）
+1)BIO全称blocking I/O，配置参数
+protocol=”HTTP/1.1”
+
+2)NIO全称Non-blocking I/O，配置
+protocol=”org.apache.coyote.http11.Http11NioProtocol”
+
+3)APR全称Apache Portable Runtime,配置
+protocol=”org.apache.coyote.http11.Http11AprProtocol”
+
+
+
+二、性能监控
+推荐使用JavaMelody 能够监测Java或Java EE应用程序服务器，并以图表的方式显示：Java内存和Java CPU使用情况，用户Session数量，JDBC连接数， 和http请求、sql请求、jsp页面与业务接口方法（EJB3、Spring、 Guice）的执行数量，平均执行时间，错误百分比等。图表可以按天，周，月，年或自定义时间段查看。
+
+
+1.下载地址：
+https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/javamelody/javamelody-1.48.0.jar 
+
+2.配置web.xml：
+       <filter>  
+             <filter-name>monitoring</filter-name>  
+                <filter-class>net.bull.javamelody.MonitoringFilter</filter-class>  
+        </filter>  
+        <filter-mapping>  
+                <filter-name>monitoring</filter-name>  
+                <url-pattern>/*</url-pattern>  
+        </filter-mapping>  
+        <listener>  
+                <listener-class>net.bull.javamelody.SessionListener</listener-class>  
+        </listener>
+		
+3.重启Tomcat应用，访问地址：
+http://host/context/monitoring
+ 
+
+
+三、高可用
+1.Tomcat的高可用官方目前是3种方案：
+Session持久化并把session保存在共享存储；
+Session持久化并把session保存的共享数据库（JDBC连接）；
+通过SimpleTcpCluster ，每个tomcat节点都保存所有tomcat节点的数据，这个也是集群模式的基础；
+另外，第三方有支持redis共享session从而实现高可用，比较推荐，但是模块稳定性可能需要考虑下。
+
+
+
+四、安全
+1.移除容器版本信息，黑客很容易根据容器版本号找到对应的漏掉做针对性的攻击；
+修改文件server.xml,如下
+<Connector port="8080" protocol="HTTP/1.1"  connectionTimeout="20000" Server =" "
+redirectPort="8443" />
+
+
+2.安全启动进程，试想有人在请求中加<% System.exit(1); %>，后果是很严重的。
+官方建议tomcat正确启动姿势，
+./startup.sh -security
+
+3.推荐使用HTTPS协议，如果tomcat直接对外访问就加一个HTTPS吧，如果前端有负载均衡器，负载均衡器使用HTTPS，tomcat放在一个安全的内网使用http也可；
+
+4.为Cookie设置HttpOnly属性
+vi web.xml
+    622     <session-config>
+    623         <session-timeout>30</session-timeout>
+    624         <cookie-config>   ##新增
+    625             <http-only>true</http-only>   ##新增
+    626             <secure>true</secure>     ##新增
+    627         </cookie-config>    ##新增
+    628     </session-config>
+	
+	
+5.推荐tomcat启动使用单独的普通用户，避免黑客攻击后导致整个服务器沦陷；
+6.在部署生产环境时，去除tomcat默认的应用和页面，避免存在安全风险，删除$tomcat/webapps目录下所有文件即可；
+7.改变Tomcat的shutdown端口和命令，假如默认的8005端口对外网访问，可以直接通过远程将运行的tomcat关闭，很危险，建议修改server.xml
+<Server port="8867" shutdown="NOTGONNAGUESS">
+
+8.替换默认的404，403，500页面，和避免异常报错暴露在页面
+在web.xml文件下添加到</web-app>之前
+<error-page>
+   <error-code>404</error-code>
+   <location>/error.jsp</location>
+</error-page>
+<error-page>
+   <error-code>403</error-code>
+   <location>/error.jsp</location>
+</error-page>
+<error-page>
+   <error-code>500</error-code>
+   <location>/error.jsp</location>
+</error-page>
+<error-page>
+   <exception-type>java.lang.Exception</exception-type>
+   <location>/error.jsp</location>
+</error-page>
+
+
+五、线程dump
+当我们的java应用比我们预期的要慢的时候，我们就需要用到thread dumps，然后分析它们并知道他们的瓶颈或阻塞的线程等信息，然后针对性的优化从而提示整个系统的性能。
+
+1.首先我们了解2个概念；
+1)Threadcontention（线程竞争）：线程竞争是一个状态，等待锁被释放，这个锁正好被其他线程占用。在web网站中，不同的线程频繁的访问共享资源。比如记录日志，线程要记录日志必须要获得锁然后才能记录日志。
+
+2)Deadlock（死锁）：死锁是一种特殊的线程竞争，2个或者更多的线程为了完成自己的任务必须等待其他线程完成他们的任务。比较典型案例，如果线程A锁住了记录1并等待记录2，而线程B锁住了记录2并等待记录1，这样两个线程就发生了死锁现象。
+
+
+2.了解java线程背景信息
+1)线程同步：
+为了解决同时访问资源，一个线程需要在访问共享资源时使用线程同步。Java中使用monitor作为线程同步，每个对象都有一个monitor，一个monitor只能被一个线程拥有。假如其他线程获得这个monitor需要进入等待队列，等待释放；
+
+2)线程状态：
+NEW：线程刚刚启动还没有开始处理任务；
+RUNNABLE：线程正在占用CPU并且处理任务；
+BLOCKED：线程是阻塞的，等待获取monitor，一般是等待共享对象、资源；
+WAITING：线程无限时间等待另外一个线程，为了执行特定的任务；
+TIMED_WAITING：线程有限时间等待另外一个线程，为了执行特定的任务；
+TERMINATED：线程已经结束生命；
+
+3)线程类型：
+daemon thread：守护线程，
+non-daemon threads：非守护线程
+
+3.获取Java堆栈
+jps -v #获取java进程PID
+jstack -F 31336 > dump.log #强制dump出线程堆栈（不同版本，获取方式不一样）
+【注】：线程堆栈是某一时刻的堆栈快照，为了分析线程状态改变，需要提取5-10次，每5秒dump一次。
+
+
+
+六、JVM dump
+Head dump是JVM某个时刻的内存快照，可以帮助我们分析内存泄露和分析java应用的内存使用情况。Heap dump通常市存储2进程hprof文件，我们打开和分析需要用jhat 或者JVisualVM等其他工具。
+
+1.获取Heap dump
+jmap -F -dump:live,format=b,file=/tmp/dump.hprof 12587 #dump时间比较长
+
+2.查看heap dump 【不建议在生产环境分析，建议在本地找一台内存大的机器启动】
+jhat /tmp/dump.hprof 12587
+
+3.访问：http://ip:7000/ 
+
+
+
+七、GC日志
+GC叫做垃圾收集，正常的垃圾回收是对整个JVM健康起着重要作用，如果回收不及时，会导致GC频繁，GC时间过长，严重情况可能导致OOM，严重影响业务正常。下面介绍怎么开启gc日志，命令行查看gc，常用gc的含义。
+1.开启gc日志
+-XX:+PrintGCDetails -Xloggc:/opt/tmp/myapp-gc.log         #这个支持java 8
+-Xlog:gc*:file=/opt/tmp/myapp-gc.log                                  #这个支持java 9
+
+
+gclog-analysis
+有下面的参数适合于java 8可以选择性开启：
+有下面的参数适合于java 8可以选择性开启：
+-XX:+DisableExplicitGC                             #开发想自己调用垃圾回收，在生产环境中不建议开发调用：System.gc() or Runtime.getRuntime().gc()
+-XX:+PrintGCDetails                                 #默认是禁用的，可以打印更加详细的垃圾回收信息
+-XX:+PrintGCApplicationStoppedTime     #默认是禁用的，这个选项代表在GC过程中，应用pause时间
+-XX:+PrintGCApplicationConcurrentTime #默认是禁用的，这个选项代表在GC过程中，应用running时间
+-XX:+PrintGCDateStamps                         #打印每个gc的日期和时间
+-Xloggc:gclog.log                                       #gclog.log是gc日志的具体路径，所有gc日志记录在这个文件
+-XX:+UseGCLogFileRotation                    #假如gc日志达到指定的大小，会开启自动轮换
+-XX:NumberOfGCLogFiles=5                   #默认是1，轮换日志的数目
+-XX:GCLogFileSize=2000k                      #指定gc日志的大小，当达到这个大小后会轮换一次
+
+
+
+命令行开启gc
+jps -v #获取java进程PID
+jstat –gc  PID 1000      #PID是jvm的进程号
+
+输出内容解释：
+S0C #显示当前Survivor 0区的大小
+S1C #显示当前Survivor 1区的大小
+S0U #显示当前使用Survivor 0区的大小
+S1U #显示当前使用Survivor 1区的大小
+EC #显示E区的大小
+EU #显示已使用E区的大小
+OC #显示old区的大小
+OU #显示已经使用的old区
+PC #显示permanent区的大小
+PU #显示已经使用的permanent区大小
+YGC #young区发生gc的次数
+YGCT #在young区累计的时间
+FGC #full gc发生的次数
+FGCT #full gc累计占有时间
+GCT #gc累计消耗时间
+
+
+八、java实用命令【java命令集很强大】
+java:启动java应用，引导main()方法；
+jps：主要是列出目标机器上运行的JVM;
+jstat：列出JVM性能统计数据；
+jstack：打印指定进程的java堆栈信息；
+jcmd：发送一些诊断命令给运行的JVM;
+jmap: 打印指定进程、核心文件或远程调试服务器的共享对象内存映射或堆内存细节。
+jhat：命令行工具解析Heap dump文件并启动一个web服务；
+jdb：针对java class，简单的命令行debug工具；
+jinfo：打印指定java进程的配置信息；
+keytool：是一个密钥和证书的管理工具，java使用https需要用到；
+jar:主要是给java应用的打包和解压工具；
+javac：将java源码编译为二进制class文件；
+jconsole：开启一个图形界面，让你监控和管理java应用；
+jvisualvm：很好的heap dump分析工具；
+
+
+
+
+
+
+
+
+
+
+
+
+
