@@ -1,0 +1,50 @@
+许多数据库会提供慢查询日志帮助开发和运维人员定位系统存在的慢操作。所谓慢查询日志就是系统在命令执行前后计算每条命令的执行时间，当然在数据库中最常见的就是select这些sql语句了，当超过预设阀值，就将这条命令的相关信息（例如：发生时间，耗时，命令的详细信息）记录下来，其实Redis也提供了类似的功能。
+
+一、相关参数
+Redis主要提供了slowlog-log-slower-than和slowlog-max-len两个配置参数来提供这项功能。两项参数分别用来设置慢查询的阈值以及存放慢查询的记录。
+
+slowlog-log-slower-than参数设置什么情况下是慢语句，只有redis命令执行时间大于slowlog-log-slower-than的才会定义成慢查询，才会被slowlog进行记录。它的单位是微秒（1秒=1000毫秒=1000000微秒），在初始情况下默认值是10000，也就是10ms，假如执行了一条比较慢的命令，如果它的执行时间超过了 10ms ，那么它将被记录在慢查询日志中。（如果slowlog-log-slower-than=0会记录所有的命令，slowlog-log-slower than<0对于任何命令都不会进行记录）
+
+slowlog-max-len说明了慢查询日志最多可以存储多少条记录，实际上Redis使用了一个列表来存储慢查询日志，slowlog-max-len就是列表的最大长度，它自身是一个先进先出队列，当slowlog超过设定的最大值后，会将最早的slowlog删除。简而言之当一个新的命令满足慢查询条件时会被插入到这个列表中，当慢查询日志列表已处于其最大长度时，最早插入的一个命令将从列表中移出，例如slowlog-max-len设置为 50 ，当有第51条慢查询插入的话，那么队头的第一条数据就出列，第51条慢查询就会入列。
+
+
+
+二、设置redis慢查询
+1、临时配置：CONFIG命令进行动态配置
+#查看
+>config get slowlog-log-slower-than
+>config get slowlog-max-len
+
+#配置查询时间超过1毫米的命令进行记录并保存500条慢查询记录
+>config set slowlog-log-slower-than 1000
+>config set slowlog-max-len 500
+
+注意通过config命令配置的为动态生效 ， 一旦服务重启则会重新恢复为默认设置 ， 所以建议在排查问题时通过config这种方式进行配置 ， 但是服务稳定后通过修改配置文件方式进行最终确认 （可以通过config rewrite命令持久化到本地文件 ， 但要主要启动redis时要指定redis.conf文件 该命令才可以生效）。
+
+
+2、永久配置：配置redis.conf文件
+# vi redis.conf
+slowlog-log-slower-than 1000
+slowlog-max-len 500
+
+
+
+三、查看redis慢查询记录
+要想查看所记录的日志 ，主要使用 SLOWLOG GET 或者 SLOWLOG GET number 命令，前者将会输出所有的 slow log ，最大长度取决于 slowlog-max-len 选项的值，而 SLOWLOG GET number 则只打印指定数量的日志。
+
+查看当前日志数量: 使用slowlog len命令查看日志数量。
+
+slowlog get 5 打印5行
+
+如果日志条数过多，还可以使用slowlog reset命令进行日志清空 。
+
+部分记录说明：
+3) 1) (integer) 25 # 唯一性(unique)的日志标识符
+ 2) (integer) 1565951323 # 被记录命令的执行时间点，以 UNIX 时间戳格式表示
+ 3) (integer) 22720 # 查询执行时间，以微秒为单位
+ 4) 1) "SMEMBERS" # 执行的命令，以数组的形式排列
+ 2) "spring:session:expirations:1565950980000" # 这里完整的命令是 SMEMBERS spring:session:expirations:1565950980000
+
+
+
+
