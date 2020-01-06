@@ -1,0 +1,120 @@
+查看show profile设置
+show variables like 'profiling%';//默认关闭，保存近15次的运行结果
+
+show variables like 'profiling%';//默认关闭，保存近15次的运行结果
+mysql> show variables like 'profiling%';
++------------------------+-------+
+| Variable_name          | Value |
++------------------------+-------+
+| profiling              | OFF   |
+| profiling_history_size | 15    |
++------------------------+-------+
+2 rows in set (0.00 sec)
+
+
+开启
+set profiling = on;
+
+mysql> show variables like 'profiling%';
++------------------------+-------+
+| Variable_name          | Value |
++------------------------+-------+
+| profiling              | ON    |
+| profiling_history_size | 15    |
++------------------------+-------+
+2 rows in set (0.00 sec)
+
+查看最近15次的运行结果
+show profiles;备注：show warnings;//可以显示警告和报错的信息
+mysql> show profiles;
++----------+------------+----------------------------------+
+| Query_ID | Duration   | Query                            |
++----------+------------+----------------------------------+
+|        1 | 0.00197150 | show variables like 'profiling%' |
++----------+------------+----------------------------------+
+1 row in set, 1 warning (0.00 sec)
+
+
+诊断运行的SQL
+命令：show profile cpu,block io for query query_id;例子：show profile cpu,block io for query 3;通过Status一列，可以看到整条SQL的运行过程1. starting //开始2. checking permissions //检查权限3. Opening tables //打开数据表4. init //初始化5. System lock //锁机制6. optimizing //优化器7. statistics //分析语法树8. prepareing //预准备9. executing //引擎执行开始10. end //引擎执行结束11. query end //查询结束......12. closing tables //释放数据表13. freeing items //释放内存14. cleaning up //彻底清理
+
+##根据Query_ID的值（show profiles查询结果）
+mysql> show profile cpu,block io for query 1;
++----------------------+----------+----------+------------+--------------+---------------+
+| Status               | Duration | CPU_user | CPU_system | Block_ops_in | Block_ops_out |
++----------------------+----------+----------+------------+--------------+---------------+
+| starting             | 0.000086 | 0.000025 |   0.000043 |            0 |             0 |
+| checking permissions | 0.000015 | 0.000006 |   0.000009 |            0 |             0 |
+| Opening tables       | 0.000022 | 0.000008 |   0.000014 |            0 |             0 |
+| init                 | 0.000060 | 0.000022 |   0.000037 |            0 |             0 |
+| System lock          | 0.000010 | 0.000003 |   0.000006 |            0 |             0 |
+| optimizing           | 0.000005 | 0.000002 |   0.000003 |            0 |             0 |
+| optimizing           | 0.000004 | 0.000002 |   0.000003 |            0 |             0 |
+| statistics           | 0.000015 | 0.000005 |   0.000009 |            0 |             0 |
+| preparing            | 0.000017 | 0.000006 |   0.000010 |            0 |             0 |
+| statistics           | 0.000028 | 0.000020 |   0.000035 |            0 |             0 |
+| preparing            | 0.000082 | 0.000000 |   0.000057 |            0 |             0 |
+| executing            | 0.000013 | 0.000000 |   0.000010 |            0 |             0 |
+| Sending data         | 0.000010 | 0.000000 |   0.000010 |            0 |             0 |
+| executing            | 0.000004 | 0.000000 |   0.000003 |            0 |             0 |
+| Sending data         | 0.001523 | 0.001527 |   0.000000 |            0 |             0 |
+| end                  | 0.000011 | 0.000007 |   0.000000 |            0 |             0 |
+| query end            | 0.000009 | 0.000009 |   0.000000 |            0 |             0 |
+| closing tables       | 0.000009 | 0.000009 |   0.000000 |            0 |             0 |
+| removing tmp table   | 0.000008 | 0.000009 |   0.000000 |            0 |             0 |
+| closing tables       | 0.000009 | 0.000009 |   0.000000 |            0 |             0 |
+| freeing items        | 0.000021 | 0.000021 |   0.000000 |            0 |             0 |
+| cleaning up          | 0.000015 | 0.000014 |   0.000000 |            0 |             0 |
++----------------------+----------+----------+------------+--------------+---------------+
+22 rows in set, 1 warning (0.01 sec)
+
+Type:ALL //显示索引的开销信息BLOCK IO //显示块IO相关开销CONTEXT SWITCHES  //上下文切换相关开销CPU //显示CPU相关开销信息IPC //显示发送和接收相关开销信息MEMORY //显示内存相关开销信息PAGE FAULTS //显示页面错误相关开销信息SOURCE //显示和source_function,source_file,source_line相关的开销信息SWAPS //显示交换次数相关开销的信息
+
+
+如出现以下一种或者几种情况，说明SQL执行性能极其低下，亟需优化* converting HEAP to MyISAM  //查询结果太大，内存都不够用了往磁盘上搬了* Creating tmp table //创建临时表：拷贝数据到临时表，用完再删* Copying to tmp table on disk //把内存中临时表复制到磁盘，危险* locked //出现死锁
+
+
+通过查询数据表来诊断SQL（第二种查询方式）
+select * from information_schema.profiling;
+select * from information_schema.profiling where Query_ID=1 limit 1 \G;
+
+mysql> select * from information_schema.profiling where Query_ID=1 limit 1 \G;
+*************************** 1. row ***************************
+           QUERY_ID: 1
+                SEQ: 2
+              STATE: starting
+           DURATION: 0.000086
+           CPU_USER: 0.000025
+         CPU_SYSTEM: 0.000043
+  CONTEXT_VOLUNTARY: 0
+CONTEXT_INVOLUNTARY: 0
+       BLOCK_OPS_IN: 0
+      BLOCK_OPS_OUT: 0
+      MESSAGES_SENT: 0
+  MESSAGES_RECEIVED: 0
+  PAGE_FAULTS_MAJOR: 0
+  PAGE_FAULTS_MINOR: 0
+              SWAPS: 0
+    SOURCE_FUNCTION: NULL
+        SOURCE_FILE: NULL
+        SOURCE_LINE: NULL
+1 row in set, 1 warning (0.00 sec)
+
+ERROR: 
+No query specified
+
+mysql> 
+
+
+全局查询日志（第二种SQL诊断方式）
+此方式诊断较简单（参数少，适合定位有问题的SQL），记录到数据库（建议只在测试库环境进行）
+设置
+方式1:命令行1. set global general_log = 1;2. set global log_output = 'TABLE';
+
+方式2:配置文件* vim my.cnfgeneral_log =1general_log_file = /path/logfilelog_output = FILE* 重启MySQL服务
+
+
+诊断SQL
+select * from mysql.general_log;
+
+

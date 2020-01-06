@@ -1,0 +1,1 @@
+mysqlbinlog --base64-output=decode-rows --verbose mysql-bin.000475

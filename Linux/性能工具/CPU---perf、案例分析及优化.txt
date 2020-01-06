@@ -1,0 +1,79 @@
+一、cpu的使用率
+1、用cpu的使用率来描述cpu的性能，cpu的使用率是单位时间内CPU的使用情况统计；
+
+2、节拍率
+1).linux是一个多任务的操作系统，将每个cpu的时间划分为很短的时间片，在通过调度器轮流分配给各个任务使用，因此造成多任务同时运行的错觉。
+2).linux就是通过实现定义的节拍率（内核中表示HZ），触发时间中断，并使用全局变量Jiffiles记录了开机以来的节拍数。每发生一次中断，Jiffies的值就加1。
+
+[root@localhost ~]# grep 'CONFIG_HZ=' /boot/config-$(uname -r)
+CONFIG_HZ=1000        #每秒钟触发1000次中断
+
+3)为了方便用户空间程序，内核还提供了用户空间节拍率USER_HZ，它的值总是固定为100，所以这里要区分内核空间中断与用户空间中断；
+
+
+3、平均cpu利用率
+/proc/stat提供的是系统CPU和任务统计信息
+平均cpu利用率 = 1-（（空闲时间t1-空闲时间t2）/（总cpu时间t1-总cpu时间t2））
+上述公式为这段时间内的平均cpu使用率，没有时间差值则算的是从开机以来的平均cpu使用率，是没有意义的；
+注意：不同性能分析工具给出的都是间隔一段时间的平均cpu利用率，所以要注意间隔时间的设置一致；
+
+
+4、命令
+top显示系统总体的CPU和内存使用情况，以及各个进程的资源使用情况；
+pidstat显示每个进程的使用情况   pidstat 1 5
+
+
+5、调试工具
+GDB：在调试过程中会中断程序运行，不适合线上环境，在大致分析出问题函数后再使用它进一步调试；
+perf：是linux 2.6.31后内置的性能分析工具，可分析系统性能和内核性能，还可分析制定应用程序的性能问题
+perf top：实时展示系统得性能信息，不保存数据，无法离线或后续分析
+Perf record：保存数据功能
+Perf report：解析record中保存的数据
+
+命令
+# -g 开启调用关系分析，-p 指定 php-fpm 的进程号 21515
+$ perf top -g -p 21515
+
+
+6、性能压测工具  ab（apache bench）
+7、ab性能工具实例数据 
+[root@localhost sbox]# ab -c 10 -n 10000 http://11.12.117.15:10000/
+This is ApacheBench, Version 2.3 <$Revision: 1430300 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 11.12.117.15 (be patient)
+Completed 1000 requests
+Completed 2000 requests
+Completed 3000 requests
+Completed 4000 requests
+Completed 5000 requests
+Completed 6000 requests
+Completed 7000 requests
+Completed 8000 requests
+Completed 9000 requests
+Completed 10000 requests
+Finished 10000 requests
+
+Server Software:        nginx/1.17.2
+Server Hostname:        11.12.117.15
+Server Port:            10000
+
+Document Path:          /
+Document Length:        9 bytes
+
+Concurrency Level:      10
+Time taken for tests:   149.838 seconds
+Complete requests:      10000
+Failed requests:        0
+Write errors:           0
+Total transferred:      1710000 bytes
+HTML transferred:       90000 bytes
+Requests per second:    66.74 [#/sec] (mean)
+Time per request:       149.838 [ms] (mean)
+
+从上述结果可以看出Requests per second:    66.74 [#/sec] (mean)；
+
+
+##如果做性能优化；将nginx进程绑定到cpu上呢，是否可以增加该数值（Requests per second:    66.74 [#/sec] (mean)）
+

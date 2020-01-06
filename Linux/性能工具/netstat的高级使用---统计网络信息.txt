@@ -1,0 +1,58 @@
+netstat-打印网络连接，路由表，接口统计信息的工具，在平常工作也会经常遇到；
+常用选项：
+    -i：查看网卡数据包收发情况（常用于查看是否有丢包、错误）
+    -s：对各种协议的统计信息
+    -r：查看路由表信息（也常用route -n）查看
+	
+
+用法示例一：查看网络包收发情况，以确定是否存在丢包的情况（当网络存在延迟的时候用）
+[root@admin test]# netstat -i
+Kernel Interface table
+Iface             MTU    RX-OK RX-ERR RX-DRP RX-OVR    TX-OK TX-ERR TX-DRP TX-OVR Flg
+docker0          1500    34954      0      0 0         39693      0      0      0 BMRU
+eth0             1500 14214045      0      0 0      12320299      0      0      0 BMRU
+lo              65536   438426      0      0 0        438426      0      0      0 LRU
+vethd0731cd      1500      271      0      0 0           345      0      0      0 BMRU
+
+RX-OK：接收的总包数
+RX-ERR：总错误数
+RX-DRP：进入 Ring Buffer 后因其他原因（如内存不足）导致的丢包数
+RX-OVR：Ring Buffer 溢出导致的丢包数 
+TX-OK等也是类似的
+
+
+
+用法示例二：对各种协议的统计信息（常用于确认传输层和网络层是否出现问题）
+会对ip、icmp、tcp、udp协议的网络包数据进行统计
+[root@nginx ~]# netstat -s
+Tcp:
+    0 active connection openings
+    3 passive connection openings
+    22 failed connection attempts
+    0 connection resets received
+    0 connections established
+    64 segments received
+    51 segments sent out
+    8 segments retransmitted
+    0 bad segments received
+    0 resets sent
+...
+TcpExt:
+    22 resets received for embryonic SYN_RECV sockets
+    2 TCP sockets finished time wait in fast timer
+    0 packet headers predicted
+    8 acknowledgments not containing data payload received
+    TCPTimeouts: 13
+    TCPOFOQueue: 2
+    TCPSynRetrans: 8
+    TCPOrigDataSent: 5
+    TCPDelivered: 5
+IpExt:
+...
+
+
+22次连接失败重试（22 failed connection attempts）
+8 次重传（8 segments retransmitted）
+11 次半连接重置（11 resets received for embryonic SYN_RECV sockets）
+8 次 SYN 重传（TCPSynRetrans）
+13 次超时（TCPTimeouts）

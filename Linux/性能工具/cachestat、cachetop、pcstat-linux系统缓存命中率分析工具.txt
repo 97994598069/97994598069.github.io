@@ -1,0 +1,102 @@
+命中率越高，表示使用缓存带来的收益越高，应用程序的性能也就越好。
+
+缓存是现在所有高并发系统必需的核心模块，主要作用就是把经常访问的数据（也就是热点数据），提前读入到内存中。这样，下次访问时就可以直接从内存读取数据，而不需要经过硬盘，从而加快应用程序的响应速度。
+
+这些独立的缓存模块通常会提供查询接口，方便我们随时查看缓存的命中情况。
+不过 Linux 系统中并没有直接提供这些接口，所以这里我要介绍一下，cachestat 和 cachetop ，它们正是查看系统缓存命中情况的工具。
+
+cachestat 提供了整个操作系统缓存的读写命中情况。
+cachetop 提供了每个进程的缓存命中情况。
+
+这两个工具都是 bcc 软件包的一部分，它们基于 Linux 内核的 eBPF（extended Berkeley Packet Filters）机制，来跟踪内核中管理的缓存，并输出缓存的使用和命中情况。
+
+Centos7安装bcc-tools
+第一步，升级内核。你可以运行下面的命令来操作：
+升级系统
+yum update -y
+
+安装ELRepo
+rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+rpm -Uvh https://www.elrepo.org/elrepo-release-7.0-3.el7.elrepo.noarch.rpm
+
+安装新内核
+yum remove -y kernel-headers kernel-tools kernel-tools-libs
+yum --enablerepo="elrepo-kernel" install -y kernel-ml kernel-ml-devel kernel-ml-headers kernel-ml-tools kernel-ml-tools-libs kernel-ml-tools-libs-devel
+
+更新Grub后重启
+grub2-mkconfig -o /boot/grub2/grub.cfg
+grub2-set-default 0
+reboot
+
+重启后确认内核版本已升级为4.20.0-1.el7.elrepo.x86_64
+uname -r
+
+
+第二步，安装 bcc-tools：
+安装bcc-tools
+yum install -y bcc-tools
+
+配置PATH路径
+export PATH=$PATH:/usr/share/bcc/tools
+
+验证安装成功
+cachestat 
+操作完这些步骤，bcc 提供的所有工具就都安装到 /usr/share/bcc/tools 这个目录中了。不过这里提醒你，bcc 软件包默认不会把这些工具配置到系统的 PATH 路径中，所以你得自己手动配置：
+$ export PATH=$PATH:/usr/share/bcc/tools
+
+
+配置完，你就可以运行 cachestat 和 cachetop 命令了。比如，下面就是一个 cachestat 的运行界面，它以1秒的时间间隔，输出了3组缓存统计数据：
+$ cachestat 1 3
+TOTAL MISSES HITS DIRTIES BUFFERS_MB CACHED_MB
+2 0 2 1 17 279
+2 0 2 1 17 279
+2 0 2 1 17 279 
+
+你可以看到，cachestat 的输出其实是一个表格。每行代表一组数据，而每一列代表不同的缓存统计指标。这些指标从左到右依次表示：
+TOTAL ，表示总的 I/O 次数；
+MISSES ，表示缓存未命中的次数；
+HITS ，表示缓存命中的次数；
+DIRTIES， 表示新增到缓存中的脏页数；
+BUFFERS_MB 表示 Buffers 的大小，以 MB 为单位；
+CACHED_MB 表示 Cache 的大小，以 MB 为单位。
+
+
+接下来我们再来看一个 cachetop 的运行界面：
+$ cachetop
+11:58:50 Buffers MB: 258 / Cached MB: 347 / Sort: HITS / Order: ascending
+PID UID CMD HITS MISSES DIRTIES READ_HIT% WRITE_HIT%
+13029 root python 1 0 0 100.0% 0.0%
+
+它的输出跟 top 类似，默认按照缓存的命中次数（HITS）排序，展示了每个进程的缓存命中情况。具体到每一个指标，这里的 HITS、MISSES和DIRTIES ，跟 cachestat 里的含义一样，分别代表间隔时间内的缓存命中次数、未命中次数以及新增到缓存中的脏页数。
+而 READ_HIT 和 WRITE_HIT ，分别表示读和写的缓存命中率。
+
+指定文件的缓存大小
+除了缓存的命中率外，还有一个指标你可能也会很感兴趣，那就是指定文件在内存中的缓存大小。你可以使用 pcstat 这个工具，来查看文件在内存中的缓存大小以及缓存比例。
+pcstat 是一个基于 Go 语言开发的工具，所以安装它之前，你首先应该安装 Go 语言; 
+安装完 Go 语言，再运行下面的命令安装 pcstat：
+$ export GOPATH=~/go
+$ export PATH=~/go/bin:$PATH
+$ go get golang.org/x/sys/unix
+$ go get github.com/tobert/pcstat/pcstat
+
+全部安装完成后，你就可以运行 pcstat 来查看文件的缓存情况了。比如，下面就是一个 pcstat 运行的示例，它展示了 /bin/ls 这个文件的缓存情况：
+
+$ pcstat /bin/ls
++---------+----------------+------------+-----------+---------+
+| Name | Size (bytes) | Pages | Cached | Percent |
+|---------+----------------+------------+-----------+---------|
+| /bin/ls | 133792 | 33 | 0 | 000.000 |
++---------+----------------+------------+-----------+---------+
+这个输出中，Cached 就是 /bin/ls 在缓存中的大小，而 Percent 则是缓存的百分比。你看到它们都是 0，这说明 /bin/ls 并不在缓存中。
+
+
+接着，如果你执行一下 ls 命令，再运行相同的命令来查看的话，就会发现 /bin/ls 都在缓存中了：
+$ ls
+$ pcstat /bin/ls
++---------+----------------+------------+-----------+---------+
+| Name | Size (bytes) | Pages | Cached | Percent |
+|---------+----------------+------------+-----------+---------|
+| /bin/ls | 133792 | 33 | 33 | 100.000 |
++---------+----------------+------------+-----------+---------+
+
+
