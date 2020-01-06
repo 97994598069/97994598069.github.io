@@ -1,0 +1,120 @@
+user nobody nobody;
+worker_processes 4;
+worker_rlimit_nofile 51200;
+error_loglogs/error.log notice;
+pid/var/run/nginx.pid;
+
+events {
+use epoll;
+worker_connections 51200;
+}
+
+http{
+server_tokens off;设定在客户端中关闭服务器的版本信息；
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;当后端有多个nginx代理服务器，使用此项记录每个转发过的IP
+client_max_body_size 20m;如果允许客户端上传的话,使用此项进行限制上传的单个文件大小最大为多少；
+client_body_buffer_size 256k;设定允许客户端上传的数据在物理内存中的最大缓存；
+proxy_connect_timeout 90;设定代理服务器向后端服务器请求超时时间为90s;
+proxy_send_timeout 90;设定代理服务器向后端服务器发送报文的超时时间为90s;
+proxy_read_timeout 90;设定代理服务器读取后端服务器发送的报文超时时间为90s;
+proxy_buffers_size 128k;设定代理服务器的缓存大小为128K；
+proxy_buffers 4 64k;设定代理服务器有4段缓存空间，每段缓存空间大小为64k;
+ 
+client_body_temp_path /var/tmp/client_body_temp 1 2;设定客户端上传数据时在磁盘中的缓存路径；
+proxy_temp_path /var/tmp/proxy_temp 1 2;设定代理服务器缓存的路径
+fastcgi_temp_path /var/tmp/fastcgi_temp 1 2;
+uwscgi_temp_path /var/tmp/uwscgi_temp 1 2;
+scgi_temp_path /var/tmp/scgi_temp 1 2;
+ 
+Ignore_invalid_headers on;表示忽略无法理解的首部报文；
+server_names_hash_max_size 256;这两项的设定是绑定hash的，速度会快很多
+server_names_hash_bucket_size 64;
+client_header_buffer_size 8k;
+large_client_header_buffers 4 32k;
+connection_pool_size 256;
+request_pool_size 64k;
+ 
+output_buffers 2 128k;
+postpone_output 1460;
+ 
+client_header_timeout 1m;
+client_body_timeout 3m;
+send_timeout 3m;   (上面这几项都可以保留默认，如果服务器内存够大的话，可以调大一些)
+ 
+log_format main  ‘$server_addr $remote_addr [$time_local] $msec+$connection’
+‘”$request” $status $connection $request_time $body_byets_sent “$http_referer”’
+‘”$http_user_agent” $http_x_forwarded_for’;(设定日志格式)
+ 
+open_log_file_cache  max=1000 inactive=20s min_uses=1  valid=1m;
+#在内存中寻找一段空间，设定日志文件缓存，有助于提升性能
+#max:最大缓存多少条目
+#inactive:非活动期限是多长
+#min_uses:最少使用多少次
+#valid:缓存的有效期时长
+ 
+access_log logs/access.log main;设置日志
+log_not_found on;
+ 
+sendfile on;
+tcp_nodelay on;
+tcp_nopush off;
+ 
+Reset_timedout_connection on;
+keepalive_timeout 10 5;
+keepalive_requests 100;  设置长链接可以请求资源的次数;
+ 
+gzip on;
+gzip_min_length  1k;
+gzip_buffers     4 16k;
+gzip_http_version 1.0;
+gzip_comp_level 2;
+gzip_types       text/plain application/x-javascript text/css application/xml;
+gzip_vary on;
+gzip_proxied        expired no-cache no-store private auth;
+gzip_disable        "MSIE [1-6]\.";
+ 
+upstream tomcat8080 {
+ip_hash;
+server 172.16.100.103:8080 weight=1 max_fails=2;
+server 172.16.100.103:8080 weight=1 max_fails=2;
+server 172.16.100.103:8080 weight=1 max_fails=2;
+}
+server {
+listen 80;
+server_name #####;
+root/data/webapps/htdocs; 
+access_log /var/logs/webapp.access.logmain;
+error_log/var/logs/webapp.error.lognotice;
+location / {
+location ~* ^.*/favicon.ico$ {
+root /data/webapps;(图片放的位置)
+expires  180d;过期时间
+break;
+}
+If( !-f $request_filename) { 
+proxy_pass http://tomcat8080;（如果访问的文件不存在，则转向至首页）
+break;
+}
+}
+error_page500 502 503 504 /50x.html
+location = /50x.html {
+roothtml;
+}
+}
+server {
+listen 8080;
+server_name nginx_status;(查看服务器状态的)
+location / {
+access_logoff;
+denyall;
+return503;
+}
+location /status {
+stub_status on;
+access_log off;
+allow 127.0.0.1;
+allow 172.16.100.71;
+deny all;
+}
+}
+}
