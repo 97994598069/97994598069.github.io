@@ -85,6 +85,21 @@ get nginx-1.15.12.tar.gz
 
 
 
+++++++++++++++++++++++++++++++++++
+如果sftp需要放到外网则需要配置密钥+密码登录  （如下是服务器禁止root登录的示例）
+groupadd  wwww  ##如果有就不用新建
+1. useradd -G www -d /opt/h5 -m -s /bin/bash abc   ##创建用户，最好是有登录权限，如果没有登录权限则没有办法生成密钥
+2. passwd abc  配置密码
+3. su - abc  ##进入到家目录
+4. ssh-keygen -t rsa   ##生成密码，做好指定密钥名字和密钥密码
+5. 通过sz命令传输出去
+6. chmod 755 /opt/h5
+7. chown root:abc /opt/h5
+8. cd /opt/h5 && mkdir upload
+9. chown -R abc:www ./upload
+
+
+测试连接，注意xshell下好像不能但是用xshell的xftp可以连接上
 
 
 
