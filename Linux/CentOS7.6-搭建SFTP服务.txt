@@ -36,7 +36,7 @@ vim /etc/ssh/sshd_config
 #下面这行注释掉#Subsystem sftp /usr/libexec/openssh/sftp-server##后面加入
 Subsystem sftp internal-sftp
 #注意，以下要 放在 本文件的最后行，否则 root用户无法登陆
-Match Group sftp
+Match Group sftp  ###若是你创建的组不是sftp,则是你创建的组名，例如www
 X11Forwarding no
 AllowTcpForwarding no
 ChrootDirectory %h
