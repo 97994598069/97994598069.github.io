@@ -16,7 +16,7 @@ yum -y install openssh-server lzo openssl openssl-devel openvpn NetworkManager-o
 3.安装 easy-rsa  该包用来制作ca证书，服务端证书，客户端证书。最新的为 easy-rsa3
  1) mkdir /mnt/openvpn/
  2) cd /mnt/openvpn/
- 3) wget https://github.com/OpenVPN/easy-rsa/archive/master.zip
+ 3) wget https://github.com/OpenVPN/easy-rsa/archive/master.zip  ##或者https://pan.baidu.com/s/1Ww-e8HyrWz9IU6yG3ALDuA
  4) unzip master.zip
  5) mv easy-rsa-master/ easy-rsa
  6) cp -R easy-rsa/ /etc/openvpn/
