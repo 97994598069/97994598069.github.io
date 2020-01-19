@@ -292,6 +292,24 @@ tun0: flags=4305<UP,POINTOPOINT,RUNNING,NOARP,MULTICAST>  mtu 1500
  3) firewall-cmd --permanent --add-port=1194/tcp
     firewall-cmd --permanent --add-masquerade
     firewall-cmd --reload
+ 
+ 备注：若是iptables则需如下:
+ ##若iptables已有存在的规则不执行如下
+iptables -F
+iptables -X
+iptables -Z
+
+添加规则
+iptables -A INPUT -s 127.0.0.1 -d 127.0.0.1 -j ACCEPT
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -p tcp --dport 25632 -j ACCEPT
+iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE   ###网段为虚拟ip段
+service iptables save
+
 	
 	
 20. 配置 OpenVPN 客户端
