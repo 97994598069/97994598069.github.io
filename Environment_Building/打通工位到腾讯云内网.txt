@@ -225,7 +225,7 @@ Certificate created at: /etc/openvpn/easy-rsa/easyrsa3/pki/issued/admin.crt
  4) cp /etc/openvpn/easy-rsa/easyrsa3/pki/dh.pem /etc/openvpn
  5) cp /etc/openvpn/easy-rsa/easyrsa3/pki/ca.crt /mnt/openvpn/client
  6) cp /etc/openvpn/easy-rsa/easyrsa3/pki/issued/admin.crt /mnt/openvpn/client
- 7) cp /root/client/easy-rsa/easyrsa3/pki/private/admin.key /mnt/openvpn/client
+ 7) cp /mnt/openvpn/client/easy-rsa/easyrsa3/pki/private/admin.key  /mnt/openvpn/client
 
 
 17.设置 OpenVPN 配置文件
