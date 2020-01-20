@@ -1,0 +1,46 @@
+概述
+创建多个并发线程、模拟多个访问者同时对某一URL进行访问,可对任何基于url的资源进行并发性能测试.
+压力测试是性能调优过程中必不可少的一环。只有让服务器处在高压情况下才能真正体现出各种设置所暴露的问题.
+
+安装
+yum-y install httpd-tools
+
+参数选项:
+-n 请求数
+-c 并发数
+-s 等待响应的时间默认30秒-H 自定义请求头参数,可多次使用该选项
+-T 设置Content-Type请求头信息
+-k 启用HTTP KeepAlive功能，即在一个HTTP会话中执行多个请求。默认时，不启用KeepAlive功能。
+
+1. 基本实例
+ab http://192.168.31.92/
+
+
+2. 100并发,5000请求
+ab -c 100 -n 5000 http://192.168.31.92/
+
+
+3. 设置请求头信息User-Agent
+ab -c 500 -n 10000 -H "User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36" http://192.168.31.92/
+
+4. GET传参接口测试
+ab -n 100 -c 10 "http://192.168.31.91/api/test/?username=chris&password=123456"
+
+
+5. POST 传参接口测试
+ab -n 100 -c 10 -p post.data -T "application/x-www-form-urlencoded" http://192.168.31.91/api/test/
+
+post.data 文件内容:
+username="chris"&password="123456"
+
+
+
+
+
+
+
+
+
+
+
+
