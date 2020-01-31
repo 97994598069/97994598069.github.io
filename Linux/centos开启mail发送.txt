@@ -26,6 +26,9 @@
 2、通过管道符直接发送
 发送命令：echo "this is my test mail" | mail -s 'mail test' xxx@yyy.com
 
+3.发送附件
+echo "测试mailx命令行发送邮件" | mailx -s "这是一封测试邮件" -a test.log xxx@yyy.com
+
 
 
 三、设置发件人信息
