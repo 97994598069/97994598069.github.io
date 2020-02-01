@@ -1,0 +1,14 @@
+x=6 HTTP/1.1
+{@timestamp:2020-02-01T12:44:21+08:00  response_time:35.496  upstream_host:10.43.112.231:9090  upstream_time:35.496  request:GET /xmtmedia/api/contentList?catalogid=16990&pageinde
+x=6 HTTP/1.1
+{@timestamp:2020-02-01T13:01:21+08:00  response_time:35.161  upstream_host:10.43.112.184:9090  upstream_time:35.161  request:GET /xmtmedia/api/contentList?catalogid=16002&pageinde
+x=12 HTTP/1.1
+{@timestamp:2020-02-01T12:48:42+08:00  response_time:34.314  upstream_host:10.43.112.233:9090  upstream_time:34.314  request:GET /xmtmedia/api/contentList?catalogid=17072&pageinde
+x=14 HTTP/1.1
+{@timestamp:2020-02-01T13:23:50+08:00  response_time:33.660  upstream_host:10.43.112.180:9090  upstream_time:33.660  request:GET /xmtmedia/api/contentList?catalogid=17886&pageinde
+x=13 HTTP/1.1
+{@timestamp:2020-02-01T12:33:58+08:00  response_time:32.306  upstream_host:10.43.112.231:9090  upstream_time:32.306  request:GET /xmtmedia/api/contentList?catalogid=17812&pageinde
+x=7 HTTP/1.1
+{@timestamp:2020-02-01T13:16:37+08:00  response_time:30.696  upstream_host:10.43.112.184:9090  upstream_time:30.696  request:GET /xmtmedia/api/contentList?catalogid=17886&pageinde
+
+[root@localhost ~]# cat 02_01.log  |grep "api/contentList" |sort -t ':' -rn -k6 |more
