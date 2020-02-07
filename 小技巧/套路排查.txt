@@ -34,3 +34,5 @@
         proxy_set_header Host $http_host;
         proxy_pass http://bcdserver/xmtmedia/api/out/insert/;        ##注意nginx的转发规则
     }
+    
+    ##备注，有关登录的接口不能做缓存，所以缓存所有接口的时候需要注意确定没有登录等接口
