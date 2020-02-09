@@ -23,6 +23,10 @@ server {
          if ($http_user_agent ~ ApacheBench|webBench|Java/) {
                  return 403;
         }
+	
+apache ab的http_user_agent 为ApacheBench
+webbench的http_user_agent 为WebBench
+java/表示jmeter的user_agent
 		
 #######################反爬虫(注意运营的百度推广等，不能禁了常用浏览器的抓取)#################################   
          if ($http_user_agent ~ "WinHttp|WebZIP|FetchURL|node-superagent|java/|FeedDemon|Jullo|JikeSpider|Indy Library|Alexa Toolbar|AskTbFXTV|AhrefsBot|CrawlDaddy|Java|Feedly|Apache-HttpAsyncClient|UniversalFeedParser|ApacheBench|Microsoft URL Control|Swiftbot|ZmEu|oBot|jaunty|Python-urllib|lightDeckReports Bot|YYSpider|DigExt|HttpClient|MJ12bot|heritrix|EasouSpider|Ezooms|BOT/0.1|YandexBot|FlightDeckReports|Linguee Bot|^$" ) {
