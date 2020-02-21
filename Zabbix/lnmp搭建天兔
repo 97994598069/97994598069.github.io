@@ -120,6 +120,13 @@ cd /usr/local/src/Lepus_v3.8_beta  ###根据自己的路径
 mysql -uroot -pwhsir lepus < sql/lepus_table.sql
 mysql -uroot -pwhsir lepus < sql/lepus_data.sql
 
+##否则可能报错不出数据
+mysql>use lepus
+mysql>alter table mysql_status modify column max_connect_errors bigint(18);
+mysql>alter table mysql_status_history modify column max_connect_errors bigint(18);
+
+
+
 安装Lpeus(天兔)程序
 cd /usr/local/src/Lepus_v3.8_beta/python
 chmod +x ./*
