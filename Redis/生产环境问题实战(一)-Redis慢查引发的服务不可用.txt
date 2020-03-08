@@ -1,0 +1,55 @@
+问题描述:
+接口访问一直超时,服务处于不可用状态,查看后台日志,发现有大量jedis连接超时异常,查看redis所在服务器资源,发现cpu100%运行中,过一段时间后,服务自行恢复正常.
+
+问题分析:
+网上资料看了一些,出现cpu过高的原因主要有以下这些:
+  1.连接数过多.通过info命令来查看
+  2.慢查询阻塞.redis是单线程的,如果有慢查询,会阻塞住后续的操作
+  3.单个value值过大?也可以当作慢查询的一种
+  4.aof重写/rdb fork的瞬间会阻塞Redis服务器
+
+redis给我们提供了很多命令来帮助排查问题,下面介绍几个重要的:
+info : 查看redis的一些基础信息,例如服务器信息,已连接客户端信息,内存信息等,详情可看info命令详解
+https://blog.csdn.net/lang_man_xing/article/details/38539057
+
+
+redis> clients
+connected_clients:107 ##已连接的客户端数量
+client_longest_output_list:0  ##当前客户端最长输出列表
+client_biggest_input_buf:0  ##当前客户端最大输入缓存
+blocked_clients:0    ##正在阻塞等待的客户端数量
+
+
+我们可以通过 config get maxclients 命令,拿到redis允许的最大数,可以看出,这个值是非常大的,我们远没有达到这个量级:
+redis>config get maxclients 
+1) ""maxclients
+2) "10000"
+
+
+slowlog get命令可以显示慢操作日志:
+7) 1) (interger) 3444745  ##唯一时间标识符
+   2) (interger) 1550824115  ##unix时间戳
+   2) (interger) 481055  ##执行消耗的时间，以毫秒为单位
+   4) 1) "KEYS"
+      2) "pic_url_1_1_0*"
+通过慢日志查询命令,我们可以看见,每次查询"pic_url_1_1_0*“时,需要阻塞0.48秒左右,这个相对于redis来说是非常非常缓慢的(以微秒为单位),在大量用户同时请求该接口时,redis无法拿到连接,请求超时,线程就会阻塞在那里,呈现出一段时间的服务不可用.
+
+
+解决方案: 问题定位到以后就很好解决了,大体思路是这样的,用户查询"pic_url_1_1_0*“时,先去redis中找"pic_url_1_1_0_all”,如果有,直接返回;如果没有,那么查询出"pic_url_1_1_0*”,然后放到"pic_url_1_1_0_all"中,再返回;新增和修改"pic_url_1_1_0*“相关的键时,要覆盖"pic_url_1_1_0_all”,这样既可以保证"pic_url_1_1_0_all"的值是最新的,又可以少走keys全内存扫描,性能上非常高.
+
+
+	  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
