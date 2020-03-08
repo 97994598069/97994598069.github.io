@@ -1,0 +1,73 @@
+1. curl命令加参数方法1：
+
+curl -o /dev/null -s -w %{http_code}::%{time_namelookup}::%{time_connect}::%{time_starttransfer}::%{time_total}::%{speed_download}"\n" https://www.baidu.com/
+
+-o：把curl 返回的html、js 输出至回收站[ /dev/null]
+-s：去掉所有状态
+-w：按照后面的格式写出rt
+--connect-timeout：指定tcp连接超时时间
+-m：指定数据传输超时时间
+http_code：状态码
+time_namelookup：DNS 解析域名www.rfyy.net的时间，单位为秒，如果测试的地址为IP，这里耗时即为0
+time_connect：client 和 server 端建立 TCP 连接的时间
+time_starttransfer：从 client 发出请求；到 web server 响应第一个字节的时间
+time_total：client 发出请求；到 web server 发送回所有的相应数据的时间
+speed_download：下载速度,单位 byte/s
+
+
+curl命令加参数方法2：
+time_namelookup —— 域名解析耗时
+time_connect —— 建立到服务器的 TCP 连接所用的时间
+time_appconnect —— 如SSL/SSH等建立连接或者完成三次握手时间
+http_code —— 上次操作返回的响应码；
+time_total —— 上次操作耗时，单位为秒；
+time_connect —— TCP连接远程主机的耗时，单位为秒；
+time_pretransfer —— 文件真正开始传输之前交互耗时，单位为秒，可能主要包括一些命令处理和协议分析的耗时；
+time_redirect} —— 重定向耗时，单位微妙；
+time_starttransfer —— 文件的第一个字节开始传输之前的耗时，单位为秒，包括time_pretransfer和服务器计算结果的时间；
+size_download —— 下载的总字节数；
+size_upload —— 上传的总字节数；
+size_request —— 发送http请求的总字节数；
+speed_download —— curl成功下载的平均下载速度；
+speed_upload —— curl成功上传的平均上传速度；
+
+
+curl -so /dev/null -w @curl.format https://www.baidu.com
+
+vi  curl-format.txt 
+\n
+            time_namelookup:  %{time_namelookup}\n
+               time_connect:  %{time_connect}\n
+            time_appconnect:  %{time_appconnect}\n
+           time_pretransfer:  %{time_pretransfer}\n
+              time_redirect:  %{time_redirect}\n
+         time_starttransfer:  %{time_starttransfer}\n
+                            ----------\n
+                 time_total:  %{time_total}\n
+\n
+
+[root@localhost ~]# curl -w "@curl-format.txt" -o /dev/null -s  http://www.baidu.com 
+
+            time_namelookup:  0.014
+               time_connect:  0.028
+            time_appconnect:  0.000
+           time_pretransfer:  0.028
+              time_redirect:  0.000
+         time_starttransfer:  0.040
+                            ----------
+                 time_total:  0.041
+
+
+[root@localhost ~]# curl -so /dev/null -w @curl-format.txt https://www.baidu.com
+
+            time_namelookup:  0.013
+               time_connect:  0.019
+            time_appconnect:  0.089
+           time_pretransfer:  0.089
+              time_redirect:  0.000
+         time_starttransfer:  0.096
+                            ----------
+                 time_total:  0.097
+
+
+
