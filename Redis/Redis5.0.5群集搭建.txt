@@ -1,0 +1,237 @@
+Redis cluster 简介
+1.采用去中心化的思想，没有中心节点的说法，它使用hash slot方式将16348个hash slot覆盖到所有节点上，对于存储的每个key值，使用CRC16（KEY）&16348=slot得到他对应的hash slot，并在访问key的时候就去找他的hash slot在哪一个节点上，然后由当前访问节点从实际被分配了这个hash slot的节点去取数据，节点之间使用轻量协议通信 减少带宽占用 性能很高，自动实现负载均衡与高可用，自动实现failover并且支持动态扩展，官方已经玩到可以1000个节点 实现的复杂度低。
+
+2.其内部中也需要配置主从，并且内部也是采用哨兵模式，如果有半数节点发现某个异常节点，共同决定更改异常节点的状态，如果改节点是主节点，则对应的从节点自动顶替为主节点，当原先的主节点上线后，则会变为从节点。如果集群中的master没有slave节点，则master挂掉后整个集群就会进入fail状态，因为集群的slot映射不完整。如果集群超过半数以上的master挂掉，无论是否有slave，集群都会进入fail状态。
+
+3.根据官方推荐 集群部署至少要3台以上的master节点。
+
+搭建过程
+Ip 端口
+192.168.83.128 6000
+192.168.83.128 6001
+192.168.83.128 6002
+192.168.83.128 6003
+192.168.83.128 6004
+192.168.83.128 6005
+
+1. 先安装redis
+cd /usr/local
+wget http://download.redis.io/releases/redis-5.0.5.tar.gz
+tar xzf redis-5.0.5.tar.gz
+cd redis-5.0.5/
+make
+
+
+2.创建目录
+mkdir rediscluster
+cd rediscluster/
+[root@localhost rediscluster]# mkdir redis6000
+[root@localhost rediscluster]# mkdir redis6001
+[root@localhost rediscluster]# mkdir redis6002
+[root@localhost rediscluster]# mkdir redis6003
+[root@localhost rediscluster]# mkdir redis6004
+[root@localhost rediscluster]# mkdir redis6005
+在每个目录下面创建 data和log
+
+3.启动参数
+存放目录 /usr/local/rediscluster/redis6000/redis6000.conf,由于是6个节点，每个节点的目录和端口是不一样的，请参照这个进行修改
+
+protected-mode no
+port 6005
+pidfile "/var/run/redis_6005.pid"
+save 9 1
+save 300 10
+save 60 10000
+daemonize yes
+timeout 1800
+databases 16
+loglevel notice
+logfile "/usr/local/rediscluster/redis6005/log/redis.log"
+rdbcompression yes
+dbfilename "dump.rdb"
+dir "/usr/local/rediscluster/redis6005/data"
+maxclients 50000
+maxmemory 1063256064
+stop-writes-on-bgsave-error yes
+appendonly yes
+appendfilename "appendonly.aof"
+appendfsync everysec
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 128mb
+activerehashing yes
+rdbchecksum yes
+#vw-enabled yes
+aof-use-rdb-preamble yes
+aof-load-truncated yes
+no-appendfsync-on-rewrite yes
+lua-time-limit 5000
+slowlog-log-slower-than 10000
+slowlog-max-len 1000
+latency-monitor-threshold 0
+notify-keyspace-events ""
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+list-max-ziplist-entries 512
+list-max-ziplist-value 64
+set-max-intset-entries 512
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+hz 10
+aof-rewrite-incremental-fsync yes
+#repliaction
+#masterauth "123456"
+#requirepass "123456"
+#slave-serve-stale-data yes
+#slave-read-only yes
+#repl-diskless-sync no
+#repl-diskless-sync-delay 5
+#repl-disable-tcp-nodelay no
+#slave-priority 100
+#cluster
+cluster-enabled yes
+cluster-config-file nodes_6005.conf
+cluster-node-timeout 15000
+
+
+4.启动redis
+[root@localhost redis-5.0.5]# src/redis-server /usr/local/rediscluster/redis6000/redis6000.conf
+[root@localhost redis-5.0.5]# src/redis-server /usr/local/rediscluster/redis6001/redis6001.conf
+[root@localhost redis-5.0.5]# src/redis-server /usr/local/rediscluster/redis6002/redis6002.conf
+[root@localhost redis-5.0.5]# src/redis-server /usr/local/rediscluster/redis6003/redis6003.conf
+[root@localhost redis-5.0.5]# src/redis-server /usr/local/rediscluster/redis6004/redis6004.conf
+[root@localhost redis-5.0.5]# src/redis-server /usr/local/rediscluster/redis6005/redis6005.conf
+
+[root@localhost redis-5.0.5]# ps -ef |grep redis
+root 57466 1 0 10:45 ? 00:00:00 src/redis-server *:6000 [cluster]
+root 57473 1 0 10:46 ? 00:00:00 src/redis-server *:6001 [cluster]
+root 57487 1 0 10:46 ? 00:00:00 src/redis-server *:6002 [cluster]
+root 57492 1 0 10:46 ? 00:00:00 src/redis-server *:6003 [cluster]
+root 57498 1 0 10:46 ? 00:00:00 src/redis-server *:6004 [cluster]
+root 57504 1 2 10:46 ? 00:00:00 src/redis-server *:6005 [cluster]
+root 57510 52442 0 10:46 pts/0 00:00:00 grep --color=auto redis
+
+
+
+5.启动后我们就可以创建集群
+注意：
+在redis5.0后 创建集群统一使用redis-cli，之前的版本使用redis-trib.rb，但是需要安装ruby软件相对复杂,相比之前的版本5.0不需要安装额外的软件，方便。具体的可以参照redis官方网站查看
+https://redis.io/topics/cluster-tutorial
+创建集群命令：其中 cluster-replicas 1 代表 一个master后有几个slave，1代表为1个slave节点
+
+src/redis-cli --cluster create 192.168.83.128:6000 192.168.83.128:6001 192.168.83.128:6002 192.168.83.128:6003 192.168.83.128:6004 192.168.83.128:6005 --cluster-replicas 1
+
+
+6.我们验证一下集群是否创建成功
+登录redis客户端 src/redis-cli -c -p 6000， -c 参数代表连接到集群中
+
+我们先看一下主从配对情况，根据node ID匹配可以得出配比。大家可以看看是否有对应的ID，这样我们就区分了主从节点的关系了。
+
+[root@localhost redis-5.0.5]# src/redis-cli -c -p 6000
+127.0.0.1:6000> cluster nodes
+
+
+查看群集信息
+[root@localhost redis-5.0.5]# src/redis-cli -c -p 6000
+127.0.0.1:6000> cluster info
+
+验证数据匹配是否采用哈希槽的方式。我在6000客户端设置的数据，被分配到6004上了。
+127.0.0.1:6000> set aa "1111"
+OK
+
+[root@localhost redis-5.0.5]# src/redis-cli -c -p 6004
+127.0.0.1:6004> get aa
+-> Redirected to slot [1180] located at 192.168.83.128:6000
+"1111"
+
+
+7.验证故障转移
+我们从上面可以看出6002为master，6003为其从节点。我们按照如下流程进行操作
+先停掉6002，发现6003转为了master节点，然后恢复6002上线，6002变为slave节点。
+[root@localhost redis-5.0.5]# ps -ef |grep redis
+root 57919 1 0 11:05 ? 00:00:02 src/redis-server *:6000 [cluster]
+root 57925 1 0 11:05 ? 00:00:02 src/redis-server *:6001 [cluster]
+root 57931 1 0 11:05 ? 00:00:02 src/redis-server *:6002 [cluster]
+root 57937 1 0 11:05 ? 00:00:02 src/redis-server *:6003 [cluster]
+root 57943 1 0 11:05 ? 00:00:02 src/redis-server *:6004 [cluster]
+root 57949 1 0 11:06 ? 00:00:02 src/redis-server *:6005 [cluster]
+root 58505 52442 0 11:36 pts/0 00:00:00 grep --color=auto redis
+
+[root@localhost redis-5.0.5]# kill -9 57931
+[root@localhost redis-5.0.5]# ps -ef |grep redis
+root 57919 1 0 11:05 ? 00:00:02 src/redis-server *:6000 [cluster]
+root 57925 1 0 11:05 ? 00:00:02 src/redis-server *:6001 [cluster]
+root 57937 1 0 11:05 ? 00:00:02 src/redis-server *:6003 [cluster]
+root 57943 1 0 11:05 ? 00:00:02 src/redis-server *:6004 [cluster]
+root 57949 1 0 11:06 ? 00:00:02 src/redis-server *:6005 [cluster]
+root 58509 52442 0 11:37 pts/0 00:00:00 grep --color=auto redis
+
+
+[root@localhost redis-5.0.5]# src/redis-server /usr/local/rediscluster/redis6002/redis6002.conf
+
+[root@localhost redis-5.0.5]# src/redis-cli -c -p 6000
+127.0.0.1:6000> cluster nodes
+
+
+8.集群节点扩容
+在rediscluster,新增2个redis节点配置6006和6007两个端口。将6006作为新增的master节点，6007作为从节点，然后启动节点：
+
+添加主节点：
+./redis-cli --cluster add-node 192.168.83.128:6006 192.168.83.128:6000
+
+添加从节点：
+./redis-cli --cluster add-node 192.168.83.128:6007 192.168.83.128:6000 --cluster-slave --cluster-master-id 22e8a8e97d6f7cc7d627e577a986384d4d181a4f(此ID为6006端口的ID)
+
+添加成功后，为新节点分配数据：
+./redis-cli --cluster reshard 192.168.83.128:6006
+这样就新增完毕了，可以通过cluster nodes命令查看一下新增后的slot分布
+
+
+
+9.集群节点缩减
+缩减节点时先缩减从节点:
+./redis-cli --cluster del-node 192.168.83.128:6007
+
+然后进行主节点slot转移：
+./redis-cli --cluster reshard 192.168.83.128:6006
+
+最后在缩减主节点
+./redis-cli --cluster del-node 192.168.83.128:6006
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
