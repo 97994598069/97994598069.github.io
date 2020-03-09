@@ -10,6 +10,7 @@ gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql
 
 yum repolist enabled | grep mysql
 yum install mysql-community-server
+##mysql-community-client
 service mysqld start
 
 service mysqld status
