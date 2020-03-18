@@ -23,6 +23,22 @@ CLOSE_WAIT->LAST_ACK->CLOSED      为完成四次挥手（被动断开连接）�
 }}
 
 
+ESTABLISHED   socket已经建立连接，表示处于连接的状态，一般认为有一个ESTABLISHED 是一个服务的并发连接。
+             该连接状态在生产场景中很重要，需要重点关注
+SYN_SENT     socket正在积极尝试建立一个连接，即处于发送后连接前的一个等待但未匹配进入连接的状态
+SYN_RECV     已经从网络上收到一个连接请求
+FIN_WAIT1    socket已关闭，连接正在或正要关闭
+FIN_WAIT2    连接已关闭，并且socket正在等待远端结束
+TIME_WAIT    socket正在等待关闭处理仍在网络上的教据包，这个连接状态在生产场景中很重要，需要重点关注
+CLOSED        socket不再被占用了
+CLOSE_WAIT    远端已经结束，等待socket关闭
+LAST_ACK      远端已经结束，并且socket也已关闭，等待acknowledgement
+LISTEN        socket正在监听连接请求
+CLOSING       socket关闭，但是我们仍旧没有发送数据
+UNKNOWN       socket状态未知
+
+
+
 三次握手:
 当面试官问你为什么需要有三次握手、三次握手的作用、讲讲三次三次握手的时候，我想很多人会这样回答：
 
