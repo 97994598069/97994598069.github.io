@@ -16,6 +16,16 @@ mysqldump　数据库名　-uroot　-p　>　xxx.sql　
 4.导出特定表的结构 
 mysqldump -uroot -p1234 --set-gtid-purged=OFF -d $database $table >./$table.sql
 
+5.备份过程中排除某些表
+可以使用--ignore-table=dbname.tablename
+忽略一张表
+/usr/bin/mysqldump --set-gtid-purged=OFF -h127.0.0.1 -uroot -p'密码' 数据库名 --ignore-table=数据库名.表名 > 自定义名称.sql
+
+忽略多张表
+/usr/bin/mysqldump --set-gtid-purged=OFF -h127.0.0.1 -uroot -p'密码' dbname --ignore-table=
+数据库名.表名1 --ignore-table=数据库名.表名2 > 自定义名字.sql
+
+
 +++++++++++++++++++++++++++++++++++++++=
 5.导出整个数据库结构和数据
 mysqldump -h localhost -uroot -p123456 database > dump.sql
