@@ -90,14 +90,15 @@ source /etc/profile
 cp /etc/sysctl.conf /etc/sysctl.conf.default
 略
 至少如下4个：
-net.ipv4.tcp_syncookies = 1
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_tw_recycle = 1  ##系统bug，可造成网站不可预知的访问异常
-net.ipv4.tcp_fin_timeout = 30
+fs.file-max = 51200   #提高整个系统的文件限制
+net.ipv4.tcp_syncookies = 1  #表示开启SYN Cookies。当出现SYN等待队列溢出时，启用cookies来处理，可防范少量SYN攻击，默认为0，表示关闭；
+net.ipv4.tcp_tw_reuse = 1  #表示开启重用。允许将TIME-WAIT sockets重新用于新的TCP连接，默认为0，表示关闭；
+net.ipv4.tcp_tw_recycle = 0 ##表示开启TCP连接中TIME-WAIT sockets的快速回收，默认为0，表示关闭；为了对NAT设备更友好，建议设置为0
+net.ipv4.tcp_fin_timeout = 30 #修改系統默认的 TIMEOUT 时间。
+net.ipv4.tcp_keepalive_time = 1200  #表示当keepalive起用的时候，TCP发送keepalive消息的频度。缺省是2小时，改为20分钟。
+net.ipv4.ip_local_port_range = 10000 65000 #表示用于向外连接的端口范围。缺省情况下很小：32768到61000;若出现Cannot assign requested address这个报错，则需要增加这个值来缓解，例如1024 65535
+net.ipv4.tcp_max_syn_backlog = 8192 #表示SYN队列的长度，默认为1024，加大队列长度为8192，可以容纳更多等待连接的网络连接数。
+net.ipv4.tcp_max_tw_buckets = 5000 #表示系统同时保持TIME_WAIT的最大数量，如果超过这个数字，TIME_WAIT将立刻被清除并打印警告信息。
 
-net.ipv4.tcp_syncookies = 1表示开启SYN Cookies。当出现SYN等待队列溢出时，启用cookies来处理，可防范少量SYN攻击，默认为0，表示关闭；
-net.ipv4.tcp_tw_reuse = 1表示开启重用。允许将TIME-WAIT sockets重新用于新的TCP连接，默认为0，表示关闭；
-net.ipv4.tcp_tw_recycle = 1表示开启TCP连接中TIME-WAIT sockets的快速回收，默认为0，表示关闭。
-net.ipv4.tcp_fin_timeout修改系統默认的TIMEOUT时间
-修改之后，再用命令查看TIME_WAIT连接数netstat -ant |grep “TIME_WAIT” |wc –l
 
+netstat -ant |grep '^tcp' |awk '{print $NF}' |sort |uniq -c |sort -rn
