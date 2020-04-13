@@ -88,8 +88,6 @@ source /etc/profile
 
 6.tcp快速回收
 cp /etc/sysctl.conf /etc/sysctl.conf.default
-略
-至少如下4个：
 fs.file-max = 51200   #提高整个系统的文件限制
 net.ipv4.tcp_syncookies = 1  #表示开启SYN Cookies。当出现SYN等待队列溢出时，启用cookies来处理，可防范少量SYN攻击，默认为0，表示关闭；
 net.ipv4.tcp_tw_reuse = 1  #表示开启重用。允许将TIME-WAIT sockets重新用于新的TCP连接，默认为0，表示关闭；
