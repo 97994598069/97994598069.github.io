@@ -1,3 +1,13 @@
+系统设置:
+vi /etc/sysctl.conf 
+vm.max_map_count=655360
+
+#立即生效
+sysctl -p
+
+echo -e "* soft nofile 65536 \n* hard nofile 65536 \n* soft nproc 65536 \n* hard nproc 65536" >> /etc/security/limits.conf
+ulimit -SHn 65536 && ulimit -s 65536
+
 1.下载解压
 略
 
