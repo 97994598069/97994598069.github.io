@@ -13,6 +13,8 @@ $ curl -O https://www.python.org/ftp/python/3.5.0/Python-3.5.0.tgz
 最后一步，编译安装Python3，默认的安装目录是 /usr/local 如果你要改成其他目录可以在编译(make)前使用 configure 命令后面追加参数 “–prefix=/alternative/path” 来完成修改。
 $ tar xf Python-3.5.0.tgz
 $ cd Python-3.5.0
+$ vi Modules/Setup.dist
+   zlib zlibmodule.c -I$(prefix)/include -L$(exec_prefix)/lib -lz  ##将前面得注释给去掉
 $ ./configure
 $ make
 $ sudo make install
