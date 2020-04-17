@@ -70,6 +70,10 @@ $ scl enable python33 bash
 
 
 
+##若是动了软链/usr/bin/python，例如ln -s /usr/local/src/Python-3.7.7/python  /usr/bin/python
+则需要配置yum。否则yum不能用
+vi /usr/bin/yum  首行的python改成python2.7
+vi /usr/libexec/urlgrabber-ext-down  ##同上将首行的python 改为python2.7
 
 
 
