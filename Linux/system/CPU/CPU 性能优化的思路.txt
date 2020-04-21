@@ -76,6 +76,36 @@ CPU优化：
 5. NUMA(Non-Uniform Memory Access)优化：支持NUMA的处理器会被划分为多个node。每个node都有自己的本地内存空间。NUMA优化，其实就是让cpu尽可能只访问本地内存
 6. 中断负载均衡： 无论是软中断还是硬中断，它们的中断处理程序都可能会耗费大量的cpu。开启irqbalance服务或者配置smp_affinity，就可以把中断处理过程自动负载均衡到多个cpu上
 
+++++++++++++++++++++++++++++++++++++
+第一：服务简介
+这个服务是专门做中断服务指令的！
+能在系统层次保证多核CPU的合理分配！
+
+第二：安装方法
+#yum -y install glib2-devel
+#yum -y install irqbalance 
+# /etc/init.d/irqbalance start
+注意：如果报错
+正在启动 irqbalance：irqbalance: symbol lookup error: irqbalance: undefined symbol: g_list_free_full
+这个就是没有安装glib2-devel引起的；
+
+
+第三：优缺点分析：
+优点：既可以提升性能，又可以降低能耗。
+原理：irqbalance 优化中断分配，它会自动收集系统数据以分析使用模式，并依据系统负载状况将工作状态置于 Performance mode 或 Power-save mode。
+觉得绕口的话，就是多个马拉一辆车，车夫就是irqbalance！
+
+缺点:
+由于irqbalance选用自己的算法，多线程服务时，会有潜在的分配失败问题，由此造成性能的不稳定！
+
+
+第四：选取标准：
+主要由系统所承载的硬件和所负载的软件来决定！
+举例：
+一台配置一般的文件服务器完全可以开启irqbalance 服务；
+一台配置很优的Oracle数据库服务器完全不需要开启此服务（Oracle自身有调度器，irqbalance 本身也消耗资源，最终要的，必须注意第三步提出的缺点）
+
+++++++++++++++++++++++++++++++++++++==
 
 千万避免过早优化
 过早优化时万恶之源
