@@ -36,6 +36,42 @@ Sysdig 工具需要用到内核头文件包，开始安装前，需要确认内�
 1:libreoffice-core-4.2.8.2-11.el6.x86_64 has missing requires of libjawt.so(SUNWprivate_1.1)(64bit)
 1:libreoffice-ure-4.2.8.2-11.el6.x86_64 has missing requires of jre >= ('0', '1.5.0', None)
 
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+安装：
+1、centos下的安装
+1.1一键安装
+curl -s https://s3.amazonaws.com/download.draios.com/stable/install-sysdig | sudo bash
+上面是一个shell 脚本，会识别常用的linux发行版本，并根据对应的版本配置源，最后是安装sysdig包。在redhat/centos上首先会配置的是epel 源 ，配置该源的目的是安装dkms包；然后会配置draios源，通过该源可以安装sysdig包。最后在装sysdig包之前还会先安装kernel-devel包。
+
+1.2、分步安装
+由于使用的源都是国外源，会出现安装比较慢的情况，所以使用一键安装失败时，可以使用分解步骤安装。在内网环境下的也可以将依赖包都下下来再安装。
+ 
+#导入draios源
+rpm --import https://s3.amazonaws.com/download.draios.com/DRAIOS-GPG-KEY.public
+curl -s -o /etc/yum.repos.d/draios.repo http://download.draios.com/stable/rpm/draios.repo
+#导入epel 源
+rpm -i http://mirror.us.leaseweb.net/epel/6/x86_64/epel-release-6-8.noarch.rpm
+ 
+#装包
+yum -y install kernel-devel*  dkms  sysdig
+
+sysdig依赖的两个包，一个是kernel-devel ,一个是dkms包，DKMS全称是Dynamic Kernel Module Support （动态内核模块支持），即在内核版本变动之后可以自动重新生成新驱动模块。想要了解的可以自行GOOGLE 。
+
+2、ubuntu下的安装
+ 
+curl -s https://s3.amazonaws.com/download.draios.com/DRAIOS-GPG-KEY.public | apt-key add -
+curl -s -o /etc/apt/sources.list.d/draios.list 
+apt-get update
+apt-get -y install linux-headers-$(uname -r)
+apt-get -y install sysdig
+
+
+
+
+
+
+
 2).安装完成后输入sysdig  报错error opening device /dev/sysdig0. Make sure you have root credentials and that the sysdig-probe module is loaded.
 输入命令
 whereis sysdig-probe-loader
@@ -56,6 +92,9 @@ sysdig 的输出
 第八列是事件参数。
 
 说明：像 tcpdump 一样，Sysdig 命令也可以用 CTRL+C 来强制停止命令行输出。
+
+
+
 
 
 Sysdig 语法和 tcpdump 类似，特别是保存和读取输出文件的时候。Sysdig 所有的输出都可以保存成一个文件。
