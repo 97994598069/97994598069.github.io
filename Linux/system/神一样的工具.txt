@@ -67,11 +67,7 @@ apt-get -y install linux-headers-$(uname -r)
 apt-get -y install sysdig
 
 
-
-
-
-
-
+##安装完成后需要输入如下命令/usr/bin/sysdig-probe-loader  否则报错
 2).安装完成后输入sysdig  报错error opening device /dev/sysdig0. Make sure you have root credentials and that the sysdig-probe module is loaded.
 输入命令
 whereis sysdig-probe-loader
@@ -338,71 +334,4 @@ HTTP 抓包分析
 
 查看 nginx 进程的 accept 链接
 #sysdig proc.name=nginx and evt.type=accept
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
