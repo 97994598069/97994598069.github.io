@@ -1,0 +1,123 @@
+#轻量级批量服务器管理工具
+
+
+pnuke  远程杀进程，但是当有多个tomcat在跑的时候不能定向杀，只能全部杀 ###指定java
+pssh 常用参数-i 
+
+当使用pssh进程远程杀进程的时候不能指定-i，否则报错
+pssh -h ip_list "ps -ef | grep "${name}_${port}" | grep -v "grep" | awk  '{print $2}' |xargs kill -9" &>/dev/null  ###定向杀死tomcat的，例如tomcat_jenkins_8081
+
+
+
+##当使用ssh定向杀进程的时候，需要两次awk
+    pid=$(ssh appuser@$ip "ps -ef | grep "_$port" | grep -v "grep" | awk  '{print $2}'" | awk '{print $2}')
+    if [[ ! -z "$pid" ]];then
+       ssh appuser@$ip "kill -9 ${pid}"
+    fi
+	
+	
+大致步骤：
+第一步：获取进程号
+pid=$(ssh root@$remote_host "ps -ef | grep ${tomcat_name} | grep -v grep | awk  '{print $2}'"| awk '{print $2}')
+
+第二步：杀掉进程
+ssh root@$remote_host "kill -9 ${pid}"
+
+
+
+注意：
+杀掉远程进程跟杀掉本地进程不一样，杀掉本地进程只需要一句话就可以搞定了：
+ps -ef | grep ${tomcat_name} | grep -v grep | awk  '{print $2}'|xargs kill -9
+
+
+但是杀掉远程的进程不一样，因为过滤的结果会被整体返回，如果在远程执行这个杀掉进程的命令：
+ssh root@$remote_host "ps -ef | grep ${tomcat_name} | grep -v grep | awk  '{print $2}' | xargs  kill -9"
+你会得到错误的提示：
+kill process java -jar tomcat-8081
+kill: can't find process "root"
+kill: can't find process "09:42"
+kill: can't find process "?"
+kill: can't find process "00:00:44"
+kill: can't find process "/opt/tools/jdk1.7.0_67/bin/java"
+kill: can't find process "-Djava.util.logging.config.file=/opt/tools/tomcat-8081/conf/logging.properties"
+kill: can't find process "-Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager"
+kill: can't find process "-Ddisconf.env=rd"
+kill: can't find process "-Ddisconf.conf_server_host=192.168.100.15:8015"
+kill: can't find process "-Ddisconf.app=ync365"
+kill: can't find process "-Ddisconf.version=1.0.0"
+kill: can't find process "-Ddisconf.user_define_download_dir=./classes"
+kill: can't find process "-Ddisconf.enable.remote.conf=true"
+kill: can't find process "-Djdk.tls.ephemeralDHKeySize=2048"
+kill: can't find process "-Djava.endorsed.dirs=/opt/tools/tomcat-8081/endorsed"
+kill: can't find process "-classpath"
+kill: can't find process "/opt/tools/tomcat-8081/bin/bootstrap.jar:/opt/tools/tomcat-8081/bin/tomcat-juli.jar"
+kill: can't find process "-Dcatalina.base=/opt/tools/tomcat-8081"
+kill: can't find process "-Dcatalina.home=/opt/tools/tomcat-8081"
+kill: can't find process "-Djava.io.tmpdir=/opt/tools/tomcat-8081/temp"
+kill: can't find process "org.apache.catalina.startup.Bootstrap"
+kill: can't find process "start"
+
+
+这是因为你执行的远程命令会返回如下结果：
+root      7314     1  7 09:51 pts/0    00:00:17 /opt/tools/jdk1.7.0_67/bin/java -Djava.util.logging.config.file=/opt/tools/apache-tomcat-7.0.70/conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager -Djdk.tls.ephemeralDHKeySize=2048 -Djava.endorsed.dirs=/opt/tools/apache-tomcat-7.0.70/endorsed -classpath /opt/tools/apache-tomcat-7.0.70/bin/bootstrap.jar:/opt/tools/apache-tomcat-7.0.70/bin/tomcat-juli.jar -Dcatalina.base=/opt/tools/apache-tomcat-7.0.70 -Dcatalina.home=/opt/tools/apache-tomcat-7.0.70 -Djava.io.tmpdir=/opt/tools/apache-tomcat-7.0.70/temp org.apache.catalina.startup.Bootstrap start
+
+然后 xargs kill -9 会把上面的所有的空格隔开的进程给删除一遍，实际上他们根本不是进程，只是一个进程下面返回的描述而已，我们真正需要的进程号是第二个 7314 这个进程，因此我们需要把返回的字符串再次过滤一遍，这样就能够得到真正的进程号了。
+
+
+
++++++++++++++++++++++++++++++++++++++
+远程传参
+需求，远程服务器上多个部署多个tomcat，在使用shell脚本的时候需要将不同的tomcat名字定成变量，进行定向重启
+startcmd="/usr/local/${name}_${port}/bin/startup.sh"  ##可以将启动命令设置为一个变量
+pssh -h ip_list -i "su appuser -c "$startcmd""  ##批量启动即可
+
+
+这里分享一个远程重启tomcat脚本：
+[root@192_168_0_37 scripts]# cat restart.sh
+#!/bin/bash
+name="$1"
+warpath="/mnt/tomcats/$name/webapps"
+for ip in $(ls /opt/tomcat/log/newmedia/$name |awk -F '_' '{print $1}')
+  do
+    port=$(ls /opt/tomcat/log/newmedia/$name |grep "$ip" |awk -F '_' '{print $2}')
+    pid=$(ssh appuser@$ip "ps -ef | grep "_$port" | grep -v "grep" | awk  '{print $2}'" | awk '{print $2}')
+    if [[ ! -z "$pid" ]];then
+       ssh appuser@$ip "kill -9 ${pid}"
+    fi
+    ssh appuser@$ip "\rm -rf $warpath/*"
+    sleep 2
+    ssh appuser@$ip "sh /mnt/tomcats/*_$port/bin/startup.sh"
+done
+
+
+
+[root@localhost ~]# cat test.sh 
+#!/bin/bash
+#source /etc/profile 
+name="$1"
+port="8080"
+startcmd="/usr/local/${name}_${port}/bin/startup.sh"
+
+##杀 -i是打印到当前屏幕，这里不需要
+pssh -h ip_list "ps -ef | grep "${name}_${port}" | grep -v "grep" | awk  '{print $2}' |xargs kill -9" &>/dev/null
+
+#起
+sleep 1
+pssh -h ip_list -i "su appuser -c "$startcmd""
+
++++++++++++++++++++++++++++++++++++++++++++
+
+
+远程打通了root的ssh，但是远程服务器上的tomcat是普通用户运行的，普通用户没有打通
+如果直接使用变量
+ssh root@192.168.36.27 "su appuser -c "sh /usr/local/${name}_8080/bin/startup.sh""  #则变量传递不过去
+若
+ssh root@192.168.36.27 'su appuser -c "sh /usr/local/${name}_8080/bin/startup.sh"'  ##不能使用变量
+
+此时可以同上，将启动命令赋值为变量，然后执行即可,如下：
+[root@localhost zz]# cat 2.sh 
+name="$1"
+port="8080"
+startcmd="/usr/local/${name}_${port}/bin/startup.sh"  ##将启动命令赋值变量
+
+ssh root@192.168.36.27 "su appuser -c "$startcmd""  ##启动
