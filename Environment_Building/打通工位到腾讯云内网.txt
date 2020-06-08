@@ -310,7 +310,27 @@ iptables -A INPUT -p tcp --dport 25632 -j ACCEPT
 iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE   ###网段为虚拟ip段
 service iptables save
 
-	
+{{ ##备注：此时的防火墙不一定是运行状态，关闭状态一样生效
+[root@192_168_0_37 ~]# service iptables status
+Redirecting to /bin/systemctl status iptables.service
+● iptables.service - IPv4 firewall with iptables
+   Loaded: loaded (/usr/lib/systemd/system/iptables.service; enabled; vendor preset: disabled)
+   Active: inactive (dead) since Mon 2020-06-08 09:02:09 CST; 38min ago
+  Process: 32433 ExecStop=/usr/libexec/iptables/iptables.init stop (code=exited, status=0/SUCCESS)
+  Process: 30270 ExecStart=/usr/libexec/iptables/iptables.init start (code=exited, status=0/SUCCESS)
+ Main PID: 30270 (code=exited, status=0/SUCCESS)
+
+Jun 07 12:56:51 192_168_0_37 systemd[1]: Starting IPv4 firewall with iptables...
+Jun 07 12:56:51 192_168_0_37 iptables.init[30270]: iptables: Applying firewall rules: [  OK  ]
+Jun 07 12:56:51 192_168_0_37 systemd[1]: Started IPv4 firewall with iptables.
+Jun 08 09:02:09 192_168_0_37 systemd[1]: Stopping IPv4 firewall with iptables...
+Jun 08 09:02:09 192_168_0_37 iptables.init[32433]: iptables: Setting chains to policy ACCEPT: filter nat [  OK  ]
+Jun 08 09:02:09 192_168_0_37 iptables.init[32433]: iptables: Flushing firewall rules: [  OK  ]
+Jun 08 09:02:09 192_168_0_37 iptables.init[32433]: iptables: Unloading modules: [  OK  ]
+Jun 08 09:02:09 192_168_0_37 systemd[1]: Stopped IPv4 firewall with iptables.
+}}
+
+
 	
 20. 配置 OpenVPN 客户端
  1) 创建 admin.ovpn 文件
