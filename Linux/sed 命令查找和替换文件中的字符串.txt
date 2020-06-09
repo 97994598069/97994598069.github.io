@@ -45,6 +45,17 @@ sed 's/\/bin\/bash/\/usr\/bin\/fish/g' sed-test.txt
 或者
 sed 's|/bin/bash|/usr/bin/fish/|g' sed-test.txt
 
+##打印匹配行及其下面1行
+[root@vm02 zz]# sed -n '/fdhdhe/, +1p' ./QQAPPID.txt 
+APP ID：fdhdhe
+APP Key：gdgddgfdhdh
+
+
+
+sed –n '/la/!p' 1.txt  ##打印不带la的行
+
+
+
 
 11) 如何以给定的模式来查找和替换数字
 sed 's/[0-9]/number/g' sed-test.txt
