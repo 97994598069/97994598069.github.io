@@ -1,0 +1,248 @@
+-C 清除表中所有的记录
+-A --add-service在服务器列表中新添加一条新的虚拟服务器记录
+-t 表示为tcp服务
+-u 表示为udp服务
+-s --scheduler 使用的调度算法， rr | wrr | lc | wlc | lblb | lblcr | dh | sh | sed | nq 默认调度算法是 wlc
+ipvsadm -a -t 192.168.3.187:80 -r 192.168.200.10:80 -m -w 1
+-a --add-server 在服务器表中添加一条新的真实主机记录
+-t --tcp-service 说明虚拟服务器提供tcp服务
+-u --udp-service 说明虚拟服务器提供udp服务
+-r --real-server 真实服务器地址
+-m --masquerading 指定LVS工作模式为NAT模式  
+-g --gatewaying 指定LVS工作模式为DR模式（也是LVS默认的模式）
+-i --ipip 指定LVS的工作模式为隧道模式
+-w --weight 真实服务器的权值
+-p 会话保持时间，定义流量呗转到同一个realserver的会话存留时间
+
+
+ipvsadm -ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.182.140:8141 wrr
+  -> 192.168.183.27:8141          Route   1      171        2153      
+  -> 192.168.183.28:8141          Route   1      150        2148      
+  -> 192.168.183.29:8141          Route   1      154        2150     
+InActConn 指非活跃连接数，我们将处于 TCP ESTABLISH 状态以外的连接都称为不活跃连接。例如处于 SYN_RECV 状态的连接，处于 TIME_WAIT 状态的连接等。
+
+
+
+
+ipvsadm -ln  --rate    ##--rate选项是显示速率信息
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port                 CPS    InPPS   OutPPS    InBPS   OutBPS
+  -> RemoteAddress:Port
+TCP  192.168.182.140:8141               54      288        0    31825        0
+  -> 192.168.183.27:8141                18       95        0    10384        0
+  -> 192.168.183.28:8141                18       96        0    10884        0
+  -> 192.168.183.29:8141                18       97        0    10556        0
+
+CPS （current connection rate） 每秒连接数
+InPPS （current in packet rate） 每秒的入包个数
+OutPPS （current out packet rate） 每秒的出包个数
+InBPS （current in byte rate） 每秒入流量（字节）
+OutBPS （current out byte rate） 每秒入流量（字节）
+
+
+
+
+ipvsadm -l --stats  ##--stats 选项是统计自该条转发规则生效以来的
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port               Conns   InPkts  OutPkts  InBytes OutBytes
+  -> RemoteAddress:Port
+TCP  192.168.184.140:8141          236321K    1284M        0     141G        0
+  -> 192.168.183.27:8141          78774050  428108K        0   47298M        0
+  -> 192.168.183.28:8141          26222992  143000K        0   16249M        0
+  -> 192.168.183.29:8141          26222982  143012K        0   16252M        0
+
+Conns （connections scheduled） 已经转发过的连接数
+InPkts （incoming packets） 入包个数
+OutPkts （outgoing packets） 出包个数
+InBytes （incoming bytes） 入流量（字节）
+OutBytes （outgoing bytes） 出流量（字节）
+
+
+修改 LVS 表中的 fin_timeout 使用指令如下  
+ipvsadm --set  900 60 300   ##中间的 60 就是 tcp 的 fin_timeout 时间  
+
+查看默认的值使用如下命令：
+ipvsadm -ln --timeout
+Timeout (tcp tcpfin udp): 900 120 300
+
+
+
++++++++++++++++++++++++++++++++++++++++++++
+ipvsadm命令选项
+    -A --add-service 在内核的虚拟服务器表中添加一条新的虚拟服务器记录。也就是增加一台新的虚拟服务器(VIP)。
+    -E --edit-service 编辑内核虚拟服务器表中的一条虚拟服务器记录。
+    -D --delete-service 删除内核虚拟服务器表中的一条虚拟服务器记录。
+    -C --clear 清除内核虚拟服务器表中的所有记录。
+    -R --restore 恢复虚拟服务器规则
+    -S --save 保存虚拟服务器规则,备份输出为-R 选项可读的格式
+    -a --add-server 在内核虚拟服务器表的一条记录里添加一条新的真实服务器记录(RIP)。也就是在一个虚拟服务器中增加一台新的真实服务器
+    -e --edit-server 编辑一条虚拟服务器记录中的某条真实服务器记录
+    -d --delete-server 删除一条虚拟服务器记录中的某条真实服务器记录
+    -L|-l --list 显示内核虚拟服务器表
+    -Z --zero 虚拟服务表计数器清零(清空当前的连接数量等)
+    --set tcp tcpfin udp 设置连接超时值
+    --start-daemon 启动同步守护进程。他后面可以是master 或backup,用来说明LVS Router 是master 或是backup。在这个功能上也可以采用keepalived 的VRRP 功能。
+    --stop-daemon 停止同步守护进程
+    -h --help 显示帮助信息
+    -p --persistent [timeout] 持久稳固的服务(持久性连接)。这个选项的意思是来自同一个客户的多次请求,将被同一台真实的服务器处理。timeout 的默认值为360 秒。
+    -t --tcp-service service-address 说明虚拟服务器提供的是tcp 的服务[vip:port] or [real-server-ip:port]
+    -f --fwmark-service fwmark 说明是经过iptables 标记过的服务类型。
+    -u --udp-service service-address 说明虚拟服务器提供的是udp 的服务[vip:port] or [real-server-ip:port]
+    -s --scheduler scheduler 使用的调度算法,有这样几个选项 rr|wrr|lc|wlc|lblc|lblcr|dh|sh|sed|nq,默认的调度算法是： wlc.
+    -M --netmask netmask     persistent granularity mask
+    -r --real-server server-address 真实的服务器[Real-Server:port]
+    -g --gatewaying 指定LVS 的工作模式为DR直接路由模式(也是LVS 默认的模式)
+    -i --ipip 指定LVS 的工作模式为隧道模式
+    -m --masquerading 指定LVS 的工作模式为NAT 模式
+    -w --weight weight 真实服务器的权值
+    --mcast-interface interface 指定组播的同步接口
+    -c --connection 显示LVS 目前的连接 如：ipvsadm -L -c
+    --timeout 显示tcp tcpfin udp 的timeout 值 如：ipvsadm -L --timeout
+    --daemon 显示同步守护进程状态
+    --stats 显示统计信息
+    --rate 显示速率信息
+    --sort 对虚拟服务器和真实服务器排序输出
+    -n --numeric  输出IP地址和端口的数字形式
+	
+	
+案例1：跟虚拟服务器相关的参数：
+   -A --add-service 在内核的虚拟服务器表中添加一条新的虚拟服务器记录。也就是增加一台新的虚拟服务器(VIP)。
+    -E --edit-service 编辑内核虚拟服务器表中的一条虚拟服务器记录。
+    -D --delete-service 删除内核虚拟服务器表中的一条虚拟服务器记录。
+    -C --clear 清除内核虚拟服务器表中的所有记录。
+    -R --restore 恢复虚拟服务器规则
+    -S --save 保存虚拟服务器规则,备份输出为-R 选项可读的格式
+	
+添加一条虚拟服务器记录：ipvsadm -A -t vip:端口 [-s rr] #-s后跟调度算法，若不跟-s则默认为wlc，其他算法还有wrr、dh、sh、lblc、lblcr、lc等
+[root@lvs-server ~]# ipvsadm -A -t 192.168.0.200:80
+[root@lvs-server ~]# ipvsadm -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+-> RemoteAddress:Port Forward Weight ActiveConn InActConn
+TCP 192.168.0.200:80 wlc
+
+
+转发方式：
+格式：
+ipvsadm -a -t VIP:端口 -r RIP:端口 -m [-w 1]       #-m-->LVS-NAT，-w 为加权
+ipvsadm -a -t VIP:端口 -r RIP:端口 -g [-w 1]　　# -g-->LVS-DR，-g可省略，默认为DR模式
+ipvsadm -a -t VIP:端口 -r RIP:端口 -i [-w 1]　　# -i-->LVS-TUN
+
+[root@lvs-server ~]# ipvsadm -a -t 192.168.0.200:80 -r 10.4.7.11:80 -m   #将vip192.168.0.200的80端口的数据转发到RS服务器10.4.7.11的80端口
+[root@lvs-server ~]# ipvsadm -a -t 192.168.0.200:80 -r 10.4.7.10:8080 -m   #将vip192.168.0.200的80端口的数据转发到RS服务器10.4.7.10的8080端口
+值得注意的是：该方式添加的规则重启服务器后规则就消失了，因此应该将该规则保存在文件中，待重启后可以直接从文件中恢复规则
+
+保存规则：
+[root@lvs-server ~]# ipvsadm -Sn   #查看保存的内容，该方式是没有做保存，只是显示出来保存规则内容
+-A -t 192.168.0.200:80 -s wlc
+-a -t 192.168.0.200:80 -r 10.4.7.10:8080 -m -w 1
+-a -t 192.168.0.200:80 -r 10.4.7.11:80 -m -w 1
+
+[root@lvs-server ~]# ipvsadm -Sn > /etc/sysconfig/ipvsadm  #将规则保存到/etc/sysconfig/ipvsadm文件中
+
+
+
+清空规则：
+[root@lvs-server ~]# ipvsadm -C
+[root@lvs-server ~]# ipvsadm -Ln         #此时规则显示为空
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+-> RemoteAddress:Port Forward Weight ActiveConn InActConn
+
+
+通过文件还原规则：
+[root@lvs-server ~]# ipvsadm -R < /etc/sysconfig/ipvsadm
+[root@lvs-server ~]# ipvsadm -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+-> RemoteAddress:Port Forward Weight ActiveConn InActConn
+TCP 192.168.0.200:80 wlc
+-> 10.4.7.10:8080 Masq 1 0 0 
+-> 10.4.7.11:80 Masq 1 0 0
+
+
+[root@lvs-server ~]# cat /usr/lib/systemd/system/ipvsadm.service 
+[Unit]
+Description=Initialise the Linux Virtual Server
+After=syslog.target network.target
+ 
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "exec /sbin/ipvsadm-restore < /etc/sysconfig/ipvsadm"   #重启服务器后，默认从/etc/sysconfig/ipvsadm该文件中读取规则，将ipvsadm服务设置开机自启动后开机将自动加载规则
+ExecStop=/bin/bash -c "exec /sbin/ipvsadm-save -n > /etc/sysconfig/ipvsadm"    #停止ipvsadm服务时(执行systemctl stop ipvsadm时)，自动将规则写入/etc/sysconfig/ipvsadm中
+ExecStop=/sbin/ipvsadm -C
+RemainAfterExit=yes
+ 
+[Install]
+WantedBy=multi-user.target
+
+
+查询命令
+[root@lvs-server ~]# ipvsadm -L  # 查看lvs负载均衡信息
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+-> RemoteAddress:Port Forward Weight ActiveConn InActConn
+TCP 192.168.0.200:http wlc
+-> 10.4.7.10:webcache Masq 1 0 0    #此处显示的不一定正确
+-> 10.4.7.11:http Masq 1 0 0
+
+
+[root@lvs-server ~]# ipvsadm -Ln   #-Ln:输出IP地址和端口的数字形式
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+-> RemoteAddress:Port Forward Weight ActiveConn InActConn
+TCP 192.168.0.200:80 wlc
+-> 10.4.7.10:8080 Masq 1 0 0 
+-> 10.4.7.11:80 Masq 1 0 0
+
+
+[root@lvs-server ~]# ipvsadm -Lcn
+IPVS connection entries
+pro expire    state          source           virtual      destination
+TCP 14:50 ESTABLISHED 192.168.0.100:63369 192.168.0.200:80 10.4.7.11:80
+TCP 14:50 ESTABLISHED 192.168.0.100:63368 192.168.0.200:80 10.4.7.10:8080#协议  连接时间  连接状态        CIP                VIP            RIP
+
+
+[root@lvs-server ~]# ipvsadm -L --rate    # 显示速率信息
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port                 CPS    InPPS   OutPPS    InBPS   OutBPS
+  -> RemoteAddress:Port
+TCP  192.168.0.200:80                    0        1        1      213       92
+  -> 10.4.7.10:8080                      0        0        0        6        4
+  -> 10.4.7.11:80                        0        1        0      207       88
+  
+  
+
+[root@lvs-server ~]# ipvsadm -L --sort     # 对虚拟服务器和真是服务器排序输出
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.0.200:80 wlc
+  -> 10.4.7.10:8080               Masq    1      0          0         
+  -> 10.4.7.11:80                 Masq    1      0          1  
+  
+
+
+[root@lvs-server ~]# ipvsadm -L --stats    # 显示统计信息
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port               Conns   InPkts  OutPkts  InBytes OutBytes
+  -> RemoteAddress:Port
+TCP  192.168.0.200:80                   10       70       43    10759     4658
+  -> 10.4.7.10:8080                      5       50       33     9899     4198
+  -> 10.4.7.11:80                        5       20       10      860      460
+  
+  
+[root@lvs-server ~]# ipvsadm -L --timeout   # 显示tcp tcpfin udp 的timeout值
+Timeout (tcp tcpfin udp): 900 120 300
+
+
+
+
+
+
+
+
