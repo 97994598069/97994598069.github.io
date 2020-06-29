@@ -100,3 +100,50 @@ net.ipv4.tcp_max_tw_buckets = 5000 #表示系统同时保持TIME_WAIT的最大�
 
 
 netstat -ant |grep '^tcp' |awk '{print $NF}' |sort |uniq -c |sort -rn
+
+
+服务器初始化系统参数：
+
+常用：
+sysctl -n net.core.netdev_max_backlog  ##查看系统该参数的值  ##或者直接sysctl net.core.netdev_max_backlog
+sysctl -w net.core.netdev_max_backlog=8192  ##临时写入，重启无效
+
+
+fs.file-max = 999999：这个参数表示进程（比如一个worker进程）可以同时打开的最大句柄数，这个参数直线限制最大并发连接数，需根据实际情况配置。 默认为1000
+
+net.ipv4.tcp_max_tw_buckets = 6000 #这个参数表示操作系统允许TIME_WAIT套接字数量的最大值，如果超过这个数字，TIME_WAIT套接字将立刻被清除并打印警告信息。该参数默认为180000，过多的TIME_WAIT套接字会使Web服务器变慢。
+注：主动关闭连接的服务端会产生TIME_WAIT状态的连接
+
+
+net.ipv4.ip_local_port_range = 1024 65000 #允许系统打开的端口范围。默认值为32768到60999，也就是说共有28231个端口，如果做为客户端2ML（4分钟）超时的话，系统默认的秒并发即是28231/（4*60）=117个
+
+net.ipv4.tcp_tw_recycle = 0 #启用timewait快速回收。  ##对于nat网络有可能会访问不了，不建议开启， 1表示开启，0表示关闭
+
+net.ipv4.tcp_tw_reuse = 1 #开启重用。允许将TIME-WAIT sockets重新用于新的TCP连接。这对于服务器来说很有意义，因为服务器上总会有大量TIME-WAIT状态的连接。
+
+net.ipv4.tcp_keepalive_time = 30：这个参数表示当keepalive启用时，TCP发送keepalive消息的频度。默认是2小时，若将其设置的小一些，可以更快地清理无效的连接。
+##使用场景: https://www.cnblogs.com/bugutian/p/12939473.html
+
+net.ipv4.tcp_syncookies = 1 #开启SYN Cookies，当出现SYN等待队列溢出时，启用cookies来处理。
+
+
+net.core.somaxconn = 40960 #web 应用中 listen 函数的 backlog 默认会给我们内核参数的 net.core.somaxconn 限制到128，而nginx定义的NGX_LISTEN_BACKLOG 默认为511，所以有必要调整这个值。
+注：对于一个TCP连接，Server与Client需要通过三次握手来建立网络连接.当三次握手成功后,我们可以看到端口的状态由LISTEN转变为ESTABLISHED,接着这条链路上就可以开始传送数据了.每一个处于监听(Listen)状态的端口,都有自己的监听队列.监听队列的长度与如somaxconn参数和使用该端口的程序中listen()函数有关
+somaxconn参数:定义了系统中每一个端口最大的监听队列的长度,这是个全局的参数,默认值为128，对于一个经常处理新连接的高负载 web服务环境来说，默认的 128 太小了。大多数环境这个值建议增加到 1024 或者更多。大的侦听队列对防止拒绝服务 DoS 攻击也会有所帮助。
+
+
+net.core.netdev_max_backlog = 262144 #每个网络接口接收数据包的速率比内核处理这些包的速率快时，允许送到队列的数据包的最大数目。
+
+net.ipv4.tcp_max_syn_backlog = 262144#这个参数标示TCP三次握手建立阶段接受SYN请求队列的最大长度，默认为1024，将其设置得大一些可以使出现Nginx繁忙来不及accept新连接的情况时，Linux不至于丢失客户端发起的连接请求。
+
+net.ipv4.tcp_rmem = 10240  87380  12582912#这个参数定义了TCP接受缓存（用于TCP接受滑动窗口）的最小值、默认值、最大值。
+net.ipv4.tcp_wmem = 10240 87380 12582912：这个参数定义了TCP发送缓存（用于TCP发送滑动窗口）的最小值、默认值、最大值。
+net.core.rmem_default = 6291456：这个参数表示内核套接字接受缓存区默认的大小。
+net.core.wmem_default = 6291456：这个参数表示内核套接字发送缓存区默认的大小。
+net.core.rmem_max = 12582912：这个参数表示内核套接字接受缓存区的最大大小。
+net.core.wmem_max = 12582912：这个参数表示内核套接字发送缓存区的最大大小。
+
+
+
+
+
