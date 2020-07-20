@@ -12,20 +12,29 @@ mv /etc/yum.repos.d/CentOS7-Base-163.repo /etc/yum.repos.d/CentOS-Base.repo
 yum clean all 
 yum makecache
 
+4)更新系统
+yum update ##说明：升级所有包同时也升级软件和系统内核     ##yum upgrade：只升级所有包，不升级软件和系统内核
+
+
+
+
+
 2.安装常用工具
 yum install ntpdate lsof net-tools gcc gcc-c++ make mtr nethogs iftop lrzsz vim openssh* psmisc openssl* ncurses ncurses-devel -y
 
 
 安装最新版的sysstat
 cd /usr/local/src
-wget http://ftp5.gwdg.de/pub/linux/archlinux/community/os/x86_64//sysstat-12.1.5-1-x86_64.pkg.tar.xz
- （http://pagesperso-orange.fr/sebastien.godard/sysstat-12.2.0.tar.gz）
-tar xf sysstat-12.1.5-1-x86_64.pkg.tar.xz
-cp /usr/local/src/usr/bin/* /usr/bin
+wget http://pagesperso-orange.fr/sebastien.godard/sysstat-12.3.3.tar.gz
+tar xf sysstat-12.3.3.tar.gz
+cd sysstat-12.3.3 
+./configure 
+make && make install 
 
 测试使用：
 pidstat -d 1  ##老版本没有io的延迟iodelay，新版本有
-pidstat -d 1 ##也多了好多
+pidstat -u 1 ##也多了iowait%
+sar -n DEV 1 ##多了 %ifutil
 
 
 3.系统时间同步
@@ -88,7 +97,7 @@ source /etc/profile
 
 6.tcp快速回收
 cp /etc/sysctl.conf /etc/sysctl.conf.default
-fs.file-max = 51200   #提高整个系统的文件限制
+fs.file-max = 99999   #提高整个系统的文件限制
 net.ipv4.tcp_syncookies = 1  #表示开启SYN Cookies。当出现SYN等待队列溢出时，启用cookies来处理，可防范少量SYN攻击，默认为0，表示关闭；
 net.ipv4.tcp_tw_reuse = 1  #表示开启重用。允许将TIME-WAIT sockets重新用于新的TCP连接，默认为0，表示关闭；
 net.ipv4.tcp_tw_recycle = 0 ##表示开启TCP连接中TIME-WAIT sockets的快速回收，默认为0，表示关闭；为了对NAT设备更友好，建议设置为0
