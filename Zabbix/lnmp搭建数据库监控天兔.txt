@@ -1,0 +1,487 @@
+Lepus(天兔)数据库监控系统是是一款专业、强大的数据库监控管理系统，通过Lepus可以监控数据库的实时健康和各项性能指标，目前已支持MySQL、Oracle、MongoDB、Redis数据库的全面监控，Lepus能够查看各种实时性能状态指标，并且对监控、性能数据进行统计分析。
+首先安装pip
+1、安装epel-release
+[root@localhost ~]# yum -y install epel-release
+2、安装python-pip
+[root@localhost ~]# yum -y install python-pip
+3、升级pip
+[root@localhost ~]# pip install --upgrade pip
+4、检查pip版本
+[root@localhost ~]# pip --version
+
+ 5、修改pip源
+复制代码
+[root@localhost ~]# cd ~  #回到家目录
+[root@localhost ~]# mkdir .pip  #创建.pip目录
+[root@localhost ~]# cd .pip
+[root@localhost .pip]# touch pip.conf  #创建pip.conf配置文件
+[root@localhost .pip]# vi pip.conf
+#在配置文件中增加如下内容
+[global]
+index-url = http://pypi.douban.com/simple
+[install]
+trusted-host = pypi.douban.com
+#配置文件保存
+
+
+1.安装 MySQLdb for python （如果需要监控MySQL则必须安装）
+MySQLdb为Python连接和操作MySQL的类库，如果您准备使用lepus系统监控MySQL数据库，那么该模块必须安装。 
+安装步骤如下： 
+wget http://www.mtop.cc/software/MySQLdb-python.zip   ##https://files.pythonhosted.org/packages/a5/e9/51b544da85a36a68debe7a7091f068d802fc515a3a202652828c73453cad/MySQL-python-1.2.5.zip
+unzip MySQLdb-python.zip 
+cd MySQLdb1-master/ 
+which mysql_config  ##若没有找到则需要安装yum -y install mysql-devel
+ /usr/local/mysql/bin/mysql_config 
+
+vim site.cfg 修改如下： 
+mysql_config = /usr/local/mysql/bin/mysql_config 
+
+python setup.py build 
+
+python setup.py install 
+
+
+常见错误解决： 
+1).如果编译python出现如下问题 
+/usr/bin/ld: cannot find -lpython2.7 
+collect2: ld returned 1 exit status 
+error: command 'gcc' failed with exit status 1 
+
+请按如下步骤处理： 
+A.检查并安装python-devel包 
+# yum -y install python-devel 
+
+B.将libpython2.7.so库文件建立软连接到/usr/lib下 
+32位服务器下执行 
+# ln -s /usr/local/Python2.7/lib/libpython2.7.so /usr/lib/libpython2.7.so 
+
+64位服务器下执行 
+# ln -s /usr/local/Python2.7/lib/libpython2.7.so /usr/lib64/libpython2.7.so 
+
+C.检查下/etc/ld.so.conf是否包含/usr/local/Python2.7/lib 
+#vi /etc/ld.so.conf 添加/usr/local/Python2.7/lib 
+#/sbin/ldconfig 
+
+{{
+也可以采用下面这种方式安装
+2、安装python基础环境
+我这里使用Centos7默认的python就好（Python版本要求为Python2.6以上,不支持Python3），MySQL-python必须安装
+yum -y install mysql-devel
+yum -y install python-devel
+pip install MySQL-python==1.2.5  ##如果不安装上述两个步骤可能会报错
+}}
+
+
+
+安装cx_oracle 
+[root@westserver software]# tar zxvf cx_Oracle-5.1.2.tar.gz  ##https://oracle.github.io/python-cx_Oracle/
+[root@westserver software]# cd cx_Oracle-5.1.2 
+[root@westserver cx_Oracle-5.1.2]# python setup.py build 
+[root@westserver cx_Oracle-5.1.2]# python setup.py install 
+
+{{
+或者如下
+2.安装cx_Oraclep
+python -m pip install cx-oracle==5.3
+}}
+
+
+3.安装Pymongo for python （如果需要监控Mongodb则必须安装）
+pymongo为Python连接和操作MongoDB的类库，如果您准备使用lepus系统监控MongoDBs数据库，那么该模块必须安装。 
+安装步骤如下: 
+下载pymongo https://pypi.python.org/packages/source/p/pymongo/ 
+wget www.mtop.cc/software/pymongo-2.7.tar.gz 
+tar zxvf pymongo-2.7.tar.gz 
+cd pymongo-2.7 
+python setup.py install 
+
+{{
+这里还是采用pip安装
+python -m pip install pymongo
+python -m pip install --upgrade pymongo
+}}
+
+
+4.安装Redis 驱动 （如果需要监控Redis则必须安装）
+[root@westserver software]# tar zxvf redis-py-2.10.3.tar.gz  ##https://pypi.org/project/redis/#files
+[root@westserver software]# cd redis-2.10.3/ 
+[root@westserver redis-2.10.3]# python setup.py install 
+
+{{
+这里采用pip安装
+pip install redis
+}}
+
+
+
+
+
+
+安装nginx：
+yum install -y wget gcc gcc-c++ make pcre pcre-devel zlib zlib-devel openssl openssl-devel lrzsz 
+cd /usr/local/src
+wget 'http://nginx.org/download/nginx-1.14.2.tar.gz'
+tar -zxvf nginx-1.14.2.tar.gz
+cd nginx-1.14.2
+./configure --prefix=/usr/local/nginx
+make && make install
+
+
+
+安装mysql  略：也可以使用目前已有的mysql节点
+mysql -uroot -p
+mysql> create database lepus default character set utf8;
+mysql> grant select,insert,update,delete,create on lepus.* to 'lepus_user'@'localhost' identified by 'blog.whsir.com';  ##也可以直接使用root账户，或者其他有权限的账户
+mysql> flush privileges;
+mysql> quit
+
+
+
+安装php： ##好像不支持php的高版本，php5最适合
+yum -y install epel-release
+yum -y install  gcc gcc-c++ make pcre pcre-devel zlib zlib-devel openssl openssl-devel libxml2 libxml2-devel libcurl libcurl-devel libjpeg libjpeg-devel libpng libpng-devel freetype freetype-devel openldap openldap-devel libmcrypt libmcrypt-devel
+
+cd /usr/local/src/
+wget 'http://hk1.php.net/distributions/php-5.6.40.tar.gz'
+tar -zxf php-5.6.40.tar.gz
+cd php-5.6.40
+cp -frp /usr/lib64/libldap* /usr/lib/  ##否则有可能报错Cannot find ldap libraries in /usr/lib.
+./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --enable-ctype --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-freetype-dir --with-jpeg-dir --with-png-dir --with-zlib --with-libxml-dir=/usr --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem --enable-inline-optimization --with-curl --enable-mbregex --enable-mbstring --with-mcrypt --with-gd --enable-gd-native-ttf --with-openssl --with-mhash --enable-pcntl --enable-sockets --with-ldap-sasl --with-xmlrpc --enable-zip --enable-soap --with-gettext --enable-fpm --with-ldap
+
+make && make install
+{{针对报错undefined reference to symbol 'ber_strdup'的解决
+编辑MakeFile 
+找到 开头是 'EXTRA_LIBS' 这一行 在结尾加上 '-llber' 然后执行 make && make install }}
+
+cp php.ini-production /usr/local/php/etc/php.ini
+
+
+环境变量：export PATH=$PATH:/usr/local/php/sbin/:/usr/local/php/bin/
+检查配置文件：/usr/local/php/sbin/php-fpm -t
+
+使用默认配置文件：mv /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf
+
+使用默认配置文件：mv /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf
+
+vim /usr/lib/systemd/system/php-fpm.service
+[Unit]
+Description=php-fpm
+After=network.target
+[Service]
+Type=forking
+ExecStart=/usr/local/php/sbin/php-fpm
+[Install]
+WantedBy=multi-user.target
+
+
+启动php-fpm
+systemctl start php-fpm
+
+nginx的默认配置无法处理php程序/usr/local/nginx/html/test.php
+<?php
+  echo "天兔";
+?>
+
+
+
+nginx+php-fpm结合的配置
+        location / {
+            root   html;   ###根据自己的路径配置
+            index  index.php;
+            
+            if (!-e $request_filename)    ##下面这几行必须添加否则报错404
+            {
+               rewrite  ^(.*)$ /index.php?s=$1 last;
+               break;
+            }
+        }
+		
+		location ~ \.php$ {
+            root     html;  ###根据自己的路径配置
+            fastcgi_pass   localhost:9000;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME  /usr/local/nginx/html$fastcgi_script_name;   ###项目根目录/usr/local/nginx/html
+            include        fastcgi_params; 
+        }
+		
+
+
+安装天兔监控
+yum install  gcc python-devel net-snmp-devel curl-devel perl-DBI php-gd php-mysql php-bcmath php-mbstring php-xml -y
+cd /usr/local/src/
+wget http://down.whsir.com/downloads/Lepus_v3.8_beta.tar.gz
+tar xf Lepus_v3.8_beta.tar.gz
+
+mysql里导入天兔数据  ##或者使用source
+cd /usr/local/src/Lepus_v3.8_beta  ###根据自己的路径
+mysql -uroot -pwhsir lepus < sql/lepus_table.sql
+mysql -uroot -pwhsir lepus < sql/lepus_data.sql
+
+##否则可能报错不出数据
+mysql>use lepus
+mysql>alter table mysql_status modify column max_connect_errors bigint(18);
+mysql>alter table mysql_status_history modify column max_connect_errors bigint(18);
+
+
+
+安装Lpeus(天兔)程序
+cd /usr/local/src/Lepus_v3.8_beta/python
+chmod +x ./*
+./install.sh
+[note] lepus will be install on basedir: /usr/local/lepus
+[note] /usr/local/lepus directory does not exist,will be created.
+[note] /usr/local/lepus directory created success.
+[note] wait copy files.......
+[note] change script permission.
+[note] create links.
+[note] install complete.
+
+
+修改lepus配置文件  ##根据自己的数据库配置
+vi /usr/local/lepus/etc/config.ini  ###根据自己的数据库信息进行配置
+[monitor_server]
+host="127.0.0.1"
+port=3306
+user="lepus_user"
+passwd="blog.whsir.com"
+dbname="lepus"
+
+启动Lepus
+启动前设置一个软连接，不然会报错，如果启动报错请查看/usr/local/lepus/logs/lepus.log
+ln -sv /usr/local/mysql/lib/libmysqlclient.so.18 /usr/lib64/libmysqlclient.so.18
+lepus start
+
+
+配置天兔web管理台
+lepus start 
+
+配置lepus的web界面  
+cd /root/Lepus_v3.8_beta/php
+cp -ap * /usr/local/nginx/html/
+cd /usr/local/nginx/html/application/config
+vim database.php   ###同样的根据自己的数据库进行配置
+
+----
+$db['default']['hostname'] = '127.0.0.1';  ###根据自己的数据库信息进行配置
+$db['default']['port']     = '3306';
+$db['default']['username'] = 'lepus';
+$db['default']['password'] = 'lepus';
+$db['default']['database'] = 'lepus';
+$db['default']['dbdriver'] = 'mysql';
+----
+
+
+重启php-fpm和nginx
+
+systemctl restart php-fpm 
+./sbin/nginx -s reload 
+
+
+测试各个驱动是否可用
+测试各个驱动是否正常运行
+cd /usr/local/lepus
+
+[root@westserver lepus]# python test_driver_mysql.py
+MySQL python drivier is ok! 
+
+[root@westserver lepus]# python test_driver_oracle.py
+Oracle python drivier is ok! 
+
+[root@westserver lepus]# python test_driver_mongodb.py
+MongoDB python drivier is ok! 
+
+[root@westserver lepus]# python test_driver_redis.py
+Redis python drivier is ok! 
+
+
+
+
+验证：
+浏览器访问：###若访问只有文字没有图形，则可以加上index.php 或者清楚浏览器缓存然后再进行访问（不用添加index.php）
+http://192.168.20.73		
+打开浏览器输入IP地址打开天兔数据库监控系统，默认账号密码为admin/Lepusadmin
+
+
+
+
+
+
+登录进行添加主机和监控
+通过浏览器输入IP地址或域名打开监控界面，即可登录系统。.默认管理员账号密码admin/Lepusadmin登录后请修改管理员密码，增加普通账号。
+对需要监控的数据库授权，在WEB添加主机进行监控。
+
+
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+监控系统慢查询分析平台配置
+
+该章节将向大家阐述如何在生产数据库服务器上部署慢查询分析平台，并实现慢查询自动推送功能，慢查询自动推送是指将系统收集的慢查询Top10数据定时通过邮件形式推送给开发或DBA进行优化。
+
+Lepus的慢查询分析平台是独立于监控系统的模块，该功能需要使用percona-toolkit (http://www.percona.com/software/percona-toolkit)工具来采集和记录慢查询日志，并且需要部署一个我们提供的shell脚本来进行数据采集。该脚本会自动开启您数据库的慢查询日志，并对慢查询日志进行按小时的切割，并收集慢查询日志的数据到监控机数据库。随后您通过Lepus系统就可以分析慢查询了。
+
+安装步骤如下所示：
+安装percona-toolkit：
+yum -y install perl-IO-Socket-SSL
+yum -y install perl-DBI
+yum -y install perl-DBD-MySQL
+
+wget www.mtop.cc/software/percona-toolkit-2.2.6-1.noarch.rpm
+rpm -ivh percona-toolkit-2.2.6-1.noarch.rpm
+
+
+从监控机拷贝lepus提供的慢查询分析脚本到MySQL端
+scp client/mysql/lepus_slowquery.sh root@10.0.4.60:/usr/local/sbin/
+
+
+在MySQL端的对分析脚本授权
+chmod +x /usr/local/sbin/lepus_slowquery.sh
+
+编辑文件修改配置，在这里您需要指定Lepus监控机数据库的地址，本地MySQL地址，以及存储慢查询的路径和慢查询时间，另外还需要配置一个Lepus主机的server_id.
+vim /usr/local/sbin/lepus_slowquery.sh
+#config lepus database server
+lepus_db_host=""
+lepus_db_port=
+lepus_db_user=" "
+lepus_db_password=""
+lepus_db_database=" "
+
+ 
+
+#config mysql server
+mysql_client="/data/mysql/bin/mysql"
+mysql_host="127.0.0.1"
+mysql_port=3306
+mysql_user="root"
+mysql_password=" "
+
+ 
+
+#config slowqury
+slowquery_dir="/data/mysql/slowlog/"
+slowquery_long_time=0.5
+pt_query_digest="/usr/bin/pt-query-digest"
+#config server_id
+lepus_server_id=131
+
+注意：lepus_server_id该值需要从系统中获取。进入MySQL服务器配置，在部署脚本的主机前查询到当前ID即为主机的server_id.
+lepus_server_id必须和MySQL服务器配置里的对应服务器ID一一对应，否则您可能将无法查询到该主机的慢查询。
+
+
+
+配置完成后保存，并加入计划任务。因为慢查询做了按小时的切割，建议计划任务时间间隔在1小时之内。
+*/5 * * * * sh /usr/local/sbin/lepus_slowquery.sh > /dev/null 2>&1
+
+加入计划任务后您可以手动执行下脚本，执行完后就可以看到生成的慢查询日志
+-rw-rw---- 1 mysql mysql 382 Aug 15 13:38 slowquery_2014081513.log
+
+
+3)开启慢查询分析
+在MySQL服务器管理里面电击右侧的编辑按钮，进入服务器编辑界面。
+配置slowquery为打开状态
+
+配置完成后，稍等片刻，即可在慢查询分析平台查看该库的慢查询日志。
+
+
+4)开启慢查询自动推送
+慢查询自动推送是指定时将系统收集到的慢查询TOP数据定时推送给相应开发人员进行优化。无需在每台数据库上部署脚本。
+
+MySQL慢查询自动推送通过计划任务完成。如果需要推送，则需要在监控机部署如下计划任务。
+注意：www.xxx.com请替换成您自己的lepus监控WEB访问地址，以下只是做一个示范，请勿照抄。
+00 08 * * * links http://www.xxxx.com/index.php/task/send_mysql_slowquery_mail > /dev/null 2>&1
+
+计划任务部署完成后，则会按照计划任务配置的时间将慢查询推送给对应人员。慢查询推送的邮件人员需要在MySQL主机配置里面设置即可，邮箱留空则该数据库主机不会发送慢查询推送。
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++
+
+监控操作系统(OS)配置
+
+该章节将向大家阐述如何在生产数据库服务器上部署OS资源的监控,包括CPU,磁盘等项目的监控和告警,Lepus是通过snmp协议进行对操作系统数据采集的!所以需要在监控器开启snmp服务。
+
+下面将向大家说明操作系统SNMP服务协议的描述和启用方法。
+
+在需要监控的linux系统下snmp服务配置
+snmpd 服务安装
+yum install net-snmp* 
+
+
+编辑snmpd.conf 配置文档
+vim /etc/snmp/snmpd.conf 
+
+
+41行 将default改为监控服务器ip;2 将public改成lepus (备注: lepus是您在天兔配置文件里配置的通用实体，如果您配置的实体是其他名称，这里要做相应的修改)示例如下：
+com2sec notConfigUser  10.0.10.10      lepus 
+
+62行 将systemview 改为all,供所有snmp访问权限 
+access  notConfigGroup ""      any       noauth    exact  all none none 
+
+
+85行 将#注释符号去掉 
+view all    included  .1                               80 
+
+
+启动 snmpd 服务
+/etc/init.d/snmpd start 
+
+
+
+验证snmpd 服务
+//snmpd 使用 tcp/udp 161 端口
+grep 'Simple Net Mgmt Proto' /etc/services  
+snmp        161/tcp             # Simple Net Mgmt Proto 
+snmp        161/udp             # Simple Net Mgmt Proto 
+
+lsof -i :161 
+COMMAND  PID USER   FD   TYPE DEVICE SIZE NODE NAME 
+snmpd   3734 root   11u  IPv4  13174       UDP *:snmp  
+
+
+ps -ef | grep 'snmpd' 
+root      3734     1  0 09:34 ?        00:00:00 /usr/sbin/snmpd -Lsd -Lf /dev/null -p /var/run/snmpd.pid -a 
+
+
+
+修改snmpd 日志级别
+//以上操作能够满足snmpd 服务正常使用，不过snmpd 默认日志级别将会在/var/log/message 写入大量snmp 信息，这样会影响我们察看系统日志，所以我们需要更改下！
+Mar  1 09:55:01 monitor snmpd[3734]: Connection from UDP: [127.0.0.1]:37535  
+Mar  1 09:55:01 monitor snmpd[3734]: Received SNMP packet(s) from UDP: [127.0.0.1]:37535  
+Mar  1 09:55:01 monitor snmpd[3734]: Connection from UDP: [127.0.0.1]:47836  
+Mar  1 09:55:01 monitor snmpd[3734]: Received SNMP packet(s) from UDP: [127.0.0.1]:47836  
+
+//注释原有的OPTINOS,添加下面的一行，重启snmpd 服务即可。
+vim /etc/init.d/snmpd
+#OPTIONS="-Lsd -Lf /dev/null -p /var/run/snmpd.pid -a" 
+OPTIONS="-LS 4 d -p /var/run/snmpd.pid -a" 
+
+
+/etc/init.d/snmpd restart
+Stopping snmpd:                                            [  OK  ]
+Starting snmpd:                                            [  OK  ]
+
+
+将SNMP服务设置开机启动
+使用snmpwalk 命令验证，在监控机上执行以下命令
+snmpwalk -v 1 -c lepus  192.168.1.10 
+snmpwalk -v 2c -c lepus  192.168.1.11 
+
+-v是指版本,-c 是指密钥，获取到系统信息则正常！
+至此，您已经成功地开启了SNMP服务。
+安装完成后即可在天兔系统配置需要监控的主机。
+首先进入天兔系统WEB界面，进入服务器配置，操作系统配置栏目。
+
+
+配置系统IP和告警项目以及告警阀值。告警类型可以配置cpu load和磁盘两种类型，磁盘监控中系统会扫描该主机的所有磁盘，可以配置警告和紧急两种阀值。
+
+配置完成后保存。随后您可以在系统监控里面查看到主机的监控数据和报告。
+
+
+
+
+
+
