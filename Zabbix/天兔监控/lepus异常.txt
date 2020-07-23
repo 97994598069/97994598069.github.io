@@ -1,0 +1,113 @@
+﻿Lepus监控复制项没有数据：
+
+使用Lepus3.8监控MySQL5.7，为什么复制监控那一块显示不了结果呢？主从同步是正常的。
+
+日志文件主要出现这种错误：
+
+2018-05-30 14:35:34 [WARNING] check mysql 172.16.11.42:3307 failure: -1 error totally whack
+2018-05-30 14:35:34 [WARNING] check mysql 172.16.11.42:3307 failure: sleep 3 seconds and check again.
+2018-05-30 14:35:34 [WARNING] check mysql 172.16.11.40:3307 failure: -1 error totally whack
+2018-05-30 14:35:34 [WARNING] check mysql 172.16.11.40:3307 failure: sleep 3 seconds and check again.
+2018-05-30 14:35:43 [INFO] check mysql controller finished.
+被监控端机器设置如下：
+
+set global show_compatibility_56=on;就好啦应该，是因为check.mysql.py中show_compatibility_56 mysql 5.7不再支持
+2、复制模块打开没有权限：
+
+解决方法（监控端）：find   /  -name  lp_mysql.php
+
+[root@localhost lepus]# find   /  -name  lp_mysql.php
+/home/tools/lepus/web/application/controllers/lp_mysql.php
+/usr/local/lepus/web/application/controllers/lp_mysql.php
+/opt/lampp/htdocs/application/controllers/lp_mysql.php
+vi lp_mysql.php
+注释掉这个文件的337行就可以了
+ public function replication_chart(){
+        # parent::check_privilege('parent::check_privilege()');
+        $server_id = $this->uri->segment(3);
+        $server_id=!empty($server_id) ? $server_id : "0";
+        $begin_time = $this->uri->segment(4);
+        $begin_time=!empty($begin_time) ? $begin_time : "60";
+        $time_span = $this->uri->segment(5);
+        $time_span=!empty($time_span) ? $time_span : "hour";
+		
+		
+		
+++++++++++++++++++
+
+2）得不到数据库表空间分析数据的解决方法：
+在Lepus.py中添加check_mysql_bigtable,如下：
+if monitor=="1":
+        if monitor_mysql=="1":
+            job = Process(target = job_run, args = ('check_mysql',frequency_monitor))
+            joblist.append(job)
+            job.start()
+            job = Process(target = job_run, args = ('check_mysql_bigtable',int(frequency_monitor)*120))  ##此行以下新增
+            joblist.append(job)
+            job.start()
+			
+图中“*120“是设置时间间隔，若是网页页面设置了1分钟刷新数据，这儿改成120。则最终是2小时才会监控得到新数据。重启lepus服务。
+
+
+
+
+
+
+++++++++++++++++++++++
+lepus bug
+
+------------------------------------------------BUG fix--------------------------------------------
+
+---------------------redis----------------------
+
+[root@HE3 lepus]#vi check_redis.py
+
+148
+149     except Exception, e:
+150         logger_msg="check redis %s:%s : %s" %(host,port,e)
+151         #logger.warning(logger_msg)
+152
+153         try:
+154             connect=0
+155             sql="insert into redis_status(server_id,host,port,tags,connect) values(%    s,%s,%s,%s,%s)"
+
+151行的注释掉就解决redis不能监控slave的bug了
+
+
+
++++++++++
+
+
+--------------------mysql复制监控图异常--------------------
+
+---MySQL复制监控中无法看图形
+
+vi /opt/lampp/htdocs/application/controllers/lp_mysql.php
+
+337行，去掉'mysql/replication'，改为parent::check_privilege();
+
+原来为parent::check_privilege('mysql/replication'）;
+
+
+
++++++++++++
+---修复mysql复制图表时间偏移导致数据不准确
+
+影响：线型图表时间偏移
+
+修复：修改vi /opt/lampp/htdocs/application/controllers/lp_mysql.php
+
+352行找到public function replication()的$chart_reslut[$i]['delay']=$dbdata['delay']，修该为：
+
+$chart_reslut[$i]['delay'] = !empty($dbdata['delay']) ? $dbdata['delay'] : 0;
+
+
++++++++++++++++++++++++++++++++++++
+更改密码：
+在个人面板里，输入新密码保存即更新
+
+++++++++++++++++++++++++++++++++
+
+
+
+
