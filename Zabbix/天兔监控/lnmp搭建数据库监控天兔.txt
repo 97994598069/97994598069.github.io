@@ -494,6 +494,20 @@ snmpwalk -v 2c -c lepus  192.168.1.11
 配置完成后保存。随后您可以在系统监控里面查看到主机的监控数据和报告。
 
 
+监控机修改lepus配置文件添加44,45,46行内容
+[root@HE3lepus]# vi /usr/local/lepus/check_os.sh 
+在43行后添加44,45,46行内容
+mem_buffered=`/usr/bin/snmpwalk -v1 -c ${community} ${ip} UCD-SNMP-MIB::memBuffer.0 |cut -d= -f2 |awk -F ' ' '{print $2}'`
+mem_cached=`/usr/bin/snmpwalk -v1 -c ${community} ${ip} UCD-SNMP-MIB::memCached.0 |cut -d= -f2 |awk -F ' ' '{print $2}'`
+mem_usage_rate=`/usr/bin/snmpdf -v1 -c ${community} ${ip} |grep "Physical"|awk '{print $6}'`
+mem_available=$[$mem_free+$mem_buffered+$mem_cached]
+if [ -z $mem_shared ]; then
+mem_shared=0
+fi
+
+[root@HE3 lepus]#python check_os.py
+
+
 
 
 
