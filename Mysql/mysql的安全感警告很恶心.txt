@@ -24,7 +24,7 @@ password=123456  ###配置数据库root密码
 设置my.cnf的权限
 chmod 600 my.cnf
 
-不用重启数据库
+不用重启数据库  ###也可以是其他路径, 例如/opt/scripts/.passwd
 [root@localhost mysql]# mysql --defaults-file=/etc/my.cnf -e "show databases;"
 +--------------------+
 | Database           |
