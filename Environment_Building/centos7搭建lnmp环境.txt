@@ -227,6 +227,36 @@ location ~ \.php$ {
 将fastcgi_param SCRIPT_FILENAME /scripts$fastcgi_script_name;改成fastcgi_param SCRIPT_FILENAME /etc/nginx/html/$fastcgi_script_name;。
 按下Esc键，然后输入:wq并回车以保存并关闭Nginx配置文件。
 
+备注：
+{{
+一开始如下:
+location ~ \.php$ {
+#       include snippets/fastcgi-php.conf;
+        include fastcgi_params;
+#       fastcgi_pass 127.0.0.1:9000;
+        fastcgi_pass unix:/run/php/php7.0-fpm.sock;
+        fastcgi_index index.php;
+}
+
+后来修改为如下:
+location ~ \.php$ {
+#       include snippets/fastcgi-php.conf;
+        include fastcgi_params;
+#       fastcgi_pass 127.0.0.1:9000;
+        fastcgi_pass unix:/run/php/php7.0-fpm.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+}
+
+唯一的区别是：加入了一行配置 　　fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+这个配置的意思是 在浏览器中访问的.php文件，实际读取的是 $document_root(网站根目录)下的.php文件 -- 也就是说当访问127.0.0.1/index.php的时候，需要读取网站根目录下面的index.php文件，如果没有配置这一配置项时，nginx不回去网站根目录下访问.php文件，所以返回空白
+配置项目中：include fastcgi_params; fastcgi_params 文件中含有各个nginx常量的定义，默认情况 SCRIPT_FILENAME = $fastcgi_script_name
+注意：在测试中发现include fastcgi-php.conf 报错，原因还没有找到
+
+
+}}
+
+
 systemctl restart nginx重新载入Nginx的配置文件。
 
 输入命令vi /etc/nginx/html/index.php打开index.php文件，按下i键，然后在文件中写入如下内容：
