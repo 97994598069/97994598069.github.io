@@ -1,0 +1,138 @@
+server端：
+
+安装nfs
+yum install nfs-utils nfs4-acl-tools -y
+
+cat /etc/exports
+/bak/  *(rw,sync,all_squash)
+
+systemctl enable nfs
+systemctl enable rpcbind
+systemctl start nfs
+systemctl start rpcbind
+
+[root@localhost ~]# cat /proc/fs/nfsd/versions    ##可以看到已经不支持nfs2了（centos7.4之后不支持2）
+-2 +3 +4 +4.1 +4.2
+
+客户端：
+yum install nfs-utils nfs4-acl-tools -y
+
+
+客户端挂载：
+mount -t nfs -s -v -o vers=4.2,soft,timeo=5,retrans=3 192.168.38.128:/bak /mnt/
+
+{{
+挂载方式有两种：
+mount -t nfs4 -s -v -o minorversion=2,soft,timeo=5,retrans=3 192.168.1.195:/mnt/nfs /mnt/
+mount -t nfs -s -v -o vers=4.2,soft,timeo=5,retrans=3 192.168.1.195:/mnt/nfs /mnt/
+}}
+
+
+systemctl restart nfs
+systemctl enable nfs
+
+[root@localhost ~]# nfsstat -m
+/mnt from 192.168.38.128:/bak
+ Flags:	rw,relatime,vers=4.2,rsize=131072,wsize=131072,namlen=255,soft,proto=tcp,port=0,timeo=5,retrans=3,sec=sys,clientaddr=192.168.38.212,local_lock=none,addr=192.168.38.128
+ 
+ 
+ 
+
+其他：
+
+一、如果使用防火墙，则需要放开所有rpc端口
+NFS配置固定端口
+1.首先打开111和2049端口
+firewall-cmd --permanent --add-port=111/tcp
+firewall-cmd --permanent --add-port=111/udp
+firewall-cmd --permanent --add-port=2049/tcp
+firewall-cmd --permanent --add-port=2049/udp
+
+2.编辑/etc/sysconfig/nfs文件
+添加
+RQUOTAD_PORT=1001
+去掉下面语句前面的“#”号
+LOCKD_TCPPORT=32803
+LOCKD_UDPPORT=32769
+MOUNTD_PORT=892
+
+3. 打开1001,32803,32769,892端口
+firewall-cmd --permanent --add-port 1001/tcp
+firewall-cmd --permanent --add-port 1001/udp
+firewall-cmd --permanent --add-port 32803/tcp
+firewall-cmd --permanent --add-port 32769/udp
+firewall-cmd --permanent --add-port 892/tcp
+firewall-cmd --permanent --add-port 892/udp
+
+4. 重启服务
+systemctl restart rpcbind
+systemctl restart nfs-server
+
+
+5. 验证命令
+[root@centos7 ~]# rpcinfo -p
+   program vers proto   port  service
+    100000    4   tcp    111  portmapper
+    100000    3   tcp    111  portmapper
+    100000    2   tcp    111  portmapper
+    100000    4   udp    111  portmapper
+    100000    3   udp    111  portmapper
+    100000    2   udp    111  portmapper
+    100005    1   udp    892  mountd
+    100005    1   tcp    892  mountd
+    100005    2   udp    892  mountd
+    100005    2   tcp    892  mountd
+    100005    3   udp    892  mountd
+    100005    3   tcp    892  mountd
+    100003    3   tcp   2049  nfs
+    100003    4   tcp   2049  nfs
+    100227    3   tcp   2049  nfs_acl
+    100003    3   udp   2049  nfs
+    100003    4   udp   2049  nfs
+    100227    3   udp   2049  nfs_acl
+    100021    1   udp  32769  nlockmgr
+    100021    3   udp  32769  nlockmgr
+    100021    4   udp  32769  nlockmgr
+    100021    1   tcp  32803  nlockmgr
+    100021    3   tcp  32803  nlockmgr
+    100021    4   tcp  32803  nlockmgr
+[root@centos7 ~]# showmount -e 10.1.1.52
+Export list for 10.1.1.52:
+/data/wwwroot 10.1.1.4/32,10.1.1.0/24
+
+
+
+挂载指定nfs版本号
+NFS3: mount -t nfs3 -o vers=3,noatime 10.12.1.13:/data/nfsdata /data/nfsdata
+NFS4：mount -t nfs 192.168.1.11:/nfs (IP后跟设备名称) /mnt/mountpoint/
+NFS4：mount -t nfs4 192.168.1.11:/nfs (IP后跟设备名称) /mnt/mountpoint/
+NFS4.1：mount -t nfs -o minorversion=1 192.16.1.11:/nfs(IP后跟设备名称) /mnt/mountpoint/
+NFS4.1：mount -t nfs -o vers=4.1 192.16.1.11:/nfs(IP后跟设备名称) /mnt/mountpoint/
+
+
+
+查看Nfs服务器
+nfsstat -c
+nfsstat -s
+showmount -e 10.12.1.13  查看nfs服务共享目录
+exportfs 管理/etc/exportfs文件
+exportfs  -r 重新挂载/etc/exportfs文件设置
+exportfs -a 生效配置文件
+exportfs 查看共享目录
+
+
+
+常见问题
+NFS4挂载问题
+[root@c62 ~]# mount -t nfs4 10.1.1.61:/data /data
+mount.nfs4: mounting 10.1.1.61:/data failed, reason given by server: No such file or directory
+
+
+处理1：
+原来针对NFS4，exports需要一个新的参数fsid，
+如我的exports：
+/home/bee  *(rw,fsid=0,sync,no_root_squash)
+处理2：
+mount -t nfs4 <serverip>:/ /localmount/point
+and not
+mount -t nfs4 <serverip>:/exports /localmount/point
