@@ -36,6 +36,27 @@ systemctl enable nfs
  Flags:	rw,relatime,vers=4.2,rsize=131072,wsize=131072,namlen=255,soft,proto=tcp,port=0,timeo=5,retrans=3,sec=sys,clientaddr=192.168.38.212,local_lock=none,addr=192.168.38.128
  
  
+ 客户端查看运行性能
+ nfsstat -cn
+  Client nfs v4:
+  null         read         write        commit       open         open_conf    
+  0         0% 0         0% 0         0% 0         0% 1         0% 0         0% 
+  open_noat    open_dgrd    close        setattr      fsinfo       renew        
+  0         0% 0         0% 0         0% 0         0% 3         2% 20       18% 
+  setclntid    confirm      lock         lockt        locku        access       
+  1         0% 1         0% 0         0% 0         0% 0         0% 7         6% 
+  getattr      lookup       lookup_root  remove       rename       link         
+  58       52% 7         6% 1         0% 0         0% 0         0% 0         0% 
+  symlink      create       pathconf     statfs       readlink     readdir      
+  0         0% 0         0% 2         1% 0         0% 0         0% 4         3% 
+  server_caps  delegreturn  getacl       setacl       fs_locations rel_lkowner  
+  5         4% 0         0% 0         0% 0         0% 0         0% 0         0% 
+  secinfo      exchange_id  create_ses   destroy_ses  sequence     get_lease_t  
+  0         0% 0         0% 0         0% 0         0% 0         0% 0         0% 
+  reclaim_comp layoutget    getdevinfo   layoutcommit layoutreturn getdevlist   
+  0         0% 0         0% 0         0% 0         0% 0         0% 0         0% 
+  (null)       
+  0         0% 
  
 
 其他：
