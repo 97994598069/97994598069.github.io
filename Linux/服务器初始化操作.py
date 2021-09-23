@@ -1,7 +1,7 @@
 1.更换国内的yum源
 yum -y install wget
 1)备份原来自带的yum源
-cd /etc/yum.repos.d && mkdir backup && mv ./* ./backup
+mkdir -pv /etc/yum.repos.d/backup  &&  mv /etc/yum.repos.d/*.repo /etc/yum.repos.d/backup
 
 2)下载国内yum源和epel
 wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
