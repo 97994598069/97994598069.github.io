@@ -70,4 +70,31 @@ vi  curl-format.txt
                  time_total:  0.097
 
 
++++++++++++++++++++++++++++++++++++++++++++++++
+
+curl调用get请求
+curl http://www.sunbanxian.com/login?user=test001&password=123456
+
+
+curl 调用post请求接口
+curl -d "user=nickwolfe&password=12345" http://www.sunbanxian.com/login
+
+-d参数可以读取本地文本文件的数据，向服务器发送。
+curl -d '@data.txt' https://google.com/login
+
+
+curl 调用post请求接口请求参数为json格式时#在命令行中直接发送JSON结构数据
+curl -H 'content-type: application/json' -X POST -d'{"accountType":"4","channel":"1"}' http://www.sunbanxian.com/login
+
+
+curl 调用post请求接口 为上传文件时
+# file:key   @/data/gexiang/baiyuekui.png:linux上图片的绝对路径
+curl -X POST -F 'file=@/data/gexiang/baiyuekui.png' http://www.sunbanxian.com:8092/common/uploadFile
+
+curl -X POST http://0.0.0.0:PORT-NUM/APP-NAME -H 'cache-control: no-cache' -H 'content-type: application/json' -d 'JSON STRING'
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
 
