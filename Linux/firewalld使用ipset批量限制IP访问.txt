@@ -1,0 +1,153 @@
+一、创建ipset
+执行命令
+$ firewall-cmd --permanent --zone=public --new-ipset=blacklist --type=hash:net	#创建一个名为blacklist的库
+执行完命令可在/etc/firewalld/ipsets路径下看到生成的blacklist.xml文件。
+
+
+二、封禁ipset
+前面只是创建了名为blacklist的ipset，而且也往里面增加了内容，最后一步即防火墙封禁该ipset即可，这样的好处是防火墙只是一条规则就封禁了文件里管理的大量ip。
+$ firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=blacklist drop'	#封禁名为blacklist的ipset
+
+
+三、添加/删除要禁止的ip或ip段
+$ firewall-cmd --permanent --zone=public --ipset=blacklist --add-entry=xxx.x.x.xx	#添加ip
+$ firewall-cmd --permanent --zone=public --ipset=blacklist --add-entry=xxx.xx.xx.0/24	#添加ip段
+$ firewall-cmd --permanent --zone=public --ipset=blacklist --remove-entry=xxx.x.x.xx	#删除ip
+$ firewall-cmd --permanent --zone=public --ipset=blacklist --remove-entry=xxx.xx.xx.0/24	#删除ip段
+$ firewall-cmd --reload  ##重载生效
+备注: –permanent参数表示永久生效，内容会写入blacklist.xml文件且需要重启防火墙firewall-cmd --reload生效，如果不加该参数，则立即生效，内容不会写入blacklist.xml文件，服务重启则规则失效。
+
+
+或者修改配置文件 vi  /etc/firewalld/ipsets/blacklist.xml
+(base) [root@test666 firewalld]# cat   /etc/firewalld/ipsets/blacklist.xml 
+<?xml version="1.0" encoding="utf-8"?>
+<ipset type="hash:net">
+  <entry>192.168.17.58</entry>
+  <entry>192.168.17.124</entry>
+  <entry>192.168.17.101</entry>
+</ipset>
+
+同样重载生效firewall-cmd --reload
+
+
+删除限制，同样重载生效firewall-cmd --reload
+firewall-cmd --permanent --zone=public --ipset=blacklist --remove-entry=192.168.17.58
+
+
+
+四、最后，重新载入防火墙即可生效：firewall-cmd --reload
+可通过命令查看当前防火墙状态：firewall-cmd --list-all
+也可以单独查看当前ipset封禁了哪些ip：ipset list blacklist
+
+
+
+上面是黑名单
+下面是白名单
+
+案例：限制国外ip访问服务器
+
+一、整理IP地址段到Ipset 下载IP地址段文件
+访问网址  http://www.ipdeny.com/ipblocks/data/countries/cn.zone ，另存为国内IP地址段，然后将文件上传到服务器；
+也可以直接在服务器上执行如下命令直接下载文件到服务器：（一般是下载不了的 国外网站）
+wget http://www.ipdeny.com/ipblocks/data/countries/cn.zone
+
+创建whitelist库
+firewall-cmd --permanent --zone=public --new-ipset=whitelist --type=hash:net
+
+放开白名单
+firewall-cmd --permanent --add-rich-rule 'rule family="ipv4" source ipset="whitelist" accept'  
+
+
+
+二、然后for循环将上述IP段加入到防火墙白名单
+firewall-cmd --permanent --zone=public --ipset=blacklist --add-entry $ip
+
+三、添加内网IP到防护墙白名单
+ipset add whitelist 10.0.0.0/8
+ipset add whitelist 172.16.0.0/12
+ipset add whitelist 192.168.0.0/16
+
+
+
+四、重载生效
+firewall-cmd --reload
+
+
+五、查看
+我们来检查一下blacklist 链的数据，大概8000多条数据
+ipset list whitelist
+ipset list whitelist | wc -l
+
+
+
+++++++++++++++++++++++++++++++++++++++++
+
+
+一、概述
+用途 ipset是ip地址的集合;
+firewalld使用ipset可以在一条规则中处理多个ip地址;
+执行效果更高; 对ip地址集合的管理也更方便。
+注意 与iptables所用的ipset命令的不同; 不要混合使用firewall-cmd的ipset参数与linux平台上的ipset命令，避免引起冲突; firewalld的ipset会记录到/etc/firewalld/ipsets/目录下。
+
+二、部署
+安装前注意事项
+为防止把自己挡住，提前关闭firewall开机自启动，并将ssh加入到信任区
+systemctl disable firewalld.service  
+firewall-cmd --permanent --zone=trusted --add-source=0.0.0.0[填写你信任的ip]  
+firewall-cmd --reload  
+
+
+新建set
+firewall-cmd --permanent --new-ipset=office --type=hash:ip  
+ll /etc/firewalld/ipsets/  
+
+
+在set添加ip
+firewall-cmd --permanent --ipset=office --add-entry=0.0.0.0[填写你信任的ip]  
+
+
+查看添加效果
+# cat /etc/firewalld/ipsets/office.xml 
+<?xml version="1.0" encoding="utf-8"?>  
+<ipset type="hash:ip">  
+  <entry>1.1.1.1</entry>
+</ipset>  
+
+
+把set加入到firewall中
+firewall-cmd --permanent --add-rich-rule 'rule family="ipv4" source ipset="office" accept'  
+firewall-cmd --reload  
+
+#添加协议和端口
+firewall-cmd –permanent –add-rich-rule ‘rule family=”ipv4” source ipset=”office” port port=3306 protocol=tcp accept’  
+
+设置开机启动
+systemctl enable firewalld.service  
+
+
+
+
+三、日常维护命令
+列出所有的ipsets
+firewall-cmd --permanent --get-ipsets  
+
+删除ip
+firewall-cmd --permanent --ipset=office --remove-entry=x.x.x.x  
+
+删除set
+firewall-cmd --permanent --delete-ipset=office  
+
+打印set的路径
+firewall-cmd --permanent --path-ipset=office  
+
+打印set的内容
+firewall-cmd --permanent --info-ipset=office  
+
+列下set下所有的entry
+firewall-cmd --permanent --ipset=office --get-entries  
+
+四、添加运维平台或者跳板机ip
+firewall-cmd --permanent --info-ipset=office  
+firewall-cmd --permanent --ipset=office --add-entry=1.1.1.1  
+
+
