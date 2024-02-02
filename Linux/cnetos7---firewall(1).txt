@@ -19,9 +19,21 @@ centos7版本对防火墙进行 加强,不再使用原来的iptables,启用firew
      7.查看运行状态
 	firewall-cmd --state
 	
-	8.将80端口的流量转发至8080
+     8.将80端口的流量转发至8080
 	firewall-cmd --add-forward-port=port=80:proto=tcp:toport=8080
-		
+
+
+
+# 开启伪装IP
+firewall-cmd --permanent --add-masquerade
+# 配置端口转发(若不开启则会失败)
+firewall-cmd --permanent --add-forward-port=port=3306:proto=tcp:toaddr=192.168.1.2:toport=13306
+
+
+
+
+
+
 
 查看所有打开的端口： firewall-cmd --zone=public --list-ports
 添加
