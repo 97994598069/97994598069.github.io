@@ -26,7 +26,7 @@ centos7版本对防火墙进行 加强,不再使用原来的iptables,启用firew
 
 # 开启伪装IP
 firewall-cmd --permanent --add-masquerade
-# 配置端口转发(若不开启则会失败)
+# 配置端口转发(注意：如果不开启伪装IP，端口转发会失败；其次，要确保源服务器上的端口(3306)和目标服务器上的端口(13306)是开启的。)
 firewall-cmd --permanent --add-forward-port=port=3306:proto=tcp:toaddr=192.168.1.2:toport=13306
 
 
