@@ -1,0 +1,108 @@
+docker网络不通：
+1.配置“域”
+systemctl start firewalld
+firewall-cmd --set-default-zone=public
+firewall-cmd --reload 
+systemctl restart firewalld
+
+2.配置防火墙规则
+systemctl start firewalld 
+firewall-cmd --add-port=1-3305/tcp --permanent
+firewall-cmd --add-port=3307-65535/tcp --permanent
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="master docker容器内IP"  port protocol="tcp" port="3306" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="master服务器IP"  port protocol="tcp" port="3306" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="子节点IP"  port protocol="tcp" port="3306" accept'
+firewall-cmd --reload
+systemctl restart firewalld
+
+3.避免docker导致防火墙失效（其实“五、其它问题”说的就是这个事）
+①vi /usr/lib/systemd/system/docker.service
+在文件中添加 --iptables=false（底部图片）
+②重启docker
+systemctl daemon-reload
+systemctl restart docker
+
+4.完成上述步骤以及可以采用系统 firewall 控制端口访问，但会出现 docker 容器间无法访问，而且容器内也无法访问外部网络。
+使用类似 NAT 网络方式使得 docker 可以访问外部网络
+firewall-cmd --permanent --zone=public --add-masquerade
+systemctl restart firewalld
+
+5.检查
+使用未在白名单机器访问3306，看是否可以访问。
+
+
+
+
+
+常用命令：
+查看现有规则：firewall-cmd --list-all
+设置开机启用防火墙：systemctl enable firewalld.service（前方运维人员检查一下是否开机自启动）
+查看防火墙状态：systemctl status firewalld
+查看端口是否开启：firewall-cmd --query-port=3306/tcp
+查看端口占用：lsof -i tcp:80
+
+
+
+对于原来已开启防火墙的情况：
+1.比如原来是:
+firewall-cmd --add-port=1-3305/tcp --permanent
+firewall-cmd --add-port=3307-65535/tcp --permanent
+
+2.保留原来3306规则情况下，增加对8080的限制
+
+3.具体操作：
+①增加限制
+vi /etc/firewalld/zones/public.xml
+修改为
+<port protocol="tcp" port="1-3305"/>
+<port protocol="tcp" port="3307-8079"/>
+<port protocol="tcp" port="8081-3305"/>
+执行
+firewall-cmd --reload
+systemctl restart firewalld
+
+②添加IP白名单
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="master服务器IP"  port protocol="tcp" port="8080" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="子节点IP"  port protocol="tcp" port="8080" accept'
+firewall-cmd --reload
+systemctl restart firewalld
+
+4.避免docker导致防火墙失效
+①vi /usr/lib/systemd/system/docker.service
+在文件中添加 --iptables=false（底部图片）
+
+②重启docker
+systemctl daemon-reload
+systemctl restart docker
+
+5.完成上述步骤以及可以采用系统 firewall 控制端口访问，但会出现 docker 容器间无法访问，而且容器内也无法访问外部网络。
+使用类似 NAT 网络方式使得 docker 可以访问外部网络
+firewall-cmd --permanent --zone=public --add-masquerade
+systemctl restart firewalld
+
+6.检查
+使用未在白名单机器访问3306，看是否可以访问。
+
+
+
+其它问题：
+1.问题描述：Linux防火墙firewalld不生效，无法拦截Docker映射端口。
+2.解决方案：
+vi /usr/lib/systemd/system/docker.service
+在文件中添加 --iptables=false（底部图片）
+
+3.重启docker
+systemctl daemon-reload
+systemctl restart docker
+
+4.完成上述步骤以及可以采用系统 firewall 控制端口访问，但会出现 docker 容器间无法访问，而且容器内也无法访问外部网络。
+使用类似 NAT 网络方式使得 docker 可以访问外部网络
+firewall-cmd --permanent --zone=public --add-masquerade
+systemctl restart firewalld
+谈谈使用该方法解决 docker 无视系统防火墙问题所带来的缺点：容器内无法获取得到客户端的真实 IP，由于是类似 NAT 网络，常常 nginx 日志上记录的是 docker0 网络的子网 IP，对于一些业务无法获取真实 IP 可能不能容忍，看个人的取舍吧。
+
+
+
+
+
+
