@@ -2,6 +2,7 @@ centos7版本对防火墙进行 加强,不再使用原来的iptables,启用firew
     1.查看已开放的端口(默认不开放任何端口)
         firewall-cmd --list-ports
         firewall-cmd --list-rich-rule
+        ipset list blacklist
 
     2.开启80端口
         firewall-cmd --zone=public(作用域) --add-port=80/tcp(端口和访问类型) --permanent(永久生效)
