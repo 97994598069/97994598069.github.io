@@ -78,6 +78,13 @@ firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='149
 ##表示允许192.168.2.0/24网段的主机访问22端口 。
 firewall-cmd --zone=drop --add-rich-rule="rule family="ipv4" source address="192.168.2.0/24" port protocol="tcp" port="22" accept"
 
+放开端口IP
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="192.168.17.58" port protocol="tcp" port="8088" accept'
+或者指定zone
+firewall-cmd --zone=public --add-rich-rule="rule family="ipv4" source address="192.168.2.0/24" port protocol="tcp" port="22" accept"
+
+
+
 
 ##表示禁止192.168.2.0/24网段的主机访问22端口 。
 firewall-cmd --zone=drop --add-rich-rule="rule family="ipv4" source address="192.168.2.0/24" port protocol="tcp" port="22" reject"
