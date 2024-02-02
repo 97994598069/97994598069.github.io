@@ -30,8 +30,16 @@ firewall-cmd --permanent --add-masquerade
 # 配置端口转发(注意：如果不开启伪装IP，端口转发会失败；其次，要确保源服务器上的端口(3306)和目标服务器上的端口(13306)是开启的。)
 firewall-cmd --permanent --add-forward-port=port=3306:proto=tcp:toaddr=192.168.1.2:toport=13306
 
+案例
+Docker 容器内无法访问外网问题
+问题：
+打开 firewalld 防火墙后，默认 public 域是不限制出站流量的，但 Docker/k8s 容器内无法访问其他 IP
 
+原因：
+未打开 masquerade IP转发
 
+解决：
+firewall-cmd --query-masquerade --zone=public public 域打开IP转发
 
 
 
