@@ -10,7 +10,7 @@
 则一般是你修改了主机名并且在hosts做了映射，此时需要添加个映射，将你的邮箱地址解析到这里，如下：
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-192.168.197.71     mnode1          smtp.qq.com
+192.168.197.71     mnode1          7472943.qq.com
 (服务器IP)      （服务器主机名）     （邮箱发送地址）
 
 然后重启sendmail即可
