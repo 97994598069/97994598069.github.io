@@ -1,0 +1,26 @@
+案例 （注意双信号和单引号中间没有空格），否则报错
+[root@android-pack app]# for i in $(cat list);do awk "/$i/"'{print $2}' ./app_list;done
+ayuyang
+afugu
+ajiaxian
+asuide
+ahengshan
+amizhi
+aqingjian
+ajingbian
+adingbian
+azizhou
+awubao
+ashenmu
+ahantai
+axixiang
+aliuba
+ahancheng
+awuqi
+azhenan
+azhashui
+alintong
+
+
+
+

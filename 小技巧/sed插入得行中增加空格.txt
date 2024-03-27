@@ -1,0 +1,14 @@
+#!/bin/bash
+
+
+cd /ftproot/zz/ios/build
+
+for i in $(ls .);do
+    count=$(grep -rl "showRadioFloatWindow" $i/configure/build.json |wc -l)
+    if [[ "$count" -eq 0 ]];then
+        sed -i '/splash35/ i\  \"showRadioFloatWindow\"\: \"1\"\,' $i/configure/build.json
+    fi
+  
+done 
+
+##必须是i\，如果不加"\"，则不识别。例如增加一个tab,则是i\\t
