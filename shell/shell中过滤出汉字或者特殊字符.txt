@@ -1,0 +1,142 @@
+一、过滤出特殊符号
+[root@test666 ~]# update_list=爱潼关,爱南郑,爱洋县,爱勉县,爱宁强,爱镇巴,爱洛南,爱丹凤,爱商南,爱上山阳,爱上汉中
+
+[root@test666 ~]# echo $update_list |grep -o '[[:punct:]]'   ##注意需要双单引号
+,
+,
+,
+,
+,
+,
+,
+,
+,
+,
+
+
+二、过滤出汉字，
+[root@test666 ~]# echo $update_list |grep -P '[\p{Han}]'
+爱潼关,爱南郑,爱洋县,爱勉县,爱宁强,爱镇巴,爱洛南,爱丹凤,爱商南,爱上山阳,爱上汉中
+[:alnum:]    #文字数字字符   
+
+[:alpha:]    #文字字符   
+
+[:digit:]    #数字字符   
+
+[:graph:]    #非空字符（非空格、控制字符）   
+
+[:lower:]    #小写字符   
+
+[:cntrl:]    #控制字符   
+
+[:print:]    #非空字符（包括空格）   
+
+[:punct:]    #标点符号   
+
+[:space:]    #所有空白字符（新行，空格，制表符）   
+
+[:upper:]    #大写字符   
+
+[:xdigit:]   #十六进制数字（0-9，a-f，A-F）  
+
+
+
+grep -i root passwd | grep -v -i -E "^root|root$"  #过滤root在中间的行
+grep 'r.t' test       #过滤r和t之间只有一个字符
+grep 'r..t' test      #过滤r和t之间有二个字符
+grep 'r...t' test     #过滤r和t之间有三个字符
+grep 'r*t' test       #过滤r出现的任意次数
+grep  'r\**t' test    #过滤r,t之间有0个字符
+grep  'ro*t' test     #过滤r和t之间o出现的任意次数
+grep  -E 'ro*t' test  #过滤r和t之间o出现的任意次数
+grep  -E 'ro?t' test  #过滤r和t之间o出现的0和1次
+grep  -E 'ro{1,}t' test  #过滤r和t之间o出现的1以上的次数
+grep  -E 'ro{,3}t' test  #过滤r和t之间o出现的3以下的次数
+
+
+
+awk '{print $1}' #打印第一列
+awk 'BEGIN{ORS=","}{print $1}' #打印第一列并替换换行为逗号
+awk -F ":" '{print $1}' passwd  #以:为分隔符，显示第一列
+awk -F ":" 'BEGIN{print "NAME"}{print $1}'  passwd  #以NAME开始显示第一列
+awk -F ":" 'BEGIN{print "NAME"}{print NR$1}END{print "END"}'  passwd #以NAME开始，以END结束，显示第一列并显示行号
+awk -F ":" 'BEGIN{print "NAME"}{print NR;print  }END{print "END"}'  passwd #显示行号并换行
+awk -F ":" '/bash$/{print $1}' passwd   #sh结尾的行的第一列,$1表示第一列
+awk -F ":" 'BEGIN{N=0}/bash$/{N++}END{print N}'  passwd  #统计passwd中以bash结尾的行数
+awk '/^ro/{print}' passwd      #打印以ro开头的行
+awk '/^[^a-d]/{print}' passwd  #打印以a到d开头的行
+awk '/^a|nologin$/{print}'  passwd  #打印以a开头或者以nologin结尾的行
+awk -F ":" '$1~/^r/{print}'  passwd #打印以r开头的行
+awk -F ":" '$1!~/^r/{print}'  passwd  #打印不以r开头的行
+awk -F ":" '{print NR,$0}' passwd  #以:为分隔符打印第一列，并表示行号，$0表示文件一整行的内容
+
+
+
+/*显示*/
+sed -n '^:/p' fstab   #显示fstab中以：开头的行
+sed -n 'UUID$/p' fstab  #显示fstab中以UUID结尾的行
+sed -n '/^UUID/p' fstab  #显示fstab中以UUID开头的行
+sed -n '2,6p' fstab    #显示fstab中的第二和第六行
+sed -n '2,6!p' fstab    #显示fstab中除过第二和第六行其余的行
+/*删除*/
+sed '/^UUID/d'  fstab   #删除以UUID开头的行
+sed '/^#/d'   fstab     #删除以#开头的行 
+sed '/^$/d'   fstab     #删除以空格开头的行 
+sed  '/^UUID/!d'  fstab  #删除不是以UUID开头的行
+cat -n fstab | sed '1,4d'  #删除1到4行
+cat -n fstab | sed -e '2d;6d'   #删除第二行和第六行
+/*添加*/
+sed '/^UUID/a\hello'  fstab   #在以UUID开头的行的前一行添加hello
+sed '/^UUID/a\hello  \nwestos'  fstab  #在以UUID开头的行的前一行添加hello换行再添加westos
+ 
+/*插入*/
+sed '/^UUID/i\hello'   fstab   #在UUID的前一行添加hello
+ 
+/*替换*/
+sed 's/要被取代的字串/新的字串/g' #查找并替换
+sed '/^UUID/c\hello' fstab  #把以UUID开头的行替换成hello
+ 
+ 
+/*其他操作*/
+sed -n '/^UUID/='  fstab  #显示以UUID开头的行号
+sed -n -e  '/^UUID/p' -e '/^UUID/=' fstab  #-e用来连接''
+sed '=' fstab | sed 'N'     #N表示每行多加一个换行符
+sed '=' fstab | sed 's/\n//g'    #显示行号并换行 
+sed '=' fstab | sed 'N;s/\n/ /g'  #显示行号不换行
+sed 'G' fstab   #每行加空行显示fstab中内容 
+sed '$!G' fstab     #每行加空行但最后一行不加空行显示
+sed -n '$p'  fstab      #显示文件的最后一行
+sed 's/nologin/westos/g' passwd     #把passwd中以nologin结尾的全部替换为westos
+sed '3,5s/nologin/westos/g' passwd  #用westos替换passwd中第三行到第五行的nologin
+sed '/adm/,/sync/s/nologin/westos/g;s/sbin/wang/g' passwd  #用westos替换以adm和sync开头
+
+
+
+
+awk使用变量： ##单引号双引号直接无空格，否则报错
+awk "/$name/"'{print $3}' $app_list |awk -F '.' '{print $1}'
+
+
+
+sed使用变量：
+sed -i "/$name/ s/$v_version/$s_version/" $app_list
+
+sed插入时使用变量：插入内容"showRadioFloatWindow" : "1"
+sed -i '/splash35/ i\  \"showRadioFloatWindow\"\: \"1\"\,' $i/configure/build.json
+
+
+
+##分隔符转换为空格
+# arr=(${u_list//、/ })  ##将、替换为空格
+
+##确定分隔符
+delimiter=$(echo $u_list |grep -o "[[:punct:]]" |uniq)
+
+##将分隔符替换为空格
+arr=(${u_list//$delimiter/ })
+
+for name in $(echo ${arr[@]});do
+    ......
+    ......
+    ......
+done	
