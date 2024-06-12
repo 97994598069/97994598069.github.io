@@ -41,8 +41,11 @@ firewall-cmd --permanent --zone=public --ipset=blacklist --remove-entry=192.168.
 
 
 
-上面是黑名单
-下面是白名单
+上述是黑名单
+
+
+
+下述是白名单
 
 案例：限制国外ip访问服务器
 
@@ -60,7 +63,10 @@ firewall-cmd --permanent --add-rich-rule 'rule family="ipv4" source ipset="white
 
 
 二、然后for循环将上述IP段加入到防火墙白名单
-firewall-cmd --permanent --zone=public --ipset=blacklist --add-entry $ip
+for ip in $(cat cn.zone);do 
+    firewall-cmd --permanent --zone=public --ipset=whitelist --add-entry $ip
+done
+
 
 三、添加内网IP到防护墙白名单
 ipset add whitelist 10.0.0.0/8
@@ -74,7 +80,7 @@ firewall-cmd --reload
 
 
 五、查看
-我们来检查一下blacklist 链的数据，大概8000多条数据
+我们来检查一下whitelist 链的数据，大概8000多条数据
 ipset list whitelist
 ipset list whitelist | wc -l
 
