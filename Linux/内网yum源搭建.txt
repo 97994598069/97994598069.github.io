@@ -10,7 +10,7 @@ loop：用来把一个文件当成硬盘分区mount到目录
 
 3.修改本机yum源配置
 vi /etc/yum.repos.d/rhel7.repo
-[rhel-media]
+[yum_server]
 name=Red Hat Enterprise Linux 7
 baseurl=file:///yum
 enabled=1
@@ -21,29 +21,27 @@ gpgkey=file:///yum/RPM-GPG-KEY-redhat-release
 4.安装nginx
 略
 配置权限和访问列表
-location / {
-    root   /yum;
+location /yum {
+    alias   /yum;
     autoindex on;
     allow 192.168.15.0/24;
     allow 192.168.19.0/24;
     deny all;
 }
 
-
 5.pssh工具批量备份内网服务器的yum源
 pssh -h host_list -i "mkdir -pv /etc/yum.repos.d/yum_back"
 pssh -h host_list -i "mv /etc/yum.repos.d/*.repo /etc/yum.repos.d/yum_back"
 
-
-
 6.配置内网yum源，并发送至内网需要的服务器
 [root@localhost conf]# cat /etc/yum.repos.d/client.repo 
-[rhel-media]
+[yum_server]
 name=Red Hat Enterprise Linux
-baseurl=http://10.43.112.226/
+baseurl=http://10.19.0.226/yum
 enabled=1
 gpgcheck=0
-gpgkey=http://10.43.112.226/RPM-GPG-KEY-redhat-release
+gpgkey=http://10.19.0.226/yum/RPM-GPG-KEY-redhat-release
+
 
 pscp -h host_list /etc/yum.repos.d/client.repo /etc/yum.repos.d/
 pssh -h host_list -i "yum clean all"
